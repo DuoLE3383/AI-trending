@@ -13,8 +13,7 @@
         "loop_sleep_interval_seconds": 3600
     },
     "sqlite": {
-        "db_path": "trend_analysis.db",  
-        "db_path": "/path/to/trend_analysis.db"
+        "db_path": "trend_analysis.db"
     },
     "telegram": {
         "bot_token_placeholder": "YOUR_TELEGRAM_BOT_TOKEN_PLACEHOLDER",

@@ -5,19 +5,41 @@ import pandas as pd
 import pandas_ta as ta
 from binance.client import Client
 import time
-import os, sqlite3 # Updated imports
-from binance.exceptions import BinanceAPIException, BinanceRequestException
+import os, sqlite3
+from binance.exceptions import BinanceAPIException, BinanceRequestException # Removed BinanceSocketManagerError
 import sys
-import logging
+import logging, asyncio # Added asyncio
 import json # Added for loading config file
 from typing import Optional, Any, Dict
-import telegram_handler # Import the new module
+import telegram_handler # Import the new module_handler
+import notifications # Import the new notifications module
 
 # --- Placeholder Constants ---
+API_KEY_PLACEHOLDER = 'YOUR_API_KEY_PLACEHOLDER' # Added this line
 API_SECRET_PLACEHOLDER = 'YOUR_API_SECRET_PLACEHOLDER'
-MONGO_URI_PLACEHOLDER = 'YOUR_MONGO_CONNECTION_STRING_PLACEHOLDER'
 TELEGRAM_BOT_TOKEN_PLACEHOLDER = 'YOUR_TELEGRAM_BOT_TOKEN_PLACEHOLDER'
 TELEGRAM_CHAT_ID_PLACEHOLDER = 'YOUR_TELEGRAM_CHAT_ID_PLACEHOLDER'
+
+# --- Analysis Constants ---
+
+# --- Script Constants ---
+PRE_LOAD_CANDLE_COUNT = 200
+ANALYSIS_CANDLE_BUFFER = 50 # Additional candles to fetch beyond the slowest EMA period for analysis
+
+# RSI Constants
+RSI_PERIOD = 14
+RSI_OVERBOUGHT = 70
+RSI_OVERSOLD = 30
+
+# Notification Constants
+PERIODIC_NOTIFICATION_INTERVAL_SECONDS = 10 * 60  # 10 minutes
+
+# --- Trend Constants ---
+TREND_STRONG_BULLISH = "✅ #StrongBullish"
+TREND_BULLISH = "📈 #Bullish"
+TREND_BEARISH = "📉 #Bearish"
+TREND_STRONG_BEARISH = "❌ #StrongBearish"
+TREND_SIDEWAYS = "Sideways/Undetermined"
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -39,17 +61,10 @@ DEFAULT_CONFIG = {
         "ema_fast": 34,
         "ema_medium": 89,
         "ema_slow": 200,
-        "loop_sleep_interval_seconds": 60
+        "loop_sleep_interval_seconds": 3600
     },
     "sqlite": {
         "db_path": "trend_analysis.db" # SQLite DB in script directory
-        # To specify full path:  "db_path": "/path/to/trend_analysis.db"
-    },
-    # Remove the MongoDB settings
-    # "mongodb": {
-    #     "uri_placeholder": MONGO_URI_PLACEHOLDER,
-    #     "db_name": "trading_analysis",
-    #     "collection_name": "trends"
     },
     "telegram": {
         "bot_token_placeholder": TELEGRAM_BOT_TOKEN_PLACEHOLDER,
@@ -95,7 +110,8 @@ LOOP_SLEEP_INTERVAL_SECONDS = int(os.getenv('LOOP_SLEEP_INTERVAL', config_data["
 SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", config_data["sqlite"]["db_path"])
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', config_data["telegram"]["bot_token_placeholder"])
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', config_data["telegram"]["chat_id_placeholder"])
-PROXY_URL = os.getenv('PROXY_URL', config_data["telegram"]["proxy_url"])
+# PROXY_URL = os.getenv('PROXY_URL', config_data["telegram"].get("proxy_url")) # .get() for safety if proxy_url is optional
+PROXY_URL = None # Explicitly disable proxy usage for Telegram
 
 # --- Initialize Binance Client ---
 binance_client: Optional[Client] = None
@@ -117,15 +133,55 @@ else:
         logger.error(f"An unexpected error occurred during Binance client initialization: {e}")
         binance_client = None
 
-def get_market_data(symbol: str) -> pd.DataFrame:
-    """Fetches historical and live market data from Binance."""
+def init_sqlite_db(db_path: str) -> bool:
+    """Initializes the SQLite database and creates the table if it doesn't exist."""
+    if not db_path:
+        logger.warning("SQLite database path not configured. Database will not be initialized or used.")
+        return False
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS trend_analysis (
+                analysis_timestamp_utc TEXT,
+                symbol TEXT,
+                timeframe TEXT,
+                price REAL,
+                ema_fast_period INTEGER,
+                ema_fast_value REAL,
+                ema_medium_period INTEGER,
+                ema_medium_value REAL,
+                ema_slow_period INTEGER,
+                ema_slow_value REAL,
+                rsi_period INTEGER, -- Added RSI columns
+                rsi_value REAL,     -- Added RSI columns
+                trend TEXT,
+                last_candle_open_time_utc TEXT
+            )
+        ''')
+        conn.commit()
+        conn.close()
+        logger.info(f"✅ Successfully initialized/verified SQLite database at {db_path}")
+        return True
+    except sqlite3.Error as e:
+        logger.error(f"Failed to initialize SQLite database at {db_path}: {e}")
+        return False
+
+def get_market_data(symbol: str, required_candles: int) -> pd.DataFrame:
+    """
+    Fetches a specific number of historical k-line (candle) data from Binance.
+    :param symbol: The trading symbol (e.g., BTCUSDT).
+    :param required_candles: The number of candles to fetch.
+    :return: A pandas DataFrame with the market data, or an empty DataFrame on error.
+    """
     if not binance_client:
         logger.error("Binance client not initialized or connection failed. Cannot fetch market data.")
         return pd.DataFrame()
 
-    logger.info(f"Fetching {TIMEFRAME} data for {symbol}...")
+    logger.info(f"Fetching {required_candles} candles of {TIMEFRAME} data for {symbol}...")
     try:
-        klines = binance_client.get_historical_klines(symbol, TIMEFRAME, f"{EMA_SLOW * 2 + 50} minutes ago UTC")
+        # Fetch the most recent 'required_candles' klines. Max limit is 1000.
+        klines = binance_client.get_historical_klines(symbol, TIMEFRAME, limit=min(required_candles, 1000))
         if not klines:
             logger.warning(f"No kline data received from Binance for {symbol} and {TIMEFRAME}.")
             return pd.DataFrame()
@@ -147,75 +203,96 @@ def get_market_data(symbol: str) -> pd.DataFrame:
         logger.error(f"Unexpected error fetching market data for {symbol} from Binance: {e}")
         return pd.DataFrame()
 
-def perform_analysis(df: pd.DataFrame, symbol: str) -> None:
+async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, Any]]:
     """Calculates EMAs and determines the trend."""
     if df.empty:
-        logger.warning("Dataframe is empty, cannot perform analysis.")
-        return
+        logger.warning(f"Dataframe is empty for {symbol}, cannot perform analysis.")
+        return None
 
-    if len(df) < EMA_SLOW:
-        logger.warning(f"Not enough data ({len(df)} points) to calculate EMA_{EMA_SLOW}. Need at least {EMA_SLOW} points.")
-        return
+    logger.info(f"Performing analysis for {symbol} with {len(df)} data points.")
 
-    df.ta.ema(length=EMA_FAST, append=True, col_names=(f'EMA_{EMA_FAST}',))
-    df.ta.ema(length=EMA_MEDIUM, append=True, col_names=(f'EMA_{EMA_MEDIUM}',))
-    df.ta.ema(length=EMA_SLOW, append=True, col_names=(f'EMA_{EMA_SLOW}',))
+    # Check for EMA data sufficiency
+    if len(df) < EMA_SLOW: # This check is for EMA
+        logger.warning(f"Not enough data ({len(df)} points) for {symbol} to calculate EMA_{EMA_SLOW}. Need at least {EMA_SLOW} points.")
+        return None # Cannot proceed without EMAs
+    
+    if len(df) < RSI_PERIOD + 1: # Check for RSI, log warning if not enough, but proceed as RSI can be N/A
+        logger.warning(f"Not enough data ({len(df)} points) for {symbol} to calculate RSI_{RSI_PERIOD}. Need at least {RSI_PERIOD + 1} points. RSI will be N/A.")
+
+    # --- Calculate EMAs ---
+    # Define EMA column names for clarity and reusability
+    ema_fast_col_name = f'EMA_{EMA_FAST}'
+    ema_medium_col_name = f'EMA_{EMA_MEDIUM}'
+    ema_slow_col_name = f'EMA_{EMA_SLOW}'
+    # Define RSI column name
+    rsi_col_name = f'RSI_{RSI_PERIOD}'
+
+
+    df.ta.ema(length=EMA_FAST, append=True, col_names=(ema_fast_col_name,))
+    df.ta.ema(length=EMA_MEDIUM, append=True, col_names=(ema_medium_col_name,))
+    df.ta.ema(length=EMA_SLOW, append=True, col_names=(ema_slow_col_name,))
     
     last_row = df.iloc[-1]
     price: Optional[float] = last_row.get('close')
-    ema_fast_val: Optional[float] = last_row.get(f'EMA_{EMA_FAST}')
-    ema_medium_val: Optional[float] = last_row.get(f'EMA_{EMA_MEDIUM}')
-    ema_slow_val: Optional[float] = last_row.get(f'EMA_{EMA_SLOW}')
+    ema_fast_val: Optional[float] = last_row.get(ema_fast_col_name)
+    ema_medium_val: Optional[float] = last_row.get(ema_medium_col_name)
+    ema_slow_val: Optional[float] = last_row.get(ema_slow_col_name)
+    
+    # --- Calculate RSI ---
+    df.ta.rsi(length=RSI_PERIOD, append=True, col_names=(rsi_col_name,))
+    rsi_val: Optional[float] = last_row.get(rsi_col_name)
+
+    # --- Interpret RSI ---
+    rsi_interpretation = "Neutral"
+    if pd.notna(rsi_val):
+        if rsi_val >= RSI_OVERBOUGHT:
+            rsi_interpretation = "Overbought"
+        elif rsi_val <= RSI_OVERSOLD:
+            rsi_interpretation = "Oversold"
 
     price_str = f"${price:,.2f}" if pd.notna(price) else "N/A"
     ema_fast_str = f"${ema_fast_val:,.2f}" if pd.notna(ema_fast_val) else "N/A"
     ema_medium_str = f"${ema_medium_val:,.2f}" if pd.notna(ema_medium_val) else "N/A"
     ema_slow_str = f"${ema_slow_val:,.2f}" if pd.notna(ema_slow_val) else "N/A"
+    rsi_str = f"{rsi_val:.2f}" if pd.notna(rsi_val) else "N/A"
     
     current_time_utc = pd.to_datetime('now', utc=True)
-    log_header = f"\n{'='*15} Analysis for {SYMBOL} at {current_time_utc.strftime('%Y-%m-%d %H:%M:%S %Z')} {'='*15}"
-    logger.info(f"\n{'='*15} Analysis for {symbol} at {current_time_utc.strftime('%Y-%m-%d %H:%M:%S %Z')} {'='*15}")
+    analysis_header_content = f" Analysis for {symbol} at {current_time_utc.strftime('%Y-%m-%d %H:%M:%S %Z')} "
+    logger.info(f"\n{'='*15}{analysis_header_content}{'='*15}") # Correctly uses the 'symbol' parameter
     logger.info(f"Current Price: {price_str}")
     logger.info(f"EMA {EMA_FAST:<{len(str(EMA_SLOW))}}:       {ema_fast_str}")
     logger.info(f"EMA {EMA_MEDIUM:<{len(str(EMA_SLOW))}}:     {ema_medium_str}")
     logger.info(f"EMA {EMA_SLOW:<{len(str(EMA_SLOW))}}:       {ema_slow_str}")
+    logger.info(f"RSI {RSI_PERIOD:<{len(str(EMA_SLOW))}}:       {rsi_str} ({rsi_interpretation})") # Log RSI
     
-    trend = "Sideways/Undetermined"
+    # --- Determine Trend based on EMAs ---
+    trend = TREND_SIDEWAYS
     if all(pd.notna(val) for val in [price, ema_fast_val, ema_medium_val, ema_slow_val]):
         if price > ema_fast_val and ema_fast_val > ema_medium_val and ema_medium_val > ema_slow_val:
-            trend = "✅ Strong Bullish"
+            trend = TREND_STRONG_BULLISH
         elif price > ema_fast_val and price > ema_medium_val and price > ema_slow_val: # General bullish conditions
-            trend = "Bullish"
+            trend = TREND_BULLISH
         elif price < ema_fast_val and price < ema_medium_val and price < ema_slow_val: # General bearish conditions
-            trend = "Bearish"
+            trend = TREND_BEARISH
         elif price < ema_fast_val and ema_fast_val < ema_medium_val and ema_medium_val < ema_slow_val:
-            trend = "❌ Strong Bearish"
+            trend = TREND_STRONG_BEARISH
         
     logger.info(f"Trend: {trend}")
-    logger.info("=" * len(log_header.strip()) + "\n")
-
-    if telegram_bot and TELEGRAM_CHAT_ID != TELEGRAM_CHAT_ID_PLACEHOLDER:
-        message = (
-            f"*{symbol} Trend Alert* ({TIMEFRAME})\n\n"
-            f"Time: {current_time_utc.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-            f"Price: `{price_str}`\n"
-            f"EMA {EMA_FAST}: `{ema_fast_str}`\n"
-            f"EMA {EMA_MEDIUM}: `{ema_medium_str}`\n"
-            f"EMA {EMA_SLOW}: `{ema_slow_str}`\n\n"
-            f"Trend: *{trend}*"
-        )
-        telegram_handler.send_telegram_notification(TELEGRAM_CHAT_ID, message)
+    logger.info("=" * (30 + len(analysis_header_content)) + "\n") # Adjusted to match the actual logged header length)
 
     # Save to SQLite
     if SQLITE_DB_PATH:  # Make sure we have a DB path
         last_candle_open_time: Optional[pd.Timestamp] = last_row.name if pd.notna(last_row.name) else None
         data_to_save = {
+            'symbol': symbol, # Include symbol in data_to_save dict
             'analysis_timestamp_utc': current_time_utc,
             'timeframe': TIMEFRAME,
             'price': price if pd.notna(price) else None,
-            f'ema_{EMA_FAST}': ema_fast_val if pd.notna(ema_fast_val) else None,
-            f'ema_{EMA_MEDIUM}': ema_medium_val if pd.notna(ema_medium_val) else None,
-            f'ema_{EMA_SLOW}': ema_slow_val if pd.notna(ema_slow_val) else None,
+            'ema_fast_val': ema_fast_val if pd.notna(ema_fast_val) else None,
+            'ema_medium_val': ema_medium_val if pd.notna(ema_medium_val) else None,
+            'ema_slow_val': ema_slow_val if pd.notna(ema_slow_val) else None,
+            'rsi_val': rsi_val if pd.notna(rsi_val) else None, # Include RSI value
+            'rsi_interpretation': rsi_interpretation, # Include RSI interpretation
             'trend': trend,
             'last_candle_open_time_utc': last_candle_open_time
         }
@@ -223,33 +300,27 @@ def perform_analysis(df: pd.DataFrame, symbol: str) -> None:
             conn = sqlite3.connect(SQLITE_DB_PATH)
             cursor = conn.cursor()
 
-            # Create the table if it doesn't exist
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS trend_analysis (
-                    analysis_timestamp_utc TEXT,
-                    symbol TEXT,  -- Added symbol column
-                    timeframe TEXT,
-                    price REAL,
-                    ema_34 REAL,
-                    ema_89 REAL,
-                    ema_200 REAL,
-                    trend TEXT,
-                    last_candle_open_time_utc TEXT
-                )
-            ''')
-            
             # Insert the analysis data
             cursor.execute('''
-                INSERT INTO trend_analysis (analysis_timestamp_utc, symbol, timeframe, price, ema_34, ema_89, ema_200, trend, last_candle_open_time_utc)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO trend_analysis ( -- Updated INSERT statement
+                    analysis_timestamp_utc, symbol, timeframe, price,
+                    ema_fast_period, ema_fast_value,
+                    ema_medium_period, ema_medium_value,
+                    rsi_period, rsi_value, -- Added RSI columns
+                    ema_slow_period, ema_slow_value,
+                    trend, last_candle_open_time_utc
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 data_to_save['analysis_timestamp_utc'].isoformat(),  # Convert datetime to string for SQLite
                 symbol,  # Include the symbol being analyzed
                 data_to_save['timeframe'],
                 data_to_save['price'],
-                data_to_save['ema_34'],
-                data_to_save['ema_89'],
-                data_to_save['ema_200'],
+                EMA_FAST, data_to_save['ema_fast_val'],
+                EMA_MEDIUM, data_to_save['ema_medium_val'],
+                # Correct order and values for ema_slow and rsi
+                EMA_SLOW, data_to_save['ema_slow_val'], # ema_slow_period, ema_slow_value
+                RSI_PERIOD, data_to_save['rsi_val'],    # rsi_period, rsi_value
                 data_to_save['trend'],
                 data_to_save['last_candle_open_time_utc'].isoformat() if data_to_save['last_candle_open_time_utc'] else None  # Convert datetime to string
             ))
@@ -263,59 +334,153 @@ def perform_analysis(df: pd.DataFrame, symbol: str) -> None:
 
     else:
         logger.warning("SQLite database path not configured. Data will not be saved.")
+    
+    return data_to_save # Return the analysis results
 
-# --- Main Loop ---
-if __name__ == "__main__":
+async def main():
+    """Main asynchronous function to run the bot."""
     logger.info("--- Starting Real-Time Market Analysis Bot ---")
     
-    if not (binance_client or (MONGO_URI != MONGO_URI_PLACEHOLDER) or (TELEGRAM_BOT_TOKEN != TELEGRAM_BOT_TOKEN_PLACEHOLDER)):
-        logger.critical("No services (Binance, MongoDB, Telegram) are properly configured. The script may not perform any useful actions.")
+    # Check if at least Binance or Telegram is configured
+    binance_configured = binance_client is not None
+    telegram_configured = TELEGRAM_BOT_TOKEN != TELEGRAM_BOT_TOKEN_PLACEHOLDER and TELEGRAM_CHAT_ID != TELEGRAM_CHAT_ID_PLACEHOLDER
+    if not (binance_configured or telegram_configured): # Check if at least one service is configured
+        logger.critical("Neither Binance nor Telegram services are properly configured. The script may not perform any useful actions.")
         # sys.exit("Exiting due to lack of service configurations.") # Optional: exit if no services configured
+    
+    # Initialize SQLite DB
+    init_sqlite_db(SQLITE_DB_PATH)
 
-    mongodb_connected = init_mongodb()
+    # Prepare display strings for Telegram startup message
+    MAX_SYMBOLS_TO_DISPLAY_IN_STARTUP = 3
+    if SYMBOLS:
+        if len(SYMBOLS) > MAX_SYMBOLS_TO_DISPLAY_IN_STARTUP:
+            displayed_symbols_list = ", ".join(SYMBOLS[:MAX_SYMBOLS_TO_DISPLAY_IN_STARTUP])
+            symbols_display_str = f"{displayed_symbols_list} (+{len(SYMBOLS) - MAX_SYMBOLS_TO_DISPLAY_IN_STARTUP} more)"
+        else:
+            symbols_display_str = ", ".join(SYMBOLS)
+    else:
+        symbols_display_str = "N/A"
+
+    def format_seconds_for_display(seconds: int) -> str:
+        if seconds < 60:
+            return f"{seconds}s"
+        elif seconds < 3600:
+            return f"{seconds // 60}m"
+        else:
+            hours = seconds // 3600
+            minutes = (seconds % 3600) // 60
+            if minutes > 0:
+                return f"{hours}h {minutes}m"
+            return f"{hours}h"
+    loop_interval_display_str = format_seconds_for_display(LOOP_SLEEP_INTERVAL_SECONDS)
+
     # Initialize Telegram bot using the new handler
-    telegram_bot_initialized = telegram_handler.init_telegram_bot(
+    telegram_bot_initialized = await telegram_handler.init_telegram_bot( # Added await
         bot_token=TELEGRAM_BOT_TOKEN,
         chat_id=TELEGRAM_CHAT_ID,
         proxy_url=PROXY_URL,
-        symbol_for_startup=", ".join(SYMBOLS) if SYMBOLS else "N/A") # Pass all symbols for startup message
+        symbols_display=symbols_display_str,
+        timeframe_display=TIMEFRAME,
+        loop_interval_display=loop_interval_display_str
+    )
+    
+    if not telegram_bot_initialized and TELEGRAM_BOT_TOKEN != TELEGRAM_BOT_TOKEN_PLACEHOLDER:
+        logger.critical("Failed to initialize Telegram Bot. Exiting as Telegram notifications are configured but could not be started.")
+        sys.exit("Exiting due to Telegram initialization failure.")
 
     if not SYMBOLS:
         logger.error("No trading symbols configured. Please check your config.json or TRADING_SYMBOLS environment variable.")
         sys.exit("Exiting due to no symbols configured.")
 
+    # --- Pre-load initial data ---
+    logger.info("--- Pre-loading initial market data (200 points per symbol) ---")
+    all_symbols_preloaded_successfully = True
+    for symbol_to_preload in SYMBOLS:
+        logger.info(f"Pre-loading 200 data points for {symbol_to_preload}...")
+        pre_load_df = get_market_data(symbol_to_preload, required_candles=PRE_LOAD_CANDLE_COUNT)
+        if pre_load_df.empty or len(pre_load_df) < PRE_LOAD_CANDLE_COUNT:
+            logger.warning(f"Failed to pre-load sufficient data ({PRE_LOAD_CANDLE_COUNT} points) for {symbol_to_preload}. Found {len(pre_load_df)} points.")
+            all_symbols_preloaded_successfully = False
+        else:
+            logger.info(f"✅ Successfully pre-loaded {len(pre_load_df)} points for {symbol_to_preload}.")
+    
+    if not all_symbols_preloaded_successfully:
+        logger.warning("One or more symbols failed to pre-load sufficient initial data. Analysis may be affected for these symbols initially.")
+    else:
+        logger.info("--- All symbols successfully pre-loaded with initial data ---")
+
     logger.info(f"--- Analysis loop starting for symbols: {', '.join(SYMBOLS)} ({TIMEFRAME}) every {LOOP_SLEEP_INTERVAL_SECONDS}s ---")
     logger.info("Press CTRL+C to stop.")
     
     cycle_count = 0
+    # Determine the number of candles needed for analysis based on the slowest EMA + a buffer
+    REQUIRED_CANDLES_FOR_ANALYSIS = EMA_SLOW + ANALYSIS_CANDLE_BUFFER
     while True:
+
         cycle_count += 1
         logger.info(f"--- Cycle {cycle_count} ({pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S %Z')}) ---")
+        cycle_analysis_results = [] # Initialize for each cycle
         try:
             for symbol_to_analyze in SYMBOLS:
                 logger.info(f"--- Analyzing {symbol_to_analyze} ---")
-                market_data_df = get_market_data(symbol_to_analyze)
+                # Fetch data - get_market_data is synchronous
+                market_data_df = get_market_data(symbol_to_analyze, required_candles=REQUIRED_CANDLES_FOR_ANALYSIS + RSI_PERIOD) # Fetch enough data for RSI too
+
                 if not market_data_df.empty:
-                    perform_analysis(market_data_df, symbol_to_analyze)
+                    # Perform analysis and get results - perform_analysis is async now
+                    analysis_result = await perform_analysis(market_data_df, symbol_to_analyze)
+                    if analysis_result: # Check if analysis was successful and returned data
+                        cycle_analysis_results.append(analysis_result)
                 else:
                     logger.warning(f"Skipping analysis for {symbol_to_analyze} due to empty market data.")
+
+            # --- Prepare lists for different notification types ---
+            strong_trend_results_for_summary = []
+            individual_alerts_to_send_details = []
             
+            for result in cycle_analysis_results:
+                trend = result['trend']
+                if trend in [TREND_STRONG_BULLISH, TREND_STRONG_BEARISH]:
+                    strong_trend_results_for_summary.append(result)
+                elif trend in [TREND_BULLISH, TREND_BEARISH]:
+                    individual_alerts_to_send_details.append(result)
+
+            # --- Send All Notifications for the current cycle ---
+            if strong_trend_results_for_summary:
+                await notifications.send_strong_trend_summary_notification(
+                    chat_id=TELEGRAM_CHAT_ID,
+                    strong_trend_results=strong_trend_results_for_summary
+                )
+            
+            for analysis_detail in individual_alerts_to_send_details:
+                await notifications.send_individual_trend_alert_notification(
+                    chat_id=TELEGRAM_CHAT_ID,
+                    analysis_result=analysis_detail,
+                    rsi_period_const=RSI_PERIOD, ema_fast_const=EMA_FAST,
+                    ema_medium_const=EMA_MEDIUM, ema_slow_const=EMA_SLOW
+                )
+
             logger.info(f"--- Cycle {cycle_count} complete. Waiting for {LOOP_SLEEP_INTERVAL_SECONDS} seconds... ---")
-            time.sleep(LOOP_SLEEP_INTERVAL_SECONDS) 
+            await asyncio.sleep(LOOP_SLEEP_INTERVAL_SECONDS) # Use asyncio.sleep in async code
         except KeyboardInterrupt:
             logger.info("🛑 Analysis stopped by user. Shutting down...")
-            if telegram_handler.telegram_bot and TELEGRAM_CHAT_ID != TELEGRAM_CHAT_ID_PLACEHOLDER: # Check bot instance in handler
-                shutdown_message = f"🛑 Trend Analysis Bot for {', '.join(SYMBOLS)} stopped by user at {pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S %Z')}."
-                telegram_handler.send_telegram_notification(TELEGRAM_CHAT_ID, shutdown_message, suppress_print=True)
+            await notifications.send_shutdown_notification(
+                chat_id=TELEGRAM_CHAT_ID,
+                symbols_list=SYMBOLS
+            )
             break
-        except ConnectionFailure as e: # More specific error for MongoDB
-            logger.error(f"MongoDB Connection Failure in main loop: {e}.")
-            logger.info(f"Attempting to re-initialize MongoDB in {LOOP_SLEEP_INTERVAL_SECONDS} seconds...")
-            time.sleep(LOOP_SLEEP_INTERVAL_SECONDS)
-            mongodb_connected = init_mongodb() # Try to re-initialize
         except Exception as e:
             logger.exception("An unexpected error occurred in the main loop:") # logger.exception automatically includes traceback
             logger.info(f"Retrying in {LOOP_SLEEP_INTERVAL_SECONDS} seconds...")
-            time.sleep(LOOP_SLEEP_INTERVAL_SECONDS)
+            await asyncio.sleep(LOOP_SLEEP_INTERVAL_SECONDS) # Use asyncio.sleep in async code
     
     logger.info("--- Bot shutdown complete. ---")
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Script interrupted by user.")
+    except Exception as e:
+        logger.critical(f"An unhandled exception occurred during script execution: {e}", exc_info=True)

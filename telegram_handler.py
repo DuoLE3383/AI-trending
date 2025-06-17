@@ -1,6 +1,7 @@
 import os
 import logging
 import pandas as pd
+import asyncio # Import asyncio
 import telegram
 from telegram.request import HTTPXRequest
 from typing import Optional
@@ -13,7 +14,57 @@ TELEGRAM_CHAT_ID_PLACEHOLDER = 'YOUR_TELEGRAM_CHAT_ID_PLACEHOLDER'
 
 telegram_bot: Optional[telegram.Bot] = None
 
-def init_telegram_bot(bot_token: str, chat_id: str, proxy_url: Optional[str], symbol_for_startup: str) -> bool:
+def _parse_custom_proxy_format(proxy_str: str, default_scheme: str = "http") -> str:
+    """
+    Parses "host:port:password" or "host:port:user:password" into a full URL.
+    Returns the original string if it's already a full URL (contains "://")
+    or if it doesn't match the custom formats.
+    """
+    if not proxy_str or "://" in proxy_str:
+        return proxy_str # It's already a URL, empty, or None
+
+    parts = proxy_str.split(':')
+    num_parts = len(parts)
+
+    if num_parts == 3: # Expected format: host:port:password
+        host, port, password = parts[0], parts[1], parts[2]
+        if port.isdigit() and host:
+            logger.info(f"Interpreting custom proxy string '{proxy_str}' as {default_scheme} with password-only: {host}:{port}")
+            return f"{default_scheme}://:{password}@{host}:{port}" # Empty username for password-only
+    elif num_parts == 4: # Expected format: host:port:username:password
+        host, port, username, password = parts[0], parts[1], parts[2], parts[3]
+        if port.isdigit() and host and username: # Username should be present
+            logger.info(f"Interpreting custom proxy string '{proxy_str}' as {default_scheme} with username/password: {host}:{port}")
+            return f"{default_scheme}://{username}:{password}@{host}:{port}"
+    
+    logger.warning(
+        f"Proxy string '{proxy_str}' is not a full URL and does not match expected custom formats "
+        f"(host:port:password or host:port:username:password). Attempting to use as is."
+    )
+    return proxy_str # Fallback to original string if parsing fails
+
+def _mask_url_credentials(url_str: str) -> str:
+    """Masks credentials in a URL string for safe logging."""
+    if url_str and "://" in url_str:
+        try:
+            scheme, rest_of_url = url_str.split("://", 1)
+            if "@" in rest_of_url:
+                credentials_part, host_part = rest_of_url.split("@", 1)
+                if credentials_part: # Only mask if there was something before @
+                    return f"{scheme}://[credentials masked]@{host_part}"
+        except ValueError:
+            logger.warning(f"Could not parse URL '{url_str}' for credential masking. Displaying as is or generic mask.")
+            # Return a generic placeholder if parsing for masking fails, to avoid accidental credential exposure
+            return f"{url_str.split('://')[0]}://[proxy_details_omitted_due_to_masking_error]"
+    return url_str # Return original if no "://" or no "@" after "://", or if it's empty
+
+async def init_telegram_bot(
+    bot_token: str, 
+    chat_id: str, 
+    proxy_url: Optional[str], 
+    symbols_display: str, 
+    timeframe_display: str, 
+    loop_interval_display: str) -> bool:
     global telegram_bot
     if bot_token == TELEGRAM_BOT_TOKEN_PLACEHOLDER or \
        chat_id == TELEGRAM_CHAT_ID_PLACEHOLDER:
@@ -23,19 +74,32 @@ def init_telegram_bot(bot_token: str, chat_id: str, proxy_url: Optional[str], sy
     try:
         logger.info("Initializing Telegram Bot...")
         request_instance = None
-        if proxy_url and proxy_url.strip(): # Ensure proxy_url is not None or empty
-            logger.info(f"Using proxy for Telegram: {proxy_url}")
-            # For python-telegram-bot v20+ with httpx, proxy is a dict
-            proxies = {
-                "all://": proxy_url # Applies to http, https, socks5 etc.
-            }
-            request_instance = HTTPXRequest(proxy=proxies) # This is the standard httpx way
-        
+        processed_proxy_url_for_httpx = None
+
+        if proxy_url and proxy_url.strip():
+            # Step 1: Parse custom format or use as is (will return original if already a full URL)
+            processed_proxy_url_for_httpx = _parse_custom_proxy_format(proxy_url.strip())
+
+            # Step 2: Mask the (potentially transformed) URL for logging
+            display_url_for_log = _mask_url_credentials(processed_proxy_url_for_httpx)
+            logger.info(f"Using proxy for Telegram: {display_url_for_log}")
+            
+            request_instance = HTTPXRequest(proxy=processed_proxy_url_for_httpx)
+
         telegram_bot = telegram.Bot(token=bot_token, request=request_instance)
-        bot_info = telegram_bot.get_me()
+        bot_info = await telegram_bot.get_me() # Await the asynchronous method
         logger.info(f"✅ Successfully initialized Telegram Bot: {bot_info.username}")
-        startup_message = f"📈 Trend Analysis Bot for {symbol_for_startup} started successfully at {pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S %Z')}."
-        send_telegram_notification(chat_id, startup_message, suppress_print=True) # Pass chat_id here
+        
+        timestamp_str = pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S %Z')
+        startup_message = (
+            f"*📈 Trend Analysis Bot Started*\n\n"
+            f"📊 *Monitoring:* #{symbols_display} 🎯Most #Binance Pair List\n"
+            f"⚙️ *Settings:* Timeframe=`{timeframe_display}`\n"
+            f"🕒 *Time:* `{timestamp_str}`\n\n"
+            f"🔔 This will be updated hourly with the latest analysis results.🚨🚨"
+
+        )
+        await send_telegram_notification(chat_id, startup_message, suppress_print=True) # Pass chat_id here and await
         return True
     except Exception as e:
         logger.error(f"Failed to initialize Telegram Bot: {e}")
@@ -44,7 +108,7 @@ def init_telegram_bot(bot_token: str, chat_id: str, proxy_url: Optional[str], sy
         telegram_bot = None
         return False
 
-def send_telegram_notification(chat_id: str, message_text: str, suppress_print: bool = False) -> None:
+async def send_telegram_notification(chat_id: str, message_text: str, suppress_print: bool = False) -> None:
     if not telegram_bot:
         if not suppress_print:
             logger.warning("Telegram bot not initialized. Cannot send notification.")
@@ -55,7 +119,7 @@ def send_telegram_notification(chat_id: str, message_text: str, suppress_print: 
         return
 
     try:
-        telegram_bot.send_message(chat_id=chat_id, text=message_text, parse_mode=telegram.constants.ParseMode.MARKDOWN)
+        await telegram_bot.send_message(chat_id=chat_id, text=message_text, parse_mode=telegram.constants.ParseMode.MARKDOWN) # Await the asynchronous method
         if not suppress_print:
             logger.info(f"✅ Telegram notification sent to {chat_id}.")
     except telegram.error.BadRequest as e:
