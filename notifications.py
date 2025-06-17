@@ -191,7 +191,8 @@ async def send_individual_trend_alert_notification(
             percentage_from_entry = 0.0
             if entry_val != 0: # entry_price_val is already checked for None before this block
                 percentage_from_entry = ((level_val - entry_val) / entry_val) * 100
-            return f"{emoji} {level_name}: `${level_val:,.4f}` ({percentage_from_entry:+.2f}%)\n"
+            leveraged_percentage = percentage_from_entry * 5 # Apply 5x leverage
+            return f"{emoji} {level_name}: `${level_val:,.4f}` ({leveraged_percentage:+.2f}%)\n"
 
         message += f"🎯 Entry Price: `${entry_price_val:,.4f}`\n"
         if sl_val is not None:

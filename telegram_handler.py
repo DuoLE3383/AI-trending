@@ -98,7 +98,9 @@ async def init_telegram_bot(
             f"📊 *Monitoring:* #{symbols_display} 🎯Most #Binance Pair List\n"
             f"⚙️ *Settings:* Timeframe=`{timeframe_display}`\n"
             f"🕒 *Time:* `{timestamp_str}`\n\n"
-            f"🔔 This will be updated 10 minutes later with the latest analysis results.🚨🚨"
+            f"🔔 This will be updated every 10 minutes with the latest analysis results.🚨🚨 Keep Calm and follow" # Corrected "update" to "updated" and "10 minutes"
+            f" @TrendAnalysisBot for more updates.\n\n"
+            f"💡 *Tip:* If you want to receive notifications in a specific topic, please set the topic ID in the config file.\n\n"
 
         )
         # Send startup message to the main chat/group
