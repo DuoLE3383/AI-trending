@@ -41,6 +41,12 @@ ATR_PERIOD = 14
 ATR_MULTIPLIER_SHORT = 1.5 # Multiplier for a shorter-term volatility projection
 ATR_MULTIPLIER_LONG = 2.5  # Multiplier for a longer-term volatility projection
 
+# TP/SL ATR Multiplier Constants
+ATR_MULTIPLIER_SL = 1.5    # Stop Loss: 1.5 * ATR
+ATR_MULTIPLIER_TP1 = 1.5   # Take Profit 1: 1.5 * ATR (Risk/Reward ~1:1)
+ATR_MULTIPLIER_TP2 = 3.0   # Take Profit 2: 3.0 * ATR (Risk/Reward ~1:2)
+ATR_MULTIPLIER_TP3 = 4.5   # Take Profit 3: 4.5 * ATR (Risk/Reward ~1:3)
+
 
 # Notification Constants
 PERIODIC_NOTIFICATION_INTERVAL_SECONDS = 10 * 60  # Set to 600 seconds (10 minutes)
@@ -196,7 +202,12 @@ def init_sqlite_db(db_path: str) -> bool:
                 proj_range_short_low REAL,      -- Projected Short-Term Range Low
                 proj_range_short_high REAL,     -- Projected Short-Term Range High
                 proj_range_long_low REAL,       -- Projected Long-Term Range Low
-                proj_range_long_high REAL       -- Projected Long-Term Range High
+                proj_range_long_high REAL,      -- Projected Long-Term Range High
+                entry_price REAL,               -- Entry Price for the signal
+                stop_loss REAL,                 -- Stop Loss level
+                take_profit_1 REAL,             -- Take Profit level 1
+                take_profit_2 REAL,             -- Take Profit level 2
+                take_profit_3 REAL              -- Take Profit level 3
             )
         ''')
         conn.commit()
@@ -332,6 +343,26 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
 
     proj_short_range_str = f"${proj_short_low_val:,.2f} - ${proj_short_high_val:,.2f}" if proj_short_low_val is not None else "N/A"
     proj_long_range_str = f"${proj_long_low_val:,.2f} - ${proj_long_high_val:,.2f}" if proj_long_low_val is not None else "N/A"
+
+    # --- Calculate TP/SL based on ATR if a strong trend is detected ---
+    entry_price_val: Optional[float] = None
+    sl_val: Optional[float] = None
+    tp1_val: Optional[float] = None
+    tp2_val: Optional[float] = None
+    tp3_val: Optional[float] = None
+
+    # Determine Trend based on EMAs (moved here to use for TP/SL calculation)
+    trend = TREND_SIDEWAYS
+    if all(pd.notna(val) for val in [price, ema_fast_val, ema_medium_val, ema_slow_val]):
+        if price > ema_fast_val and ema_fast_val > ema_medium_val and ema_medium_val > ema_slow_val:
+            trend = TREND_STRONG_BULLISH
+        elif price > ema_fast_val and price > ema_medium_val and price > ema_slow_val: # General bullish conditions
+            trend = TREND_BULLISH
+        elif price < ema_fast_val and price < ema_medium_val and price < ema_slow_val: # General bearish conditions
+            trend = TREND_BEARISH
+        elif price < ema_fast_val and ema_fast_val < ema_medium_val and ema_medium_val < ema_slow_val:
+            trend = TREND_STRONG_BEARISH
+
     
     current_time_utc = pd.to_datetime('now', utc=True)
     analysis_header_content = f" Analysis for {symbol} at {current_time_utc.strftime('%Y-%m-%d %H:%M:%S %Z')} "
@@ -345,19 +376,25 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
     logger.info(f"ATR ({ATR_PERIOD}):        {atr_str}")
     logger.info(f"Proj. Range (Short, ATRx{ATR_MULTIPLIER_SHORT}): {proj_short_range_str}")
     logger.info(f"Proj. Range (Long, ATRx{ATR_MULTIPLIER_LONG}):  {proj_long_range_str}")
-    
-    # --- Determine Trend based on EMAs ---
-    trend = TREND_SIDEWAYS
-    if all(pd.notna(val) for val in [price, ema_fast_val, ema_medium_val, ema_slow_val]):
-        if price > ema_fast_val and ema_fast_val > ema_medium_val and ema_medium_val > ema_slow_val:
-            trend = TREND_STRONG_BULLISH
-        elif price > ema_fast_val and price > ema_medium_val and price > ema_slow_val: # General bullish conditions
-            trend = TREND_BULLISH
-        elif price < ema_fast_val and price < ema_medium_val and price < ema_slow_val: # General bearish conditions
-            trend = TREND_BEARISH
-        elif price < ema_fast_val and ema_fast_val < ema_medium_val and ema_medium_val < ema_slow_val:
-            trend = TREND_STRONG_BEARISH
-        
+
+    if trend in [TREND_STRONG_BULLISH, TREND_STRONG_BEARISH] and pd.notna(price) and pd.notna(atr_val):
+        entry_price_val = price # Current price is the entry price
+        if trend == TREND_STRONG_BULLISH:
+            sl_val = price - (ATR_MULTIPLIER_SL * atr_val)
+            tp1_val = price + (ATR_MULTIPLIER_TP1 * atr_val)
+            tp2_val = price + (ATR_MULTIPLIER_TP2 * atr_val)
+            tp3_val = price + (ATR_MULTIPLIER_TP3 * atr_val)
+        elif trend == TREND_STRONG_BEARISH:
+            sl_val = price + (ATR_MULTIPLIER_SL * atr_val)
+            tp1_val = price - (ATR_MULTIPLIER_TP1 * atr_val)
+            tp2_val = price - (ATR_MULTIPLIER_TP2 * atr_val)
+            tp3_val = price - (ATR_MULTIPLIER_TP3 * atr_val)
+        logger.info(f"Entry Price: ${entry_price_val:,.4f}")
+        logger.info(f"SL: ${sl_val:,.4f}, TP1: ${tp1_val:,.4f}, TP2: ${tp2_val:,.4f}, TP3: ${tp3_val:,.4f}")
+    else:
+        # Log that TP/SL are not calculated if not a strong trend or data is missing
+        logger.debug(f"TP/SL not calculated for {symbol}: Trend is '{trend}', Price is {'valid' if pd.notna(price) else 'N/A'}, ATR is {'valid' if pd.notna(atr_val) else 'N/A'}.")
+
     logger.info(f"Trend: {trend}")
     logger.info("=" * (30 + len(analysis_header_content)) + "\n") # Adjusted to match the actual logged header length)
 
@@ -384,6 +421,11 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
             'proj_range_short_high': proj_short_high_val,
             'proj_range_long_low': proj_long_low_val,
             'proj_range_long_high': proj_long_high_val,
+            'entry_price': entry_price_val,
+            'stop_loss': sl_val,
+            'take_profit_1': tp1_val,
+            'take_profit_2': tp2_val,
+            'take_profit_3': tp3_val,
         }
         try:
             conn = sqlite3.connect(SQLITE_DB_PATH)
@@ -398,10 +440,11 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
                     rsi_period, rsi_value, -- Added RSI columns
                     ema_slow_period, ema_slow_value, trend,
                     last_candle_open_time_utc, bb_lower, bb_middle, bb_upper, -- BBands
-                    atr_value, proj_range_short_low, proj_range_short_high, -- ATR & Proj Short
-                    proj_range_long_low, proj_range_long_high -- Proj Long
+                    atr_value, proj_range_short_low, proj_range_short_high,   -- ATR & Proj Short
+                    proj_range_long_low, proj_range_long_high,                -- Proj Long
+                    entry_price, stop_loss, take_profit_1, take_profit_2, take_profit_3 -- TP/SL
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 data_to_save['analysis_timestamp_utc'].isoformat(),  # Convert datetime to string for SQLite
                 symbol,  # Include the symbol being analyzed
@@ -421,7 +464,12 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
                 data_to_save['proj_range_short_low'],
                 data_to_save['proj_range_short_high'],
                 data_to_save['proj_range_long_low'],
-                data_to_save['proj_range_long_high']
+                data_to_save['proj_range_long_high'],
+                data_to_save['entry_price'],
+                data_to_save['stop_loss'],
+                data_to_save['take_profit_1'],
+                data_to_save['take_profit_2'],
+                data_to_save['take_profit_3']
             ))
 
             conn.commit()

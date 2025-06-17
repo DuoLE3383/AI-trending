@@ -111,6 +111,13 @@ async def send_individual_trend_alert_notification(
     if proj_long_low_val is not None and proj_long_high_val is not None:
         proj_long_range_str = f"${proj_long_low_val:,.4f}{proj_long_low_pct_str} - ${proj_long_high_val:,.4f}{proj_long_high_pct_str}"
 
+    # Get TP/SL values
+    entry_price_val = analysis_result.get('entry_price')
+    sl_val = analysis_result.get('stop_loss')
+    tp1_val = analysis_result.get('take_profit_1')
+    tp2_val = analysis_result.get('take_profit_2')
+    tp3_val = analysis_result.get('take_profit_3')
+
     trend = analysis_result.get('trend', 'N/A')
 
     # --- Conditional Notification Logic ---
@@ -171,10 +178,36 @@ async def send_individual_trend_alert_notification(
         f"  • Fast ({ema_fast_const}): `{ema_fast_str}`\n"
         f"  • Medium ({ema_medium_const}): `{ema_medium_str}`\n"
         f"  • Slow ({ema_slow_const}): `{ema_slow_str}`\n\n"
+    )
+
+    # Add TP/SL info if available (typically for strong trends)
+    if entry_price_val is not None: # Check if entry_price was calculated
+        
+        # Helper to calculate and format percentage change from entry
+        def format_level_with_percentage(level_name: str, level_val: Optional[float], entry_val: float, emoji: str) -> str:
+            if level_val is None:
+                return "" # Return empty string if level_val is None
+            # Ensure entry_val is not None and not zero before calculating percentage
+            percentage_from_entry = 0.0
+            if entry_val != 0: # entry_price_val is already checked for None before this block
+                percentage_from_entry = ((level_val - entry_val) / entry_val) * 100
+            return f"{emoji} {level_name}: `${level_val:,.4f}` ({percentage_from_entry:+.2f}%)\n"
+
+        message += f"🎯 Entry Price: `${entry_price_val:,.4f}`\n"
+        if sl_val is not None:
+            message += format_level_with_percentage("SL", sl_val, entry_price_val, "🛡️")
+        if tp1_val is not None:
+            message += format_level_with_percentage("TP1", tp1_val, entry_price_val, "💰")
+        if tp2_val is not None:
+            message += format_level_with_percentage("TP2", tp2_val, entry_price_val, "💰")
+        if tp3_val is not None:
+            message += format_level_with_percentage("TP3", tp3_val, entry_price_val, "💰")
+        message += "Leverage: x5 (Margin)\n\n" # Add the leverage line
+
+    message += (
         f"💡 Trend: next 4 hour *{trend}* (Price range: `{proj_short_range_str}`)\n"
         f"💡 Trend: next 8 hour *{trend}* (Price range: `{proj_long_range_str}`)"
     )
-
     # Commented out: Send to main chat/channel
     # await telegram_handler.send_telegram_notification(chat_id, message, message_thread_id=None)
 
