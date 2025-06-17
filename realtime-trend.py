@@ -36,6 +36,12 @@ RSI_OVERSOLD = 30
 BBANDS_PERIOD = 20
 BBANDS_STD_DEV = 2.0
 
+# ATR and Projected Range Constants
+ATR_PERIOD = 14
+ATR_MULTIPLIER_SHORT = 1.5 # Multiplier for a shorter-term volatility projection
+ATR_MULTIPLIER_LONG = 2.5  # Multiplier for a longer-term volatility projection
+
+
 # Notification Constants
 PERIODIC_NOTIFICATION_INTERVAL_SECONDS = 10 * 60  # Set to 600 seconds (10 minutes)
 
@@ -185,7 +191,12 @@ def init_sqlite_db(db_path: str) -> bool:
                 last_candle_open_time_utc TEXT,
                 bb_lower REAL,      -- Bollinger Band Lower
                 bb_middle REAL,     -- Bollinger Band Middle
-                bb_upper REAL       -- Bollinger Band Upper
+                bb_upper REAL,      -- Bollinger Band Upper
+                atr_value REAL,                 -- ATR Value
+                proj_range_short_low REAL,      -- Projected Short-Term Range Low
+                proj_range_short_high REAL,     -- Projected Short-Term Range High
+                proj_range_long_low REAL,       -- Projected Long-Term Range Low
+                proj_range_long_high REAL       -- Projected Long-Term Range High
             )
         ''')
         conn.commit()
@@ -259,6 +270,8 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
     bbands_lower_col_name = f'BBL_{BBANDS_PERIOD}_{BBANDS_STD_DEV}'
     bbands_middle_col_name = f'BBM_{BBANDS_PERIOD}_{BBANDS_STD_DEV}'
     bbands_upper_col_name = f'BBU_{BBANDS_PERIOD}_{BBANDS_STD_DEV}'
+    # Define ATR column name
+    atr_col_name = f'ATRr_{ATR_PERIOD}' # pandas_ta appends 'r' for RMA-based ATR
 
 
     df.ta.ema(length=EMA_FAST, append=True, col_names=(ema_fast_col_name,))
@@ -271,6 +284,9 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
     # --- Calculate Bollinger Bands ---
     df.ta.bbands(length=BBANDS_PERIOD, std=BBANDS_STD_DEV, append=True)
 
+    # --- Calculate ATR ---
+    df.ta.atr(length=ATR_PERIOD, append=True, col_names=(atr_col_name,)) # ATR calculation
+
     # Get the last row AFTER all indicators are calculated and appended
     last_row = df.iloc[-1]
     price: Optional[float] = last_row.get('close')
@@ -281,6 +297,7 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
     bb_lower_val: Optional[float] = last_row.get(bbands_lower_col_name)
     bb_middle_val: Optional[float] = last_row.get(bbands_middle_col_name)
     bb_upper_val: Optional[float] = last_row.get(bbands_upper_col_name)
+    atr_val: Optional[float] = last_row.get(atr_col_name)
 
     # --- Interpret RSI ---
     rsi_interpretation = "N/A" # Default if RSI could not be calculated
@@ -301,6 +318,20 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
     bb_lower_str = f"${bb_lower_val:,.2f}" if pd.notna(bb_lower_val) else "N/A"
     bb_middle_str = f"${bb_middle_val:,.2f}" if pd.notna(bb_middle_val) else "N/A"
     bb_upper_str = f"${bb_upper_val:,.2f}" if pd.notna(bb_upper_val) else "N/A"
+    atr_str = f"{atr_val:.4f}" if pd.notna(atr_val) else "N/A" # ATR might be small, more precision
+
+    # Calculate projected ranges based on ATR
+    proj_short_low_val, proj_short_high_val = None, None
+    proj_long_low_val, proj_long_high_val = None, None
+
+    if pd.notna(price) and pd.notna(atr_val):
+        proj_short_low_val = price - (ATR_MULTIPLIER_SHORT * atr_val)
+        proj_short_high_val = price + (ATR_MULTIPLIER_SHORT * atr_val)
+        proj_long_low_val = price - (ATR_MULTIPLIER_LONG * atr_val)
+        proj_long_high_val = price + (ATR_MULTIPLIER_LONG * atr_val)
+
+    proj_short_range_str = f"${proj_short_low_val:,.2f} - ${proj_short_high_val:,.2f}" if proj_short_low_val is not None else "N/A"
+    proj_long_range_str = f"${proj_long_low_val:,.2f} - ${proj_long_high_val:,.2f}" if proj_long_low_val is not None else "N/A"
     
     current_time_utc = pd.to_datetime('now', utc=True)
     analysis_header_content = f" Analysis for {symbol} at {current_time_utc.strftime('%Y-%m-%d %H:%M:%S %Z')} "
@@ -311,6 +342,9 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
     logger.info(f"EMA {EMA_SLOW:<{len(str(EMA_SLOW))}}:       {ema_slow_str}")
     logger.info(f"RSI {RSI_PERIOD:<{len(str(EMA_SLOW))}}:       {rsi_str} ({rsi_interpretation})") # Log RSI
     logger.info(f"BBands ({BBANDS_PERIOD},{BBANDS_STD_DEV}): Low: {bb_lower_str}, Mid: {bb_middle_str}, High: {bb_upper_str}")
+    logger.info(f"ATR ({ATR_PERIOD}):        {atr_str}")
+    logger.info(f"Proj. Range (Short, ATRx{ATR_MULTIPLIER_SHORT}): {proj_short_range_str}")
+    logger.info(f"Proj. Range (Long, ATRx{ATR_MULTIPLIER_LONG}):  {proj_long_range_str}")
     
     # --- Determine Trend based on EMAs ---
     trend = TREND_SIDEWAYS
@@ -345,6 +379,11 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
             'bb_lower': bb_lower_val if pd.notna(bb_lower_val) else None,
             'bb_middle': bb_middle_val if pd.notna(bb_middle_val) else None,
             'bb_upper': bb_upper_val if pd.notna(bb_upper_val) else None,
+            'atr_value': atr_val if pd.notna(atr_val) else None,
+            'proj_range_short_low': proj_short_low_val,
+            'proj_range_short_high': proj_short_high_val,
+            'proj_range_long_low': proj_long_low_val,
+            'proj_range_long_high': proj_long_high_val,
         }
         try:
             conn = sqlite3.connect(SQLITE_DB_PATH)
@@ -358,10 +397,11 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
                     ema_medium_period, ema_medium_value,
                     rsi_period, rsi_value, -- Added RSI columns
                     ema_slow_period, ema_slow_value, trend,
-                    last_candle_open_time_utc,
-                    bb_lower, bb_middle, bb_upper -- Added BBands columns
+                    last_candle_open_time_utc, bb_lower, bb_middle, bb_upper, -- BBands
+                    atr_value, proj_range_short_low, proj_range_short_high, -- ATR & Proj Short
+                    proj_range_long_low, proj_range_long_high -- Proj Long
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 data_to_save['analysis_timestamp_utc'].isoformat(),  # Convert datetime to string for SQLite
                 symbol,  # Include the symbol being analyzed
@@ -376,7 +416,12 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
                 data_to_save['last_candle_open_time_utc'].isoformat() if data_to_save['last_candle_open_time_utc'] else None,  # Convert datetime to string
                 data_to_save['bb_lower'],
                 data_to_save['bb_middle'],
-                data_to_save['bb_upper']
+                data_to_save['bb_upper'],
+                data_to_save['atr_value'],
+                data_to_save['proj_range_short_low'],
+                data_to_save['proj_range_short_high'],
+                data_to_save['proj_range_long_low'],
+                data_to_save['proj_range_long_high']
             ))
 
             conn.commit()
@@ -480,7 +525,7 @@ async def main():
             for symbol_to_analyze in SYMBOLS:
                 logger.info(f"--- Analyzing {symbol_to_analyze} ---")
                 # Fetch data - get_market_data is synchronous
-                market_data_df = get_market_data(symbol_to_analyze, required_candles=REQUIRED_CANDLES_FOR_ANALYSIS + RSI_PERIOD) # Fetch enough data for RSI too
+                market_data_df = get_market_data(symbol_to_analyze, required_candles=REQUIRED_CANDLES_FOR_ANALYSIS + max(RSI_PERIOD, ATR_PERIOD)) # Fetch enough data for RSI/ATR
 
                 if not market_data_df.empty:
                     # Perform analysis and get results - perform_analysis is async now

@@ -79,6 +79,14 @@ async def send_individual_trend_alert_notification(
     bb_lower_str = f"${bb_lower_val:,.2f}" if pd.notna(bb_lower_val) else "N/A"
     bb_upper_val = analysis_result.get('bb_upper')
     bb_upper_str = f"${bb_upper_val:,.2f}" if pd.notna(bb_upper_val) else "N/A"
+    atr_val = analysis_result.get('atr_value') # Get ATR value
+    atr_str = f"{atr_val:.4f}" if pd.notna(atr_val) else "N/A"
+    proj_short_low_val = analysis_result.get('proj_range_short_low')
+    proj_short_high_val = analysis_result.get('proj_range_short_high')
+    proj_long_low_val = analysis_result.get('proj_range_long_low')
+    proj_long_high_val = analysis_result.get('proj_range_long_high')
+    proj_short_range_str = f"${proj_short_low_val:,.2f} - ${proj_short_high_val:,.2f}" if proj_short_low_val is not None and proj_short_high_val is not None else "N/A"
+    proj_long_range_str = f"${proj_long_low_val:,.2f} - ${proj_long_high_val:,.2f}" if proj_long_low_val is not None and proj_long_high_val is not None else "N/A"
 
     trend = analysis_result.get('trend', 'N/A')
 
@@ -87,12 +95,14 @@ async def send_individual_trend_alert_notification(
         f"🕒 Time: `{timestamp_str}`\n"
         f"💲 Price: `{price_str}`\n"
         f"📊 RSI ({rsi_period_const}): `{rsi_str}` ({rsi_interpretation})\n\n"
-        f" रेंज BBands ({bbands_period_const}, {bbands_std_dev_const}): `{bb_lower_str} - {bb_upper_str}`\n\n" # Using "रेंज" for "Range"
+        # f"📈 BBands ({bbands_period_const}, {bbands_std_dev_const}): `{bb_lower_str} - {bb_upper_str}`\n" # Removed as per request
+        f"📉 ATR ({analysis_result.get('atr_period', 'N/A')}): `{atr_str}`\n\n" # Assuming atr_period might be added to analysis_result or use a const
         f"📉 EMAs:\n"
         f"  • Fast ({ema_fast_const}): `{ema_fast_str}`\n"
         f"  • Medium ({ema_medium_const}): `{ema_medium_str}`\n"
         f"  • Slow ({ema_slow_const}): `{ema_slow_str}`\n\n"
-        f"💡 Trend: *{trend}*"
+        f"💡 Trend: next 4 hour *{trend}* (Price range: `{proj_short_range_str}`)\n"
+        f"💡 Trend: next 8 hour *{trend}* (Price range: `{proj_long_range_str}`)"
     )
 
     # Commented out: Send to main chat/channel
