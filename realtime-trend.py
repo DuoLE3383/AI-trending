@@ -380,20 +380,23 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
     if trend in [TREND_STRONG_BULLISH, TREND_STRONG_BEARISH] and pd.notna(price) and pd.notna(atr_val):
         entry_price_val = price # Current price is the entry price
         # TP levels are still based on entry price and ATR
+        # New TP levels based on fixed percentage from entry price
         if trend == TREND_STRONG_BULLISH:
             # New SL: 10% below the short-term projected low
             if proj_short_low_val is not None:
                 sl_val = proj_short_low_val * 0.90 
-            tp1_val = price + (ATR_MULTIPLIER_TP1 * atr_val)
-            tp2_val = price + (ATR_MULTIPLIER_TP2 * atr_val)
-            tp3_val = price + (ATR_MULTIPLIER_TP3 * atr_val)
+            # TP levels: +2%, +4%, +6% actual gain from entry price
+            tp1_val = entry_price_val * (1 + 0.02)
+            tp2_val = entry_price_val * (1 + 0.04)
+            tp3_val = entry_price_val * (1 + 0.06)
         elif trend == TREND_STRONG_BEARISH:
             # New SL: 10% above the short-term projected high
             if proj_short_high_val is not None:
                 sl_val = proj_short_high_val * 1.10
-            tp1_val = price - (ATR_MULTIPLIER_TP1 * atr_val)
-            tp2_val = price - (ATR_MULTIPLIER_TP2 * atr_val)
-            tp3_val = price - (ATR_MULTIPLIER_TP3 * atr_val)
+            # TP levels: -2%, -4%, -6% actual loss from entry price
+            tp1_val = entry_price_val * (1 - 0.02)
+            tp2_val = entry_price_val * (1 - 0.04)
+            tp3_val = entry_price_val * (1 - 0.06)
         
         logger.info(f"Entry Price: ${entry_price_val:,.4f}")
         logger.info(f"SL: ${sl_val:,.4f}, TP1: ${tp1_val:,.4f}, TP2: ${tp2_val:,.4f}, TP3: ${tp3_val:,.4f}")
