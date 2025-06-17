@@ -1,5 +1,6 @@
 import logging
 import pandas as pd
+import asyncio # Import asyncio
 from typing import List, Dict, Any, Optional
 import telegram_handler # To call the actual send function
 

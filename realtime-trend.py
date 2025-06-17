@@ -58,7 +58,7 @@ DEFAULT_CONFIG = {
     },
     "trading": {
         "symbols": ["BTCUSDT"], # Default to a list with one symbol
-        "timeframe": "1m",
+        "timeframe": "15m",
         "ema_fast": 34,
         "ema_medium": 89,
         "ema_slow": 200,
@@ -265,12 +265,15 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
     rsi_val: Optional[float] = last_row.get(rsi_col_name)
 
     # --- Interpret RSI ---
-    rsi_interpretation = "Neutral"
+    rsi_interpretation = "N/A" # Default if RSI could not be calculated
     if pd.notna(rsi_val):
         if rsi_val >= RSI_OVERBOUGHT:
             rsi_interpretation = "Overbought"
         elif rsi_val <= RSI_OVERSOLD:
             rsi_interpretation = "Oversold"
+        else:
+            # RSI is a valid number and it's in the neutral zone
+            rsi_interpretation = "Neutral"
 
     price_str = f"${price:,.2f}" if pd.notna(price) else "N/A"
     ema_fast_str = f"${ema_fast_val:,.2f}" if pd.notna(ema_fast_val) else "N/A"
