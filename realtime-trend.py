@@ -24,8 +24,8 @@ TELEGRAM_MESSAGE_THREAD_ID_PLACEHOLDER = 'YOUR_TELEGRAM_MESSAGE_THREAD_ID_PLACEH
 # --- Analysis Constants ---
 
 # --- Script Constants ---
-PRE_LOAD_CANDLE_COUNT = 200
-ANALYSIS_CANDLE_BUFFER = 50 # Additional candles to fetch beyond the slowest EMA period for analysis
+PRE_LOAD_CANDLE_COUNT = 300
+ANALYSIS_CANDLE_BUFFER = 200 # Additional candles to fetch beyond the slowest EMA period for analysis
 
 # RSI Constants
 RSI_PERIOD = 14
@@ -494,10 +494,10 @@ async def main():
         sys.exit("Exiting due to no symbols configured.")
 
     # --- Pre-load initial data ---
-    logger.info("--- Pre-loading initial market data (200 points per symbol) ---")
+    logger.info("--- Pre-loading initial market data (300 points per symbol) ---")
     all_symbols_preloaded_successfully = True
     for symbol_to_preload in SYMBOLS:
-        logger.info(f"Pre-loading 200 data points for {symbol_to_preload}...")
+        logger.info(f"Pre-loading 300 data points for {symbol_to_preload}...")
         pre_load_df = get_market_data(symbol_to_preload, required_candles=PRE_LOAD_CANDLE_COUNT)
         if pre_load_df.empty or len(pre_load_df) < PRE_LOAD_CANDLE_COUNT:
             logger.warning(f"Failed to pre-load sufficient data ({PRE_LOAD_CANDLE_COUNT} points) for {symbol_to_preload}. Found {len(pre_load_df)} points.")
