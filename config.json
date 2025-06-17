@@ -1,0 +1,24 @@
+{
+    "binance": {
+        "api_key_placeholder": "YOUR_API_KEY_PLACEHOLDER",
+        "api_secret_placeholder": "YOUR_API_SECRET_PLACEHOLDER"
+    },
+    "trading": {
+        "symbols": ["BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT", "SOLUSDT", "DOTUSDT", "DOGEUSDT",
+                   "MATICUSDT", "LTCUSDT", "LINKUSDT", "TRXUSDT", "AVAXUSDT", "UNIUSDT", "SHIBUSDT"],
+        "timeframe": "15m",
+        "ema_fast": 34,
+        "ema_medium": 89,
+        "ema_slow": 200,
+        "loop_sleep_interval_seconds": 3600
+    },
+    "sqlite": {
+        "db_path": "trend_analysis.db",  
+        "db_path": "/path/to/trend_analysis.db"
+    },
+    "telegram": {
+        "bot_token_placeholder": "YOUR_TELEGRAM_BOT_TOKEN_PLACEHOLDER",
+        "chat_id_placeholder": "YOUR_TELEGRAM_CHAT_ID_PLACEHOLDER",
+        "proxy_url": null
+    }
+}
