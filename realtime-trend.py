@@ -38,14 +38,14 @@ BBANDS_STD_DEV = 2.0
 
 # ATR and Projected Range Constants
 ATR_PERIOD = 14
-ATR_MULTIPLIER_SHORT = 1.5 # Multiplier for a shorter-term volatility projection
+ATR_MULTIPLIER_SHORT = 2.5 # Multiplier for a shorter-term volatility projection
 ATR_MULTIPLIER_LONG = 2.5  # Multiplier for a longer-term volatility projection
 
 # TP/SL ATR Multiplier Constants
-ATR_MULTIPLIER_SL = 1.5    # Stop Loss: 1.5 * ATR
-ATR_MULTIPLIER_TP1 = 1.5   # Take Profit 1: 1.5 * ATR (Risk/Reward ~1:1)
-ATR_MULTIPLIER_TP2 = 3.0   # Take Profit 2: 3.0 * ATR (Risk/Reward ~1:2)
-ATR_MULTIPLIER_TP3 = 4.5   # Take Profit 3: 4.5 * ATR (Risk/Reward ~1:3)
+ATR_MULTIPLIER_SL = 1.2    # Stop Loss: 1.5 * ATR
+ATR_MULTIPLIER_TP1 = 1.3   # Take Profit 1: 1.5 * ATR (Risk/Reward ~1:1)
+ATR_MULTIPLIER_TP2 = 2.3   # Take Profit 2: 3.0 * ATR (Risk/Reward ~1:2)
+ATR_MULTIPLIER_TP3 = 3.2   # Take Profit 3: 4.5 * ATR (Risk/Reward ~1:3)
 
 
 # Notification Constants
