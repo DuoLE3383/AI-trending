@@ -19,6 +19,7 @@ API_KEY_PLACEHOLDER = 'YOUR_API_KEY_PLACEHOLDER' # Added this line
 API_SECRET_PLACEHOLDER = 'YOUR_API_SECRET_PLACEHOLDER'
 TELEGRAM_BOT_TOKEN_PLACEHOLDER = 'YOUR_TELEGRAM_BOT_TOKEN_PLACEHOLDER'
 TELEGRAM_CHAT_ID_PLACEHOLDER = 'YOUR_TELEGRAM_CHAT_ID_PLACEHOLDER'
+TELEGRAM_MESSAGE_THREAD_ID_PLACEHOLDER = 'YOUR_TELEGRAM_MESSAGE_THREAD_ID_PLACEHOLDER' # For topic/thread IDs
 
 # --- Analysis Constants ---
 
@@ -32,7 +33,7 @@ RSI_OVERBOUGHT = 70
 RSI_OVERSOLD = 30
 
 # Notification Constants
-PERIODIC_NOTIFICATION_INTERVAL_SECONDS = 10 * 60  # 10 minutes
+PERIODIC_NOTIFICATION_INTERVAL_SECONDS = 10 * 60  # Set to 600 seconds (10 minutes)
 
 # --- Trend Constants ---
 TREND_STRONG_BULLISH = "✅ #StrongBullish"
@@ -69,7 +70,8 @@ DEFAULT_CONFIG = {
     "telegram": {
         "bot_token_placeholder": TELEGRAM_BOT_TOKEN_PLACEHOLDER,
         "chat_id_placeholder": TELEGRAM_CHAT_ID_PLACEHOLDER,
-        "proxy_url": None
+        "proxy_url": None,
+        "message_thread_id_placeholder": TELEGRAM_MESSAGE_THREAD_ID_PLACEHOLDER
     }
 }
 
@@ -104,12 +106,32 @@ TIMEFRAME = os.getenv('TRADING_TIMEFRAME', config_data["trading"]["timeframe"])
 EMA_FAST = int(os.getenv('EMA_FAST', config_data["trading"]["ema_fast"]))
 EMA_MEDIUM = int(os.getenv('EMA_MEDIUM', config_data["trading"]["ema_medium"]))
 EMA_SLOW = int(os.getenv('EMA_SLOW', config_data["trading"]["ema_slow"]))
-LOOP_SLEEP_INTERVAL_SECONDS = int(os.getenv('LOOP_SLEEP_INTERVAL', config_data["trading"]["loop_sleep_interval_seconds"]))
+LOOP_SLEEP_INTERVAL_SECONDS = 3600  # Set to 3600 seconds (60 minutes = 1 hour)
 
 # Load SQLite DB Path
 SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", config_data["sqlite"]["db_path"])
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', config_data["telegram"]["bot_token_placeholder"])
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', config_data["telegram"]["chat_id_placeholder"])
+
+# Load Telegram Message Thread ID (Topic ID)
+raw_message_thread_id = os.getenv('TELEGRAM_MESSAGE_THREAD_ID', config_data["telegram"]["message_thread_id_placeholder"])
+TELEGRAM_MESSAGE_THREAD_ID: Optional[int] = None
+
+if raw_message_thread_id is not None and str(raw_message_thread_id) != TELEGRAM_MESSAGE_THREAD_ID_PLACEHOLDER:
+    try:
+        TELEGRAM_MESSAGE_THREAD_ID = int(raw_message_thread_id)
+    except ValueError:
+        logger.warning(
+            f"Invalid TELEGRAM_MESSAGE_THREAD_ID: '{raw_message_thread_id}'. Must be an integer. "
+            "Topic-specific messaging will be disabled; messages will go to the main chat (if configured)."
+        )
+        # TELEGRAM_MESSAGE_THREAD_ID remains None
+elif str(raw_message_thread_id) == TELEGRAM_MESSAGE_THREAD_ID_PLACEHOLDER:
+    logger.info(
+        "TELEGRAM_MESSAGE_THREAD_ID is set to its placeholder. "
+        "Messages will be sent to the main chat/group (if chat_id is configured)."
+    )
+    # TELEGRAM_MESSAGE_THREAD_ID remains None
 # PROXY_URL = os.getenv('PROXY_URL', config_data["telegram"].get("proxy_url")) # .get() for safety if proxy_url is optional
 PROXY_URL = None # Explicitly disable proxy usage for Telegram
 
@@ -379,6 +401,7 @@ async def main():
     telegram_bot_initialized = await telegram_handler.init_telegram_bot( # Added await
         bot_token=TELEGRAM_BOT_TOKEN,
         chat_id=TELEGRAM_CHAT_ID,
+        message_thread_id_for_startup=TELEGRAM_MESSAGE_THREAD_ID, # Pass the topic ID for startup message
         proxy_url=PROXY_URL,
         symbols_display=symbols_display_str,
         timeframe_display=TIMEFRAME,
@@ -450,12 +473,16 @@ async def main():
             if strong_trend_results_for_summary:
                 await notifications.send_strong_trend_summary_notification(
                     chat_id=TELEGRAM_CHAT_ID,
+                    # Pass the configured topic ID to the notification function
+                    message_thread_id=TELEGRAM_MESSAGE_THREAD_ID,
                     strong_trend_results=strong_trend_results_for_summary
                 )
             
             for analysis_detail in individual_alerts_to_send_details:
                 await notifications.send_individual_trend_alert_notification(
                     chat_id=TELEGRAM_CHAT_ID,
+                    # Pass the configured topic ID to the notification function
+                    message_thread_id=TELEGRAM_MESSAGE_THREAD_ID,
                     analysis_result=analysis_detail,
                     rsi_period_const=RSI_PERIOD, ema_fast_const=EMA_FAST,
                     ema_medium_const=EMA_MEDIUM, ema_slow_const=EMA_SLOW
@@ -467,6 +494,8 @@ async def main():
             logger.info("🛑 Analysis stopped by user. Shutting down...")
             await notifications.send_shutdown_notification(
                 chat_id=TELEGRAM_CHAT_ID,
+                # Pass the configured topic ID to the notification function
+                message_thread_id=TELEGRAM_MESSAGE_THREAD_ID,
                 symbols_list=SYMBOLS
             )
             break

@@ -7,6 +7,7 @@ logger = logging.getLogger(__name__)
 
 async def send_strong_trend_summary_notification(
     chat_id: str,
+    message_thread_id: Optional[int],
     strong_trend_results: List[Dict[str, Any]] # Expects list of analysis_result dicts
 ):
     """Formats and sends a summary of strong trend alerts."""
@@ -33,10 +34,19 @@ async def send_strong_trend_summary_notification(
     if strong_trend_alerts_details:
         header = f"⚡️ *Strong Trend Alerts* ({pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S %Z')}) ⚡️\n\n"
         full_message = header + "\n".join(strong_trend_alerts_details)
-        await telegram_handler.send_telegram_notification(chat_id, full_message)
+        
+        # Send to main chat/channel
+        await telegram_handler.send_telegram_notification(chat_id, full_message, message_thread_id=None)
+        
+        # If a topic ID is provided, also send to the topic
+        if message_thread_id is not None:
+             # Add a small delay to avoid potential API rate limits or processing issues
+            await asyncio.sleep(0.5) 
+            await telegram_handler.send_telegram_notification(chat_id, full_message, message_thread_id=message_thread_id)
 
 async def send_individual_trend_alert_notification(
     chat_id: str,
+    message_thread_id: Optional[int],
     analysis_result: Dict[str, Any],
     rsi_period_const: int,
     ema_fast_const: int,
@@ -75,13 +85,37 @@ async def send_individual_trend_alert_notification(
         f"  • Slow ({ema_slow_const}): `{ema_slow_str}`\n\n"
         f"💡 Trend: *{trend}*"
     )
-    await telegram_handler.send_telegram_notification(chat_id, message)
+    
+    # Send to main chat/channel
+    await telegram_handler.send_telegram_notification(chat_id, message, message_thread_id=None)
+    
+    # If a topic ID is provided, also send to the topic
+    if message_thread_id is not None:
+        # Add a small delay
+        await asyncio.sleep(0.5) 
+        await telegram_handler.send_telegram_notification(chat_id, message, message_thread_id=message_thread_id)
 
-async def send_shutdown_notification(chat_id: str, symbols_list: List[str]):
+async def send_shutdown_notification(
+    chat_id: str,
+    message_thread_id: Optional[int],
+    symbols_list: List[str]
+):
     """Formats and sends a shutdown notification."""
     if not telegram_handler.telegram_bot or chat_id == telegram_handler.TELEGRAM_CHAT_ID_PLACEHOLDER:
         logger.debug("Telegram not configured or chat ID is placeholder; skipping shutdown notification.")
         return
         
     shutdown_message = f"🛑 Trend Analysis Bot for {', '.join(symbols_list)} stopped by user at {pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S %Z')}."
-    await telegram_handler.send_telegram_notification(chat_id, shutdown_message, suppress_print=True)
+    
+    # Send to main chat/channel
+    await telegram_handler.send_telegram_notification(
+        chat_id, shutdown_message, message_thread_id=None, suppress_print=True
+    )
+    # If a topic ID is provided, also send to the topic
+    if message_thread_id is not None:
+        await asyncio.sleep(0.5) # Add a small delay
+        await telegram_handler.send_telegram_notification(
+            chat_id, shutdown_message, message_thread_id=message_thread_id, suppress_print=True
+        )
+
+    )

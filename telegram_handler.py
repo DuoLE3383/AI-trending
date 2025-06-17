@@ -61,11 +61,13 @@ def _mask_url_credentials(url_str: str) -> str:
 async def init_telegram_bot(
     bot_token: str, 
     chat_id: str, 
+    message_thread_id_for_startup: Optional[int], # Added message_thread_id specifically for startup
     proxy_url: Optional[str], 
     symbols_display: str, 
     timeframe_display: str, 
     loop_interval_display: str) -> bool:
     global telegram_bot
+
     if bot_token == TELEGRAM_BOT_TOKEN_PLACEHOLDER or \
        chat_id == TELEGRAM_CHAT_ID_PLACEHOLDER:
         logger.warning("Telegram Bot Token or Chat ID not configured. Notifications will not be sent.")
@@ -99,7 +101,14 @@ async def init_telegram_bot(
             f"🔔 This will be updated hourly with the latest analysis results.🚨🚨"
 
         )
-        await send_telegram_notification(chat_id, startup_message, suppress_print=True) # Pass chat_id here and await
+        # Send startup message to the main chat/group
+        await send_telegram_notification(
+            chat_id, startup_message, message_thread_id=None, suppress_print=True
+        )
+        # If a topic ID was provided for startup, also send to the topic
+        if message_thread_id_for_startup is not None:
+             await asyncio.sleep(0.5) # Add a small delay
+             await send_telegram_notification(chat_id, startup_message, message_thread_id=message_thread_id_for_startup, suppress_print=True)
         return True
     except Exception as e:
         logger.error(f"Failed to initialize Telegram Bot: {e}")
@@ -108,7 +117,12 @@ async def init_telegram_bot(
         telegram_bot = None
         return False
 
-async def send_telegram_notification(chat_id: str, message_text: str, suppress_print: bool = False) -> None:
+async def send_telegram_notification(
+    chat_id: str,
+    message_text: str,
+    message_thread_id: Optional[int] = None, # Added message_thread_id with a default
+    suppress_print: bool = False
+) -> None:
     if not telegram_bot:
         if not suppress_print:
             logger.warning("Telegram bot not initialized. Cannot send notification.")
@@ -119,7 +133,12 @@ async def send_telegram_notification(chat_id: str, message_text: str, suppress_p
         return
 
     try:
-        await telegram_bot.send_message(chat_id=chat_id, text=message_text, parse_mode=telegram.constants.ParseMode.MARKDOWN) # Await the asynchronous method
+        await telegram_bot.send_message(
+            chat_id=chat_id,
+            text=message_text,
+            parse_mode=telegram.constants.ParseMode.MARKDOWN,
+            message_thread_id=message_thread_id # Pass it to the API call
+        )
         if not suppress_print:
             logger.info(f"✅ Telegram notification sent to {chat_id}.")
     except telegram.error.BadRequest as e:
