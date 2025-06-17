@@ -5,7 +5,7 @@
     },
     "trading": {
         "symbols": ["BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT", "SOLUSDT", "DOTUSDT", "DOGEUSDT",
-                   "MATICUSDT", "LTCUSDT", "LINKUSDT", "TRXUSDT", "AVAXUSDT", "UNIUSDT", "SHIBUSDT"],
+                   "MATICUSDT", "LTCUSDT", "LINKUSDT", "TRXUSDT", "AVAXUSDT", "UNIUSDT", "SHIBUSDT", "ATOMUSDT", "ALGOUSDT", "XLMUSDT", "VETUSDT", "FILUSDT", "CROUSDT", "XMRUSDT", "EOSUSDT", "THETAUSDT", "AAVEUSDT", "BCHUSDT", "XECUSDT", "FTMUSDT", "NEARUSDT", "SANDUSDT", "AXSUSDT", "MANAUSDT"],
         "timeframe": "15m",
         "ema_fast": 34,
         "ema_medium": 89,
@@ -21,3 +21,4 @@
         "proxy_url": null
     }
 }
+
