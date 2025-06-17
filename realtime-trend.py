@@ -536,25 +536,20 @@ async def main():
                     logger.warning(f"Skipping analysis for {symbol_to_analyze} due to empty market data.")
 
             # --- Prepare lists for different notification types ---
-            strong_trend_results_for_summary = []
+            # strong_trend_results_for_summary = [] # No longer sending summaries
             individual_alerts_to_send_details = []
             
             for result in cycle_analysis_results:
                 trend = result['trend']
                 if trend in [TREND_STRONG_BULLISH, TREND_STRONG_BEARISH]:
-                    strong_trend_results_for_summary.append(result)
-                elif trend in [TREND_BULLISH, TREND_BEARISH]:
+                    # Only send individual detailed alerts for strong trends
                     individual_alerts_to_send_details.append(result)
+                # Regular TREND_BULLISH and TREND_BEARISH will no longer trigger notifications
 
             # --- Send All Notifications for the current cycle ---
-            if strong_trend_results_for_summary:
-                await notifications.send_strong_trend_summary_notification(
-                    chat_id=TELEGRAM_CHAT_ID,
-                    # Pass the configured topic ID to the notification function
-                    message_thread_id=TELEGRAM_MESSAGE_THREAD_ID,
-                    strong_trend_results=strong_trend_results_for_summary
-                )
-            
+            # The strong trend summary notification is removed as per the request to "only notify strong next trend"
+            # with the detailed individual format.
+
             for analysis_detail in individual_alerts_to_send_details:
                 await notifications.send_individual_trend_alert_notification(
                     chat_id=TELEGRAM_CHAT_ID,
