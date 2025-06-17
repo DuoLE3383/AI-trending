@@ -98,7 +98,7 @@ async def init_telegram_bot(
             f"📊 *Monitoring:* #{symbols_display} 🎯Most #Binance Pair List\n"
             f"⚙️ *Settings:* Timeframe=`{timeframe_display}`\n"
             f"🕒 *Time:* `{timestamp_str}`\n\n"
-            f"🔔 This will be updated hourly with the latest analysis results.🚨🚨"
+            f"🔔 This will be updated 10 minutes later with the latest analysis results.🚨🚨"
 
         )
         # Send startup message to the main chat/group

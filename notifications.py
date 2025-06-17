@@ -6,6 +6,10 @@ import telegram_handler # To call the actual send function
 
 logger = logging.getLogger(__name__)
 
+# In-memory store for the last notified projected ranges for each symbol
+# Structure: { "SYMBOL": {"short_low": X, "short_high": Y, "long_low": A, "long_high": B}, ... }
+last_notified_ranges: Dict[str, Dict[str, Optional[float]]] = {}
+
 async def send_strong_trend_summary_notification(
     chat_id: str,
     message_thread_id: Optional[int],
@@ -50,6 +54,7 @@ async def send_individual_trend_alert_notification(
     message_thread_id: Optional[int],
     analysis_result: Dict[str, Any],
     bbands_period_const: int, # Added
+    atr_period_const: int, # Added
     bbands_std_dev_const: float, # Added
     rsi_period_const: int,
     ema_fast_const: int,
@@ -90,13 +95,60 @@ async def send_individual_trend_alert_notification(
 
     trend = analysis_result.get('trend', 'N/A')
 
+    # --- Conditional Notification Logic ---
+    symbol_key = f"{symbol}_{timeframe}" # Unique key per symbol and timeframe
+    previous_ranges = last_notified_ranges.get(symbol_key)
+    current_ranges_for_storage = {
+        "short_low": proj_short_low_val,
+        "short_high": proj_short_high_val,
+        "long_low": proj_long_low_val,
+        "long_high": proj_long_high_val
+    }
+
+    send_this_notification = False
+    if previous_ranges is None:
+        send_this_notification = True # Always send the first notification for a symbol
+        logger.info(f"First notification for {symbol_key}, will send.")
+    else:
+        significant_change_detected = False
+        # Compare current ranges with previous ranges
+        boundaries_to_check = [
+            ("short_low", previous_ranges.get("short_low"), proj_short_low_val),
+            ("short_high", previous_ranges.get("short_high"), proj_short_high_val),
+            ("long_low", previous_ranges.get("long_low"), proj_long_low_val),
+            ("long_high", previous_ranges.get("long_high"), proj_long_high_val),
+        ]
+
+        for name, prev_val, curr_val in boundaries_to_check:
+            if prev_val is None and curr_val is not None: # Was N/A, now has value
+                significant_change_detected = True; break
+            if prev_val is not None and curr_val is None: # Had value, now N/A
+                significant_change_detected = True; break
+            if prev_val is not None and curr_val is not None:
+                if prev_val == 0: # Avoid division by zero if previous was 0
+                    if curr_val != 0: # Changed from 0 to non-zero
+                        significant_change_detected = True; break
+                else:
+                    percentage_diff = abs(curr_val - prev_val) / abs(prev_val)
+                    if percentage_diff > 0.05: # More than 5% change
+                        logger.info(f"Significant change for {symbol_key} in {name}: prev={prev_val:.4f}, curr={curr_val:.4f}, diff={percentage_diff:.2%}")
+                        significant_change_detected = True; break
+        
+        if significant_change_detected:
+            send_this_notification = True
+        else:
+            logger.info(f"No significant (>5%) change in projected ranges for {symbol_key}. Skipping notification.")
+
+    if not send_this_notification:
+        return # Do not send if conditions are not met
+
     message = (
         f"*{symbol} Trend Alert* ({timeframe})\n\n"
         f"🕒 Time: `{timestamp_str}`\n"
         f"💲 Price: `{price_str}`\n"
         f"📊 RSI ({rsi_period_const}): `{rsi_str}` ({rsi_interpretation})\n\n"
         # f"📈 BBands ({bbands_period_const}, {bbands_std_dev_const}): `{bb_lower_str} - {bb_upper_str}`\n" # Removed as per request
-        f"📉 ATR ({analysis_result.get('atr_period', 'N/A')}): `{atr_str}`\n\n" # Assuming atr_period might be added to analysis_result or use a const
+        f"📉 ATR ({atr_period_const}): `{atr_str}`\n\n"
         f"📉 EMAs:\n"
         f"  • Fast ({ema_fast_const}): `{ema_fast_str}`\n"
         f"  • Medium ({ema_medium_const}): `{ema_medium_str}`\n"
@@ -112,6 +164,7 @@ async def send_individual_trend_alert_notification(
     if message_thread_id is not None:
         # Add a small delay
         await asyncio.sleep(0.5)
+        last_notified_ranges[symbol_key] = current_ranges_for_storage # Update stored ranges AFTER successful send attempt
         await telegram_handler.send_telegram_notification(chat_id, message, message_thread_id=message_thread_id)
 
 async def send_shutdown_notification(

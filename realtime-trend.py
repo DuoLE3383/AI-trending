@@ -562,6 +562,7 @@ async def main():
                     message_thread_id=TELEGRAM_MESSAGE_THREAD_ID,
                     analysis_result=analysis_detail, # This now includes BBands
                     bbands_period_const=BBANDS_PERIOD, # Pass BBands period
+                    atr_period_const=ATR_PERIOD, # Pass ATR period
                     bbands_std_dev_const=BBANDS_STD_DEV, # Pass BBands std dev
                     rsi_period_const=RSI_PERIOD, ema_fast_const=EMA_FAST,
                     ema_medium_const=EMA_MEDIUM, ema_slow_const=EMA_SLOW
