@@ -117,5 +117,3 @@ async def send_shutdown_notification(
         await telegram_handler.send_telegram_notification(
             chat_id, shutdown_message, message_thread_id=message_thread_id, suppress_print=True
         )
-
-    )
