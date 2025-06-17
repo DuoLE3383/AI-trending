@@ -132,8 +132,8 @@ elif str(raw_message_thread_id) == TELEGRAM_MESSAGE_THREAD_ID_PLACEHOLDER:
         "Messages will be sent to the main chat/group (if chat_id is configured)."
     )
     # TELEGRAM_MESSAGE_THREAD_ID remains None
-# PROXY_URL = os.getenv('PROXY_URL', config_data["telegram"].get("proxy_url")) # .get() for safety if proxy_url is optional
-PROXY_URL = None # Explicitly disable proxy usage for Telegram
+# PROXY_URL = os.getenv('PROXY_URL', config_data["telegram"].get("proxy_url")) # Commented out to disable proxy
+PROXY_URL = None # Explicitly disable proxy usage
 
 # --- Initialize Binance Client ---
 binance_client: Optional[Client] = None
