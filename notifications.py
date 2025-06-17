@@ -69,8 +69,8 @@ async def send_individual_trend_alert_notification(
     symbol = analysis_result.get('symbol', 'N/A')
     timeframe = analysis_result.get('timeframe', 'N/A')
     timestamp_str = analysis_result.get('analysis_timestamp_utc', pd.to_datetime('now', utc=True)).strftime('%Y-%m-%d %H:%M:%S %Z')
-    price_val = analysis_result.get('price')
-    price_str = f"${price_val:,.2f}" if pd.notna(price_val) else "N/A"
+    price_val: Optional[float] = analysis_result.get('price') # Added type hint for clarity
+    price_str = f"${price_val:,.4f}" if pd.notna(price_val) else "N/A" # Increased precision for current price
     rsi_val = analysis_result.get('rsi_val')
     rsi_str = f"{rsi_val:.2f}" if pd.notna(rsi_val) else "N/A"
     rsi_interpretation = analysis_result.get('rsi_interpretation', 'N/A')
@@ -90,8 +90,26 @@ async def send_individual_trend_alert_notification(
     proj_short_high_val = analysis_result.get('proj_range_short_high')
     proj_long_low_val = analysis_result.get('proj_range_long_low')
     proj_long_high_val = analysis_result.get('proj_range_long_high')
-    proj_short_range_str = f"${proj_short_low_val:,.2f} - ${proj_short_high_val:,.2f}" if proj_short_low_val is not None and proj_short_high_val is not None else "N/A"
-    proj_long_range_str = f"${proj_long_low_val:,.2f} - ${proj_long_high_val:,.2f}" if proj_long_low_val is not None and proj_long_high_val is not None else "N/A"
+    proj_short_range_str = f"${proj_short_low_val:,.4f} - ${proj_short_high_val:,.4f}" if proj_short_low_val is not None and proj_short_high_val is not None else "N/A"
+    proj_long_range_str = f"${proj_long_low_val:,.4f} - ${proj_long_high_val:,.4f}" if proj_long_low_val is not None and proj_long_high_val is not None else "N/A"
+
+    # Calculate percentage difference from current price to projected range boundaries
+    def get_percentage_diff_str(current_price: Optional[float], boundary_price: Optional[float]) -> str:
+        if current_price is None or boundary_price is None or current_price == 0:
+            return "" # Return empty if not calculable or current price is zero
+        percentage_diff = ((boundary_price - current_price) / current_price) * 100
+        return f" ({percentage_diff:+.2f}%)" # Show sign and 2 decimal places
+
+    proj_short_low_pct_str = get_percentage_diff_str(price_val, proj_short_low_val)
+    proj_short_high_pct_str = get_percentage_diff_str(price_val, proj_short_high_val)
+    proj_long_low_pct_str = get_percentage_diff_str(price_val, proj_long_low_val)
+    proj_long_high_pct_str = get_percentage_diff_str(price_val, proj_long_high_val)
+
+    # Update range strings to include percentages
+    if proj_short_low_val is not None and proj_short_high_val is not None:
+        proj_short_range_str = f"${proj_short_low_val:,.4f}{proj_short_low_pct_str} - ${proj_short_high_val:,.4f}{proj_short_high_pct_str}"
+    if proj_long_low_val is not None and proj_long_high_val is not None:
+        proj_long_range_str = f"${proj_long_low_val:,.4f}{proj_long_low_pct_str} - ${proj_long_high_val:,.4f}{proj_long_high_pct_str}"
 
     trend = analysis_result.get('trend', 'N/A')
 
