@@ -35,8 +35,8 @@ async def send_strong_trend_summary_notification(
         header = f"⚡️ *Strong Trend Alerts* ({pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S %Z')}) ⚡️\n\n"
         full_message = header + "\n".join(strong_trend_alerts_details)
 
-        # Send to main chat/channel
-        await telegram_handler.send_telegram_notification(chat_id, full_message, message_thread_id=None)
+        # Commented out: Send to main chat/channel
+        # await telegram_handler.send_telegram_notification(chat_id, full_message, message_thread_id=None)
 
         # If a topic ID is provided, also send to the topic
         if message_thread_id is not None:
@@ -86,8 +86,8 @@ async def send_individual_trend_alert_notification(
         f"💡 Trend: *{trend}*"
     )
 
-    # Send to main chat/channel
-    await telegram_handler.send_telegram_notification(chat_id, message, message_thread_id=None)
+    # Commented out: Send to main chat/channel
+    # await telegram_handler.send_telegram_notification(chat_id, message, message_thread_id=None)
 
     # If a topic ID is provided, also send to the topic
     if message_thread_id is not None:
@@ -106,6 +106,6 @@ async def send_shutdown_notification(
         return
         
     shutdown_message = f"🛑 Trend Analysis Bot for {', '.join(symbols_list)} stopped by user at {pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S %Z')}."
-    await telegram_handler.send_telegram_notification(
-        chat_id, shutdown_message, message_thread_id=message_thread_id, suppress_print=True
-    )
+    # Commented out, because the logic of this function sends only to topic:  await telegram_handler.send_telegram_notification(
+    #    chat_id, shutdown_message, message_thread_id=message_thread_id, suppress_print=True
+    #)
