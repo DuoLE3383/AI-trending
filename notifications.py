@@ -49,6 +49,8 @@ async def send_individual_trend_alert_notification(
     chat_id: str,
     message_thread_id: Optional[int],
     analysis_result: Dict[str, Any],
+    bbands_period_const: int, # Added
+    bbands_std_dev_const: float, # Added
     rsi_period_const: int,
     ema_fast_const: int,
     ema_medium_const: int,
@@ -73,6 +75,11 @@ async def send_individual_trend_alert_notification(
     ema_medium_str = f"${ema_medium_val:,.2f}" if pd.notna(ema_medium_val) else "N/A"
     ema_slow_val = analysis_result.get('ema_slow_val')
     ema_slow_str = f"${ema_slow_val:,.2f}" if pd.notna(ema_slow_val) else "N/A"
+    bb_lower_val = analysis_result.get('bb_lower')
+    bb_lower_str = f"${bb_lower_val:,.2f}" if pd.notna(bb_lower_val) else "N/A"
+    bb_upper_val = analysis_result.get('bb_upper')
+    bb_upper_str = f"${bb_upper_val:,.2f}" if pd.notna(bb_upper_val) else "N/A"
+
     trend = analysis_result.get('trend', 'N/A')
 
     message = (
@@ -80,6 +87,7 @@ async def send_individual_trend_alert_notification(
         f"🕒 Time: `{timestamp_str}`\n"
         f"💲 Price: `{price_str}`\n"
         f"📊 RSI ({rsi_period_const}): `{rsi_str}` ({rsi_interpretation})\n\n"
+        f" रेंज BBands ({bbands_period_const}, {bbands_std_dev_const}): `{bb_lower_str} - {bb_upper_str}`\n\n" # Using "रेंज" for "Range"
         f"📉 EMAs:\n"
         f"  • Fast ({ema_fast_const}): `{ema_fast_str}`\n"
         f"  • Medium ({ema_medium_const}): `{ema_medium_str}`\n"

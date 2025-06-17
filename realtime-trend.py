@@ -32,6 +32,10 @@ RSI_PERIOD = 14
 RSI_OVERBOUGHT = 70
 RSI_OVERSOLD = 30
 
+# Bollinger Bands Constants
+BBANDS_PERIOD = 20
+BBANDS_STD_DEV = 2.0
+
 # Notification Constants
 PERIODIC_NOTIFICATION_INTERVAL_SECONDS = 10 * 60  # Set to 600 seconds (10 minutes)
 
@@ -178,7 +182,10 @@ def init_sqlite_db(db_path: str) -> bool:
                 rsi_period INTEGER, -- Added RSI columns
                 rsi_value REAL,     -- Added RSI columns
                 trend TEXT,
-                last_candle_open_time_utc TEXT
+                last_candle_open_time_utc TEXT,
+                bb_lower REAL,      -- Bollinger Band Lower
+                bb_middle REAL,     -- Bollinger Band Middle
+                bb_upper REAL       -- Bollinger Band Upper
             )
         ''')
         conn.commit()
@@ -248,21 +255,32 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
     ema_slow_col_name = f'EMA_{EMA_SLOW}'
     # Define RSI column name
     rsi_col_name = f'RSI_{RSI_PERIOD}'
+    # Define Bollinger Bands column name prefix (pandas_ta will append period and std)
+    bbands_lower_col_name = f'BBL_{BBANDS_PERIOD}_{BBANDS_STD_DEV}'
+    bbands_middle_col_name = f'BBM_{BBANDS_PERIOD}_{BBANDS_STD_DEV}'
+    bbands_upper_col_name = f'BBU_{BBANDS_PERIOD}_{BBANDS_STD_DEV}'
 
 
     df.ta.ema(length=EMA_FAST, append=True, col_names=(ema_fast_col_name,))
     df.ta.ema(length=EMA_MEDIUM, append=True, col_names=(ema_medium_col_name,))
     df.ta.ema(length=EMA_SLOW, append=True, col_names=(ema_slow_col_name,))
-    
+
+    # --- Calculate RSI ---
+    df.ta.rsi(length=RSI_PERIOD, append=True, col_names=(rsi_col_name,))
+
+    # --- Calculate Bollinger Bands ---
+    df.ta.bbands(length=BBANDS_PERIOD, std=BBANDS_STD_DEV, append=True)
+
+    # Get the last row AFTER all indicators are calculated and appended
     last_row = df.iloc[-1]
     price: Optional[float] = last_row.get('close')
     ema_fast_val: Optional[float] = last_row.get(ema_fast_col_name)
     ema_medium_val: Optional[float] = last_row.get(ema_medium_col_name)
     ema_slow_val: Optional[float] = last_row.get(ema_slow_col_name)
-    
-    # --- Calculate RSI ---
-    df.ta.rsi(length=RSI_PERIOD, append=True, col_names=(rsi_col_name,))
     rsi_val: Optional[float] = last_row.get(rsi_col_name)
+    bb_lower_val: Optional[float] = last_row.get(bbands_lower_col_name)
+    bb_middle_val: Optional[float] = last_row.get(bbands_middle_col_name)
+    bb_upper_val: Optional[float] = last_row.get(bbands_upper_col_name)
 
     # --- Interpret RSI ---
     rsi_interpretation = "N/A" # Default if RSI could not be calculated
@@ -280,6 +298,9 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
     ema_medium_str = f"${ema_medium_val:,.2f}" if pd.notna(ema_medium_val) else "N/A"
     ema_slow_str = f"${ema_slow_val:,.2f}" if pd.notna(ema_slow_val) else "N/A"
     rsi_str = f"{rsi_val:.2f}" if pd.notna(rsi_val) else "N/A"
+    bb_lower_str = f"${bb_lower_val:,.2f}" if pd.notna(bb_lower_val) else "N/A"
+    bb_middle_str = f"${bb_middle_val:,.2f}" if pd.notna(bb_middle_val) else "N/A"
+    bb_upper_str = f"${bb_upper_val:,.2f}" if pd.notna(bb_upper_val) else "N/A"
     
     current_time_utc = pd.to_datetime('now', utc=True)
     analysis_header_content = f" Analysis for {symbol} at {current_time_utc.strftime('%Y-%m-%d %H:%M:%S %Z')} "
@@ -289,6 +310,7 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
     logger.info(f"EMA {EMA_MEDIUM:<{len(str(EMA_SLOW))}}:     {ema_medium_str}")
     logger.info(f"EMA {EMA_SLOW:<{len(str(EMA_SLOW))}}:       {ema_slow_str}")
     logger.info(f"RSI {RSI_PERIOD:<{len(str(EMA_SLOW))}}:       {rsi_str} ({rsi_interpretation})") # Log RSI
+    logger.info(f"BBands ({BBANDS_PERIOD},{BBANDS_STD_DEV}): Low: {bb_lower_str}, Mid: {bb_middle_str}, High: {bb_upper_str}")
     
     # --- Determine Trend based on EMAs ---
     trend = TREND_SIDEWAYS
@@ -319,7 +341,10 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
             'rsi_val': rsi_val if pd.notna(rsi_val) else None, # Include RSI value
             'rsi_interpretation': rsi_interpretation, # Include RSI interpretation
             'trend': trend,
-            'last_candle_open_time_utc': last_candle_open_time
+            'last_candle_open_time_utc': last_candle_open_time,
+            'bb_lower': bb_lower_val if pd.notna(bb_lower_val) else None,
+            'bb_middle': bb_middle_val if pd.notna(bb_middle_val) else None,
+            'bb_upper': bb_upper_val if pd.notna(bb_upper_val) else None,
         }
         try:
             conn = sqlite3.connect(SQLITE_DB_PATH)
@@ -332,10 +357,11 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
                     ema_fast_period, ema_fast_value,
                     ema_medium_period, ema_medium_value,
                     rsi_period, rsi_value, -- Added RSI columns
-                    ema_slow_period, ema_slow_value,
-                    trend, last_candle_open_time_utc
+                    ema_slow_period, ema_slow_value, trend,
+                    last_candle_open_time_utc,
+                    bb_lower, bb_middle, bb_upper -- Added BBands columns
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 data_to_save['analysis_timestamp_utc'].isoformat(),  # Convert datetime to string for SQLite
                 symbol,  # Include the symbol being analyzed
@@ -347,7 +373,10 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
                 EMA_SLOW, data_to_save['ema_slow_val'], # ema_slow_period, ema_slow_value
                 RSI_PERIOD, data_to_save['rsi_val'],    # rsi_period, rsi_value
                 data_to_save['trend'],
-                data_to_save['last_candle_open_time_utc'].isoformat() if data_to_save['last_candle_open_time_utc'] else None  # Convert datetime to string
+                data_to_save['last_candle_open_time_utc'].isoformat() if data_to_save['last_candle_open_time_utc'] else None,  # Convert datetime to string
+                data_to_save['bb_lower'],
+                data_to_save['bb_middle'],
+                data_to_save['bb_upper']
             ))
 
             conn.commit()
@@ -486,7 +515,9 @@ async def main():
                     chat_id=TELEGRAM_CHAT_ID,
                     # Pass the configured topic ID to the notification function
                     message_thread_id=TELEGRAM_MESSAGE_THREAD_ID,
-                    analysis_result=analysis_detail,
+                    analysis_result=analysis_detail, # This now includes BBands
+                    bbands_period_const=BBANDS_PERIOD, # Pass BBands period
+                    bbands_std_dev_const=BBANDS_STD_DEV, # Pass BBands std dev
                     rsi_period_const=RSI_PERIOD, ema_fast_const=EMA_FAST,
                     ema_medium_const=EMA_MEDIUM, ema_slow_const=EMA_SLOW
                 )
