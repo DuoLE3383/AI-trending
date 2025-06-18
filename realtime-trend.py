@@ -36,10 +36,10 @@ RSI_OVERSOLD = 30
 BBANDS_PERIOD = 20
 BBANDS_STD_DEV = 2.0
 
-# ATR and Projected Range Constants
+# --- MODIFIED: ATR and Projected Range Constants ---
 ATR_PERIOD = 14
-ATR_MULTIPLIER_SHORT = 2.5 # Multiplier for a shorter-term volatility projection
-ATR_MULTIPLIER_LONG = 2.5  # Multiplier for a longer-term volatility projection
+ATR_MULTIPLIER_SHORT = 1.5 # Multiplier for a shorter-term volatility projection (Reduced for closer range)
+ATR_MULTIPLIER_LONG = 1.5  # Multiplier for a longer-term volatility projection (Reduced for closer range)
 
 # TP/SL ATR Multiplier Constants
 ATR_MULTIPLIER_SL = 1.2    # Stop Loss: 1.5 * ATR
@@ -238,8 +238,8 @@ def get_market_data(symbol: str, required_candles: int) -> pd.DataFrame:
             return pd.DataFrame()
 
         df = pd.DataFrame(klines, columns=[
-            'timestamp', 'open', 'high', 'low', 'close', 'volume', 
-            'close_time', 'quote_asset_volume', 'number_of_trades', 
+            'timestamp', 'open', 'high', 'low', 'close', 'volume',
+            'close_time', 'quote_asset_volume', 'number_of_trades',
             'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'
         ])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
@@ -266,7 +266,7 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
     if len(df) < EMA_SLOW: # This check is for EMA
         logger.warning(f"Not enough data ({len(df)} points) for {symbol} to calculate EMA_{EMA_SLOW}. Need at least {EMA_SLOW} points.")
         return None # Cannot proceed without EMAs
-    
+
     if len(df) < RSI_PERIOD + 1: # Check for RSI, log warning if not enough, but proceed as RSI can be N/A
         logger.warning(f"Not enough data ({len(df)} points) for {symbol} to calculate RSI_{RSI_PERIOD}. Need at least {RSI_PERIOD + 1} points. RSI will be N/A.")
 
@@ -363,7 +363,7 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
         elif price < ema_fast_val and ema_fast_val < ema_medium_val and ema_medium_val < ema_slow_val:
             trend = TREND_STRONG_BEARISH
 
-    
+
     current_time_utc = pd.to_datetime('now', utc=True)
     analysis_header_content = f" Analysis for {symbol} at {current_time_utc.strftime('%Y-%m-%d %H:%M:%S %Z')} "
     logger.info(f"\n{'='*15}{analysis_header_content}{'='*15}") # Correctly uses the 'symbol' parameter
@@ -379,25 +379,29 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
 
     if trend in [TREND_STRONG_BULLISH, TREND_STRONG_BEARISH] and pd.notna(price) and pd.notna(atr_val):
         entry_price_val = price # Current price is the entry price
-        # TP levels are still based on entry price and ATR
-        # New TP levels based on fixed percentage from entry price
+
+        # --- MODIFIED: Contrarian TP/SL Logic ---
+        # Strong Bullish Trend -> Generate SHORT Signal (Sell)
         if trend == TREND_STRONG_BULLISH:
-            # New SL: 10% below the short-term projected low
-            if proj_short_low_val is not None:
-                sl_val = proj_short_low_val * 0.90 
-            # TP levels: +2%, +4%, +6% actual gain from entry price
-            tp1_val = entry_price_val * (1 + 0.02)
-            tp2_val = entry_price_val * (1 + 0.04)
-            tp3_val = entry_price_val * (1 + 0.06)
-        elif trend == TREND_STRONG_BEARISH:
-            # New SL: 10% above the short-term projected high
+            logger.info("Strong Bullish trend detected. Generating SHORT signal (contrarian).")
+            # SL for a short trade: 10% above the short-term projected high
             if proj_short_high_val is not None:
                 sl_val = proj_short_high_val * 1.10
-            # TP levels: -2%, -4%, -6% actual loss from entry price
+            # TP levels for a short trade: -2%, -4%, -6% from entry price
             tp1_val = entry_price_val * (1 - 0.02)
             tp2_val = entry_price_val * (1 - 0.04)
             tp3_val = entry_price_val * (1 - 0.06)
-        
+        # Strong Bearish Trend -> Generate LONG Signal (Buy)
+        elif trend == TREND_STRONG_BEARISH:
+            logger.info("Strong Bearish trend detected. Generating LONG signal (contrarian).")
+            # SL for a long trade: 10% below the short-term projected low
+            if proj_short_low_val is not None:
+                sl_val = proj_short_low_val * 0.90
+            # TP levels for a long trade: +2%, +4%, +6% from entry price
+            tp1_val = entry_price_val * (1 + 0.02)
+            tp2_val = entry_price_val * (1 + 0.04)
+            tp3_val = entry_price_val * (1 + 0.06)
+
         logger.info(f"Entry Price: ${entry_price_val:,.4f}")
         logger.info(f"SL: ${sl_val:,.4f}, TP1: ${tp1_val:,.4f}, TP2: ${tp2_val:,.4f}, TP3: ${tp3_val:,.4f}")
     else:
@@ -446,14 +450,14 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
                     analysis_timestamp_utc, symbol, timeframe, price,
                     ema_fast_period, ema_fast_value,
                     ema_medium_period, ema_medium_value,
-                    rsi_period, rsi_value, -- Added RSI columns
-                    ema_slow_period, ema_slow_value, trend,
+                    ema_slow_period, ema_slow_value,
+                    rsi_period, rsi_value, trend,
                     last_candle_open_time_utc, bb_lower, bb_middle, bb_upper, -- BBands
                     atr_value, proj_range_short_low, proj_range_short_high,   -- ATR & Proj Short
                     proj_range_long_low, proj_range_long_high,                -- Proj Long
                     entry_price, stop_loss, take_profit_1, take_profit_2, take_profit_3 -- TP/SL
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 data_to_save['analysis_timestamp_utc'].isoformat(),  # Convert datetime to string for SQLite
                 symbol,  # Include the symbol being analyzed
@@ -461,9 +465,8 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
                 data_to_save['price'],
                 EMA_FAST, data_to_save['ema_fast_val'],
                 EMA_MEDIUM, data_to_save['ema_medium_val'],
-                # Correct order and values for ema_slow and rsi
-                EMA_SLOW, data_to_save['ema_slow_val'], # ema_slow_period, ema_slow_value
-                RSI_PERIOD, data_to_save['rsi_val'],    # rsi_period, rsi_value
+                EMA_SLOW, data_to_save['ema_slow_val'],
+                RSI_PERIOD, data_to_save['rsi_val'],
                 data_to_save['trend'],
                 data_to_save['last_candle_open_time_utc'].isoformat() if data_to_save['last_candle_open_time_utc'] else None,  # Convert datetime to string
                 data_to_save['bb_lower'],
@@ -490,20 +493,20 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, 
 
     else:
         logger.warning("SQLite database path not configured. Data will not be saved.")
-    
+
     return data_to_save # Return the analysis results
 
 async def main():
     """Main asynchronous function to run the bot."""
     logger.info("--- Starting Real-Time Market Analysis Bot ---")
-    
+
     # Check if at least Binance or Telegram is configured
     binance_configured = binance_client is not None
     telegram_configured = TELEGRAM_BOT_TOKEN != TELEGRAM_BOT_TOKEN_PLACEHOLDER and TELEGRAM_CHAT_ID != TELEGRAM_CHAT_ID_PLACEHOLDER
     if not (binance_configured or telegram_configured): # Check if at least one service is configured
         logger.critical("Neither Binance nor Telegram services are properly configured. The script may not perform any useful actions.")
         # sys.exit("Exiting due to lack of service configurations.") # Optional: exit if no services configured
-    
+
     # Initialize SQLite DB
     init_sqlite_db(SQLITE_DB_PATH)
 
@@ -541,7 +544,7 @@ async def main():
         timeframe_display=TIMEFRAME,
         loop_interval_display=loop_interval_display_str
     )
-    
+
     if not telegram_bot_initialized and TELEGRAM_BOT_TOKEN != TELEGRAM_BOT_TOKEN_PLACEHOLDER:
         logger.critical("Failed to initialize Telegram Bot. Exiting as Telegram notifications are configured but could not be started.")
         sys.exit("Exiting due to Telegram initialization failure.")
@@ -561,7 +564,7 @@ async def main():
             all_symbols_preloaded_successfully = False
         else:
             logger.info(f"✅ Successfully pre-loaded {len(pre_load_df)} points for {symbol_to_preload}.")
-    
+
     if not all_symbols_preloaded_successfully:
         logger.warning("One or more symbols failed to pre-load sufficient initial data. Analysis may be affected for these symbols initially.")
     else:
@@ -569,7 +572,7 @@ async def main():
 
     logger.info(f"--- Analysis loop starting for symbols: {', '.join(SYMBOLS)} ({TIMEFRAME}) every {LOOP_SLEEP_INTERVAL_SECONDS}s ---")
     logger.info("Press CTRL+C to stop.")
-    
+
     cycle_count = 0
     # Determine the number of candles needed for analysis based on the slowest EMA + a buffer
     REQUIRED_CANDLES_FOR_ANALYSIS = EMA_SLOW + ANALYSIS_CANDLE_BUFFER
@@ -595,7 +598,7 @@ async def main():
             # --- Prepare lists for different notification types ---
             # strong_trend_results_for_summary = [] # No longer sending summaries
             individual_alerts_to_send_details = []
-            
+
             for result in cycle_analysis_results:
                 trend = result['trend']
                 if trend in [TREND_STRONG_BULLISH, TREND_STRONG_BEARISH]:
@@ -635,7 +638,7 @@ async def main():
             logger.exception("An unexpected error occurred in the main loop:") # logger.exception automatically includes traceback
             logger.info(f"Retrying in {LOOP_SLEEP_INTERVAL_SECONDS} seconds...")
             await asyncio.sleep(LOOP_SLEEP_INTERVAL_SECONDS) # Use asyncio.sleep in async code
-    
+
     logger.info("--- Bot shutdown complete. ---")
 
 if __name__ == "__main__":
