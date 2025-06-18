@@ -196,7 +196,7 @@ async def send_individual_trend_alert_notification(
 
         message += f"🎯 Entry Price: `${entry_price_val:,.4f}`\n"
         if sl_val is not None:
-            message += ("SL", sl_val, entry_price_val, "🛡️")
+            message += format_level_with_percentage("SL", sl_val / 2, entry_price_val, "🛡️")
         if tp1_val is not None:
             message += format_level_with_percentage("TP1", tp1_val, entry_price_val, "💰")
         if tp2_val is not None:
