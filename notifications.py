@@ -170,14 +170,14 @@ async def send_individual_trend_alert_notification(
     message = (
         f"*{symbol} Trend Alert* ({timeframe})\n\n"
         f"🕒 Time: `{timestamp_str}`\n"
-        # f"💲 Price: `{price_str}`\n"
-        # f"📊 RSI ({rsi_period_const}): `{rsi_str}` ({rsi_interpretation})\n\n"
-        # f"📈 BBands ({bbands_period_const}, {bbands_std_dev_const}): `{bb_lower_str} - {bb_upper_str}`\n" # Removed as per request
-        # f"📉 ATR ({atr_period_const}): `{atr_str}`\n\n"
-        # f"📉 EMAs:\n"
-        # f"  • Fast ({ema_fast_const}): `{ema_fast_str}`\n"
-        # f"  • Medium ({ema_medium_const}): `{ema_medium_str}`\n"
-        # f"  • Slow ({ema_slow_const}): `{ema_slow_str}`\n\n"
+         f"💲 Price: `{price_str}`\n"
+         f"📊 RSI ({rsi_period_const}): `{rsi_str}` ({rsi_interpretation})\n\n"
+         f"📈 BBands ({bbands_period_const}, {bbands_std_dev_const}): `{bb_lower_str} - {bb_upper_str}`\n" # Removed as per request
+         f"📉 ATR ({atr_period_const}): `{atr_str}`\n\n"
+         f"📉 EMAs:\n"
+         f"  • Fast ({ema_fast_const}): `{ema_fast_str}`\n"
+         f"  • Medium ({ema_medium_const}): `{ema_medium_str}`\n"
+         f"  • Slow ({ema_slow_const}): `{ema_slow_str}`\n\n"
     )
 
     # Add TP/SL info if available (typically for strong trends)
