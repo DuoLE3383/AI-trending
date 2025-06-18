@@ -1,188 +1,209 @@
 import logging
 import pandas as pd
 import asyncio
-from typing import List, Dict, Any, Optional
-import telegram_handler # To call the actual send function
+from typing import List, Dict, Any, Optional, Tuple
+from typing_extensions import TypedDict
+import telegram_handler
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
-# In-memory stores
+# --- Constants ---
+NOTIFICATION_THRESHOLD_PERCENT = 0.05  # 5% change to trigger a new alert
+STATUS_UPDATE_INTERVAL_MINUTES = 10
+LEVERAGE_MULTIPLIER = 5
+
+# --- In-memory State Stores ---
+# Note: This state is lost on script restart. For persistence, consider Redis or a database.
 last_notified_ranges: Dict[str, Dict[str, Optional[float]]] = {}
 last_notification_timestamp: Dict[str, pd.Timestamp] = {}
 
-async def send_no_signal_status_update(chat_id: str, message_thread_id: Optional[int], analysis_result: Dict[str, Any]):
-    # This function remains the same as the previous version.
+# --- Define a structured type for analysis results for clarity ---
+class AnalysisResult(TypedDict, total=False):
+    symbol: str
+    timeframe: str
+    analysis_timestamp_utc: pd.Timestamp
+    price: float
+    rsi_val: float
+    rsi_interpretation: str
+    ema_fast_val: float
+    ema_medium_val: float
+    ema_slow_val: float
+    atr_value: float
+    proj_range_short_low: float
+    proj_range_short_high: float
+    proj_range_long_low: float
+    proj_range_long_high: float
+    entry_price: float
+    stop_loss: float
+    take_profit_1: float
+    take_profit_2: float
+    take_profit_3: float
+    trend: str
+
+# --- Helper Functions (Refactored for Clarity) ---
+
+def _should_send_alert(symbol_key: str, new_ranges: Dict[str, Optional[float]]) -> bool:
+    """Determines if a notification should be sent based on range changes."""
+    previous_ranges = last_notified_ranges.get(symbol_key)
+    if not previous_ranges:
+        return True  # Always send if it's the first time
+
+    for key, prev_val in previous_ranges.items():
+        curr_val = new_ranges.get(key)
+        if prev_val and curr_val and prev_val != 0:
+            if abs(curr_val - prev_val) / abs(prev_val) > NOTIFICATION_THRESHOLD_PERCENT:
+                logger.info(f"Threshold exceeded for {symbol_key} on '{key}'. Sending alert.")
+                return True
+    return False
+
+def _determine_trade_info(entry: Optional[float], tp1: Optional[float], original_trend: str) -> Tuple[Optional[str], str, str]:
+    """Determines trade direction and corrects the trend label if necessary."""
+    if not entry or not tp1:
+        return None, original_trend, ""
+
+    if tp1 > entry:
+        direction = "Long"
+        corrected_label = "✅ Bullish"
+    else:
+        direction = "Short"
+        corrected_label = "❌ Bearish"
+    
+    if original_trend not in corrected_label:
+        logger.warning(f"Correcting trend! Original='{original_trend}', but levels indicate a '{direction}' trade.")
+        
+    return direction, corrected_label, f"({direction})"
+
+def _format_level(level_name: str, level_val: Optional[float], entry_val: float, emoji: str, direction: str) -> str:
+    """Formats a single SL or TP level with its percentage change."""
+    if not all([level_val, entry_val, direction]):
+        return ""
+    
+    percentage = ((level_val - entry_val) / entry_val if direction == "Long" else (entry_val - level_val) / entry_val) * 100
+    leveraged_percentage = -abs(percentage * LEVERAGE_MULTIPLIER) if level_name == "SL" else abs(percentage * LEVERAGE_MULTIPLIER)
+    
+    return f"{emoji} {level_name}: `${level_val:,.4f}` ({leveraged_percentage:+.2f}%)\n"
+
+def _format_alert_message(result: AnalysisResult, constants: Dict[str, Any]) -> str:
+    """Builds the final, formatted Telegram message string."""
+    # --- Data Extraction ---
+    price_str = f"${result.get('price', 0):,.4f}"
+    rsi_str = f"{result.get('rsi_val', 0):.2f}"
+    atr_str = f"{result.get('atr_value', 0):.4f}"
+    
+    # --- Determine Trade Direction & Corrected Trend ---
+    direction, corrected_trend, trade_type_str = _determine_trade_info(
+        result.get('entry_price'), result.get('take_profit_1'), result.get('trend', 'N/A')
+    )
+
+    # --- Build Message Components ---
+    message_parts = [
+        f"*{result.get('symbol')} Trend Alert* ({result.get('timeframe')})\n",
+        f"🕒 Time: `{result.get('analysis_timestamp_utc', pd.Timestamp.now(tz='UTC')).strftime('%Y-%m-%d %H:%M:%S %Z')}`",
+        f"💲 Price: `{price_str}`",
+        f"📊 RSI ({constants['rsi_period_const']}): `{rsi_str}` ({result.get('rsi_interpretation', 'N/A')})",
+        f"📉 ATR ({constants['atr_period_const']}): `{atr_str}`\n",
+        f"📉 EMAs:",
+        f"  • Fast ({constants['ema_fast_const']}): `${result.get('ema_fast_val', 0):,.2f}`",
+        f"  • Medium ({constants['ema_medium_const']}): `${result.get('ema_medium_val', 0):,.2f}`",
+        f"  • Slow ({constants['ema_slow_const']}): `${result.get('ema_slow_val', 0):,.2f}`\n"
+    ]
+
+    # --- Add Trade Levels if they exist ---
+    entry_price = result.get('entry_price')
+    if entry_price and direction:
+        message_parts.append("---") # Visual separator
+        message_parts.append(f"🎯 Entry Price: `${entry_price:,.4f}` {trade_type_str}")
+        message_parts.append(_format_level("SL", result.get('stop_loss'), entry_price, "🛡️", direction))
+        message_parts.append(_format_level("TP1", result.get('take_profit_1'), entry_price, "💰", direction))
+        message_parts.append(_format_level("TP2", result.get('take_profit_2'), entry_price, "💰", direction))
+        message_parts.append(_format_level("TP3", result.get('take_profit_3'), entry_price, "💰", direction))
+        message_parts.append(f"Leverage: x{LEVERAGE_MULTIPLIER} (Margin)\n")
+
+    # --- Add Trend Projections ---
+    def get_range_str(low: float, high: float, price: float) -> str:
+        low_pct = f"({((low - price) / price) * 100:+.2f}%)" if price else ""
+        high_pct = f"({((high - price) / price) * 100:+.2f}%)" if price else ""
+        return f"`${low:,.4f}{low_pct} - ${high:,.4f}{high_pct}`"
+
+    short_range_str = get_range_str(result.get('proj_range_short_low', 0), result.get('proj_range_short_high', 0), result.get('price', 0))
+    long_range_str = get_range_str(result.get('proj_range_long_low', 0), result.get('proj_range_long_high', 0), result.get('price', 0))
+
+    message_parts.append(f"💡 Trend (4h): *{corrected_trend}* (Range: {short_range_str})")
+    message_parts.append(f"💡 Trend (8h): *{corrected_trend}* (Range: {long_range_str})")
+
+    return "\n".join(message_parts)
+
+
+# --- Main Notification Logic (Now Cleaner) ---
+
+async def send_individual_trend_alert_notification(
+    chat_id: str,
+    message_thread_id: Optional[int],
+    analysis_result: AnalysisResult,
+    constants: Dict[str, Any]
+):
+    """
+    Main function to process an analysis result and send a Telegram alert if necessary.
+    """
+    if not telegram_handler.telegram_bot or chat_id == telegram_handler.TELEGRAM_CHAT_ID_PLACEHOLDER:
+        return
+
     symbol = analysis_result.get('symbol', 'N/A')
     timeframe = analysis_result.get('timeframe', 'N/A')
-    price_val: Optional[float] = analysis_result.get('price')
-    price_str = f"${price_val:,.4f}" if pd.notna(price_val) else "N/A"
-    rsi_val = analysis_result.get('rsi_val')
-    rsi_str = f"{rsi_val:.2f}" if pd.notna(rsi_val) else "N/A"
-    rsi_interpretation = analysis_result.get('rsi_interpretation', 'N/A')
-    timestamp_str = pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S %Z')
     symbol_key = f"{symbol}_{timeframe}"
+    
+    new_ranges = {
+        "short_low": analysis_result.get("proj_range_short_low"), "short_high": analysis_result.get("proj_range_short_high"),
+        "long_low": analysis_result.get("proj_range_long_low"), "long_high": analysis_result.get("proj_range_long_high")
+    }
 
+    if not _should_send_alert(symbol_key, new_ranges):
+        # If no significant change, check if it's time for a simple status update
+        last_ts = last_notification_timestamp.get(symbol_key)
+        if not last_ts or (pd.Timestamp.now(tz='UTC') - last_ts > timedelta(minutes=STATUS_UPDATE_INTERVAL_MINUTES)):
+            await send_no_signal_status_update(chat_id, message_thread_id, analysis_result)
+        return
+
+    # --- Format and Send ---
+    message = _format_alert_message(analysis_result, constants)
+    await telegram_handler.send_telegram_notification(chat_id, message, message_thread_id=message_thread_id)
+    
+    # --- Update State ---
+    last_notified_ranges[symbol_key] = new_ranges
+    last_notification_timestamp[symbol_key] = pd.Timestamp.now(tz='UTC')
+    await asyncio.sleep(0.5)
+
+
+# --- Status and Shutdown Notifications (Largely Unchanged) ---
+
+async def send_no_signal_status_update(chat_id: str, message_thread_id: Optional[int], analysis_result: AnalysisResult):
+    """Sends a simplified status update when no major signal is found for a while."""
+    symbol = analysis_result.get('symbol', 'N/A')
+    timeframe = analysis_result.get('timeframe', 'N/A')
+    price_str = f"${analysis_result.get('price', 0):,.4f}"
+    rsi_str = f"{analysis_result.get('rsi_val', 0):.2f}"
+    
     message = (
         f"⏳ *{symbol} Status Update* ({timeframe})\n\n"
         f"No significant signal detected recently.\n\n"
         f"*Current Analytics:*\n"
         f"  • Price: `{price_str}`\n"
-        f"  • RSI: `{rsi_str}` ({rsi_interpretation})\n\n"
-        f"🕒 Time: `{timestamp_str}`"
+        f"  • RSI: `{rsi_str}` ({analysis_result.get('rsi_interpretation', 'N/A')})\n\n"
+        f"🕒 Time: `{pd.Timestamp.now(tz='UTC').strftime('%Y-%m-%d %H:%M:%S %Z')}`"
     )
 
-    logger.info(f"Sending 10-minute status update for {symbol_key}.")
+    logger.info(f"Sending {STATUS_UPDATE_INTERVAL_MINUTES}-minute status update for {symbol}_{timeframe}.")
     await telegram_handler.send_telegram_notification(chat_id, message, message_thread_id=message_thread_id)
-    last_notification_timestamp[symbol_key] = pd.to_datetime('now', utc=True)
+    last_notification_timestamp[f"{symbol}_{timeframe}"] = pd.Timestamp.now(tz='UTC')
     await asyncio.sleep(0.5)
 
-async def send_individual_trend_alert_notification(
-    chat_id: str,
-    message_thread_id: Optional[int],
-    analysis_result: Dict[str, Any],
-    bbands_period_const: int,
-    atr_period_const: int,
-    bbands_std_dev_const: float,
-    rsi_period_const: int,
-    ema_fast_const: int,
-    ema_medium_const: int,
-    ema_slow_const: int
-):
-    if not telegram_handler.telegram_bot or chat_id == telegram_handler.TELEGRAM_CHAT_ID_PLACEHOLDER:
-        return
-
-    # --- Extract data ---
-    symbol = analysis_result.get('symbol', 'N/A')
-    timeframe = analysis_result.get('timeframe', 'N/A')
-    symbol_key = f"{symbol}_{timeframe}"
-    timestamp_str = analysis_result.get('analysis_timestamp_utc', pd.to_datetime('now', utc=True)).strftime('%Y-%m-%d %H:%M:%S %Z')
-    price_val: Optional[float] = analysis_result.get('price')
-    price_str = f"${price_val:,.4f}" if pd.notna(price_val) else "N/A"
-    rsi_val = analysis_result.get('rsi_val')
-    rsi_str = f"{rsi_val:.2f}" if pd.notna(rsi_val) else "N/A"
-    rsi_interpretation = analysis_result.get('rsi_interpretation', 'N/A')
-    ema_fast_val = analysis_result.get('ema_fast_val')
-    ema_fast_str = f"${ema_fast_val:,.2f}" if pd.notna(ema_fast_val) else "N/A"
-    ema_medium_val = analysis_result.get('ema_medium_val')
-    ema_medium_str = f"${ema_medium_val:,.2f}" if pd.notna(ema_medium_val) else "N/A"
-    ema_slow_val = analysis_result.get('ema_slow_val')
-    ema_slow_str = f"${ema_slow_val:,.2f}" if pd.notna(ema_slow_val) else "N/A"
-    atr_val = analysis_result.get('atr_value')
-    atr_str = f"{atr_val:.4f}" if pd.notna(atr_val) else "N/A"
-    proj_short_low_val = analysis_result.get('proj_range_short_low')
-    proj_short_high_val = analysis_result.get('proj_range_short_high')
-    proj_long_low_val = analysis_result.get('proj_range_long_low')
-    proj_long_high_val = analysis_result.get('proj_range_long_high')
-    entry_price_val = analysis_result.get('entry_price')
-    sl_val = analysis_result.get('stop_loss')
-    tp1_val = analysis_result.get('take_profit_1')
-    tp2_val = analysis_result.get('take_profit_2')
-    tp3_val = analysis_result.get('take_profit_3')
-    original_trend = analysis_result.get('trend', 'N/A')
-
-    # --- Conditional Notification Logic (Same as before) ---
-    # (This section is unchanged, but included for completeness)
-    previous_ranges = last_notified_ranges.get(symbol_key)
-    send_this_notification = False
-    if previous_ranges is None:
-        send_this_notification = True
-    else:
-        boundaries_to_check = [("short_low", previous_ranges.get("short_low"), proj_short_low_val), ("short_high", previous_ranges.get("short_high"), proj_short_high_val)]
-        for name, prev_val, curr_val in boundaries_to_check:
-            if prev_val is not None and curr_val is not None and prev_val != 0:
-                if abs(curr_val - prev_val) / abs(prev_val) > 0.05: # 5% change check
-                    send_this_notification = True
-                    break
-    if not send_this_notification:
-        if last_notification_timestamp.get(symbol_key) is None or (pd.to_datetime('now', utc=True) - last_notification_timestamp.get(symbol_key) > timedelta(minutes=10)):
-            await send_no_signal_status_update(chat_id, message_thread_id, analysis_result)
-        return
-
-    # --- NEW LOGIC: Detect and Correct Trade Direction ---
-    trade_direction = None
-    corrected_trend_label = ""
-    trade_type_str = ""
-    
-    if entry_price_val and tp1_val:
-        if tp1_val > entry_price_val:
-            trade_direction = "Long"
-            corrected_trend_label = "✅ Bullish"
-            trade_type_str = "(Long)"
-        else:
-            trade_direction = "Short"
-            corrected_trend_label = "❌ Bearish"
-            trade_type_str = "(Short)"
-            
-        if original_trend not in corrected_trend_label:
-            logger.warning(f"Correcting trend! Original was '{original_trend}', but levels indicate a '{trade_direction}' trade.")
-
-    # --- MODIFIED: Formatting Function for SL/TP ---
-    def format_level_with_percentage(level_name: str, level_val: Optional[float], entry_val: float, emoji: str, direction: Optional[str]) -> str:
-        if level_val is None or entry_val == 0 or direction is None:
-            return ""
-        
-        # Calculate percentage based on trade direction (Long vs. Short)
-        if direction == "Long":
-            percentage = ((level_val - entry_val) / entry_val) * 100
-        else: # Short
-            percentage = ((entry_val - level_val) / entry_val) * 100
-
-        # Apply leverage and ensure SL is negative, TPs are positive
-        leveraged_percentage = percentage * 5
-        if level_name == "SL":
-            leveraged_percentage = -abs(leveraged_percentage) # SL is always a loss
-        else:
-            leveraged_percentage = abs(leveraged_percentage) # TPs are always profit
-            
-        return f"{emoji} {level_name}: `${level_val:,.4f}` ({leveraged_percentage:+.2f}%)\n"
-
-    # --- Format Projected Ranges (Unchanged) ---
-    def get_percentage_diff_str(current_price: Optional[float], boundary_price: Optional[float]) -> str:
-        if current_price is None or boundary_price is None or current_price == 0: return ""
-        percentage_diff = ((boundary_price - current_price) / current_price) * 100
-        return f" ({percentage_diff:+.2f}%)"
-    proj_short_range_str = f"${proj_short_low_val:,.4f}{get_percentage_diff_str(price_val, proj_short_low_val)} - ${proj_short_high_val:,.4f}{get_percentage_diff_str(price_val, proj_short_high_val)}"
-    proj_long_range_str = f"${proj_long_low_val:,.4f}{get_percentage_diff_str(price_val, proj_long_low_val)} - ${proj_long_high_val:,.4f}{get_percentage_diff_str(price_val, proj_long_high_val)}"
-
-    # --- Build The Message with Corrected Logic ---
-    message = (
-        f"*{symbol} Trend Alert* ({timeframe})\n\n"
-        f"🕒 Time: `{timestamp_str}`\n"
-        f"💲 Price: `{price_str}`\n"
-        f"📊 RSI ({rsi_period_const}): `{rsi_str}` ({rsi_interpretation})\n"
-        f"📉 ATR ({atr_period_const}): `{atr_str}`\n\n"
-        f"📉 EMAs:\n"
-        f"  • Fast ({ema_fast_const}): `{ema_fast_str}`\n"
-        f"  • Medium ({ema_medium_const}): `{ema_medium_str}`\n"
-        f"  • Slow ({ema_slow_const}): `{ema_slow_str}`\n\n"
-    )
-
-    if entry_price_val and trade_direction:
-        message += f"🎯 Entry Price: `${entry_price_val:,.4f}` {trade_type_str}\n"
-        message += format_level_with_percentage("SL", sl_val, entry_price_val, "🛡️", trade_direction)
-        message += format_level_with_percentage("TP1", tp1_val, entry_price_val, "💰", trade_direction)
-        message += format_level_with_percentage("TP2", tp2_val, entry_price_val, "💰", trade_direction)
-        message += format_level_with_percentage("TP3", tp3_val, entry_price_val, "💰", trade_direction)
-        message += "Leverage: x5 (Margin)\n\n"
-
-    # Use the corrected trend label for the final message
-    message += (
-        f"💡 Trend: next 4 hour *{corrected_trend_label}* (Price range: `{proj_short_range_str}`)\n"
-        f"💡 Trend: next 8 hour *{corrected_trend_label}* (Price range: `{proj_long_range_str}`)"
-    )
-
-    # --- Send Notification and Update State ---
-    await telegram_handler.send_telegram_notification(chat_id, message, message_thread_id=message_thread_id)
-    
-    last_notified_ranges[symbol_key] = {"short_low": proj_short_low_val, "short_high": proj_short_high_val, "long_low": proj_long_low_val, "long_high": proj_long_high_val}
-    last_notification_timestamp[symbol_key] = pd.to_datetime('now', utc=True)
-    await asyncio.sleep(0.5)
 
 async def send_shutdown_notification(chat_id: str, message_thread_id: Optional[int], symbols_list: List[str]):
-    # This function remains the same
+    """Sends a notification when the bot is shut down."""
     if not telegram_handler.telegram_bot or chat_id == telegram_handler.TELEGRAM_CHAT_ID_PLACEHOLDER:
         return
-    shutdown_message = (f"🛑 Trend Analysis Bot for *{', '.join(symbols_list)}* stopped by user at " f"`{pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S %Z')}`.")
+    shutdown_message = (f"🛑 Trend Analysis Bot for *{', '.join(symbols_list)}* stopped by user at "
+                        f"`{pd.Timestamp.now(tz='UTC').strftime('%Y-%m-%d %H:%M:%S %Z')}`.")
     await telegram_handler.send_telegram_notification(chat_id, shutdown_message, message_thread_id=message_thread_id, suppress_print=True)
 
