@@ -10,6 +10,7 @@ from binance.exceptions import BinanceAPIException, BinanceRequestException # Re
 import sys
 import logging, asyncio # Added asyncio
 import json # Added for loading config file
+import subprocess # Added to run the updater script
 from typing import Optional, Any, Dict
 import telegram_handler # Import the new module_handler
 import notifications # Import the new notifications module
@@ -642,6 +643,38 @@ async def main():
     logger.info("--- Bot shutdown complete. ---")
 
 if __name__ == "__main__":
+    # --- MODIFICATION: Run Pairlist Updater Script First ---
+    try:
+        logger.info("Attempting to execute pairlistupdater.py to refresh the symbol list...")
+        # Use sys.executable to ensure the same Python interpreter is used.
+        # Using check=True will raise a CalledProcessError if the script fails (returns non-zero exit code).
+        result = subprocess.run(
+            [sys.executable, 'pairlistupdater.py'],
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding='utf-8' # Explicitly set encoding
+        )
+        logger.info("✅ Successfully executed pairlistupdater.py.")
+        # Optional: Log the output from the updater script for debugging purposes.
+        if result.stdout:
+            logger.info(f"pairlistupdater.py output:\n{result.stdout}")
+    except FileNotFoundError:
+        logger.error("❌ CRITICAL: 'pairlistupdater.py' not found. This script is required to update the symbol list. Please ensure it is in the same directory.")
+        sys.exit("Exiting: Missing required script 'pairlistupdater.py'.")
+    except subprocess.CalledProcessError as e:
+        logger.error("❌ CRITICAL: 'pairlistupdater.py' failed to execute correctly.")
+        logger.error(f"Return Code: {e.returncode}")
+        # Log stdout and stderr from the failed script to help with debugging.
+        logger.error(f"Output from script:\n{e.stdout}")
+        logger.error(f"Error output from script:\n{e.stderr}")
+        sys.exit("Exiting: The 'pairlistupdater.py' script encountered an error.")
+    except Exception as e:
+        logger.critical(f"An unexpected error occurred while trying to run pairlistupdater.py: {e}", exc_info=True)
+        sys.exit("Exiting: Unexpected error during the execution of the pairlist updater.")
+    # --- END MODIFICATION ---
+
+    # --- Original Main Execution ---
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
