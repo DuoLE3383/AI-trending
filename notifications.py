@@ -206,4 +206,96 @@ async def send_shutdown_notification(chat_id: str, message_thread_id: Optional[i
     shutdown_message = (f"🛑 Trend Analysis Bot for *{', '.join(symbols_list)}* stopped by user at "
                         f"`{pd.Timestamp.now(tz='UTC').strftime('%Y-%m-%d %H:%M:%S %Z')}`.")
     await telegram_handler.send_telegram_notification(chat_id, shutdown_message, message_thread_id=message_thread_id, suppress_print=True)
+# Add these imports at the top of notifications.py
+import sqlite3
+import pandas as pd
+from typing import List
+
+# ... (keep all your existing functions like send_individual_trend_alert_notification) ...
+
+# Add this new function at the end of the file
+async def send_periodic_summary_notification(
+    db_path: str,
+    symbols: List[str],
+    timeframe: str,
+    chat_id: str,
+    message_thread_id: int | None
+) -> None:
+    """
+    Queries the latest analysis for each symbol from the DB and sends a summary.
+    """
+    if not db_path:
+        logger.warning("Cannot send periodic summary: SQLite DB path is not configured.")
+        return
+
+    summary_parts = [
+        f"📊 *Market Summary* ({timeframe})",
+        "_" * 25, ""
+    ]
+    found_data = False
+
+    try:
+        conn = sqlite3.connect(db_path)
+        # Set row_factory to easily convert rows to dictionaries
+        conn.row_factory = sqlite3.Row
+
+        for symbol in symbols:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT * FROM trend_analysis
+                WHERE symbol = ?
+                ORDER BY analysis_timestamp_utc DESC
+                LIMIT 1
+                """, (symbol,)
+            )
+            latest_record = cursor.fetchone()
+
+            if latest_record:
+                found_data = True
+                # Convert the row object to a dictionary
+                record_dict = dict(latest_record)
+                price = record_dict.get('price', 0.0)
+                trend = record_dict.get('trend', 'N/A')
+                rsi = record_dict.get('rsi_value', 0.0)
+                
+                # Format the line for the summary
+                price_str = f"${price:,.2f}" if price else "N/A"
+                rsi_str = f"{rsi:.1f}" if rsi else "N/A"
+                
+                symbol_line = (
+                    f"*{symbol}*:\n"
+                    f"  `Price: {price_str:<12}`\n"
+                    f"  `RSI:   {rsi_str:<12}`\n"
+                    f"  `Trend: {trend}`"
+                )
+                summary_parts.append(symbol_line)
+            else:
+                summary_parts.append(f"*{symbol}*: `No analysis data available yet.`")
+        
+        conn.close()
+
+    except sqlite3.Error as e:
+        logger.error(f"Failed to query SQLite for periodic summary: {e}")
+        summary_parts.append("_Error fetching data from database._")
+
+    if not found_data:
+        logger.info("Skipping periodic summary notification as no analysis data was found in the database.")
+        return
+
+    # Add a timestamp to the footer
+    timestamp_utc = pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S %Z')
+    summary_parts.extend(["", f"<sub>Last Updated: {timestamp_utc}</sub>"])
+
+    message = "\n".join(summary_parts)
+
+    # Use the existing telegram_handler to send the message
+    from telegram_handler import send_telegram_message
+    await send_telegram_message(
+        chat_id=chat_id,
+        message=message,
+        message_thread_id=message_thread_id
+    )
+    logger.info("✅ Successfully sent periodic summary notification to Telegram.")
+
 
