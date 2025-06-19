@@ -284,7 +284,8 @@
         "ema_fast": 34,
         "ema_medium": 89,
         "ema_slow": 200,
-        "loop_sleep_interval_seconds": 3600
+        "loop_sleep_interval_seconds": 3600,
+        "periodic_notification_interval_seconds": 600
     },
     "sqlite": {
         "db_path": "trend_analysis.db"
