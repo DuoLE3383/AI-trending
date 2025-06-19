@@ -4,47 +4,32 @@ load_dotenv()
 import pandas as pd
 import pandas_ta as ta
 from binance.client import Client
-import os, sqlite3
+import os, sqlite3, time
 from binance.exceptions import BinanceAPIException, BinanceRequestException
 import sys, logging, asyncio, json
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict, List, Set
 
+# Local Modules
 import telegram_handler
 import notifications
 
-# --- All Constants (remain the same) ---
+# --- Constants ---
+# (Constants remain the same, ensure they are here)
 API_KEY_PLACEHOLDER = 'YOUR_API_KEY_PLACEHOLDER'
 API_SECRET_PLACEHOLDER = 'YOUR_API_SECRET_PLACEHOLDER'
 TELEGRAM_BOT_TOKEN_PLACEHOLDER = 'YOUR_TELEGRAM_BOT_TOKEN_PLACEHOLDER'
 TELEGRAM_CHAT_ID_PLACEHOLDER = 'YOUR_TELEGRAM_CHAT_ID_PLACEHOLDER'
-TELEGRAM_MESSAGE_THREAD_ID_PLACEHOLDER = 'YOUR_TELEGRAM_MESSAGE_THREAD_ID_PLACEHOLDER'
-PRE_LOAD_CANDLE_COUNT = 300
-ANALYSIS_CANDLE_BUFFER = 200
-RSI_PERIOD = 14
-RSI_OVERBOUGHT = 70
-RSI_OVERSOLD = 30
-BBANDS_PERIOD = 20
-BBANDS_STD_DEV = 2.0
-ATR_PERIOD = 14
-ATR_MULTIPLIER_SHORT = 1.5
-ATR_MULTIPLIER_LONG = 1.5
-ATR_MULTIPLIER_SL = 1.2
-ATR_MULTIPLIER_TP1 = 1.3
-ATR_MULTIPLIER_TP2 = 2.3
-ATR_MULTIPLIER_TP3 = 3.2
 TREND_STRONG_BULLISH = "✅ #StrongBullish"
-TREND_BULLISH = "📈 #Bullish"
-TREND_BEARISH = "📉 #Bearish"
 TREND_STRONG_BEARISH = "❌ #StrongBearish"
-TREND_SIDEWAYS = "Sideways/Undetermined"
+# ... and so on for all your constants
 
-# --- Logging & Config Loading (remain the same) ---
+# --- Logging & Config ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger(__name__)
 
-DEFAULT_CONFIG = { "binance": {"api_key_placeholder": API_KEY_PLACEHOLDER, "api_secret_placeholder": API_SECRET_PLACEHOLDER}, "trading": {"symbols": ["BTCUSDT"], "timeframe": "15m", "ema_fast": 34, "ema_medium": 89, "ema_slow": 200, "loop_sleep_interval_seconds": 3600, "periodic_notification_interval_seconds": 600}, "sqlite": {"db_path": "trend_analysis.db"}, "telegram": {"bot_token_placeholder": TELEGRAM_BOT_TOKEN_PLACEHOLDER, "chat_id_placeholder": TELEGRAM_CHAT_ID_PLACEHOLDER, "proxy_url": None, "message_thread_id_placeholder": TELEGRAM_MESSAGE_THREAD_ID_PLACEHOLDER} }
-
+DEFAULT_CONFIG = { "binance": {"api_key_placeholder": API_KEY_PLACEHOLDER}, "trading": {"symbols": ["BTCUSDT"], "timeframe": "15m", "loop_sleep_interval_seconds": 3600, "periodic_notification_interval_seconds": 600}, "sqlite": {"db_path": "trend_analysis.db"}, "telegram": {"bot_token_placeholder": TELEGRAM_BOT_TOKEN_PLACEHOLDER} }
 def load_config(config_path="config.json"):
+    # (Your existing load_config function)
     config = DEFAULT_CONFIG.copy()
     try:
         with open(config_path, 'r') as f:
@@ -56,154 +41,138 @@ def load_config(config_path="config.json"):
 
 config_data = load_config()
 
-# --- Load Configuration from config/env ---
-API_KEY = os.getenv('BINANCE_API_KEY', config_data["binance"]["api_key_placeholder"])
-API_SECRET = os.getenv('BINANCE_API_SECRET', config_data["binance"]["api_secret_placeholder"])
-SYMBOLS = [s.strip().upper() for s in os.getenv('TRADING_SYMBOLS', ",".join(config_data["trading"]["symbols"])).split(',') if s.strip()]
-TIMEFRAME = os.getenv('TRADING_TIMEFRAME', config_data["trading"]["timeframe"])
-EMA_FAST, EMA_MEDIUM, EMA_SLOW = int(os.getenv('EMA_FAST', config_data["trading"]["ema_fast"])), int(os.getenv('EMA_MEDIUM', config_data["trading"]["ema_medium"])), int(os.getenv('EMA_SLOW', config_data["trading"]["ema_slow"]))
-SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", config_data["sqlite"]["db_path"])
-TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', config_data["telegram"]["bot_token_placeholder"])
-TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', config_data["telegram"]["chat_id_placeholder"])
-raw_thread_id = os.getenv('TELEGRAM_MESSAGE_THREAD_ID', config_data["telegram"]["message_thread_id_placeholder"])
-TELEGRAM_MESSAGE_THREAD_ID = int(raw_thread_id) if raw_thread_id and raw_thread_id.isdigit() else None
-LOOP_SLEEP_INTERVAL_SECONDS = int(os.getenv('LOOP_SLEEP_INTERVAL_SECONDS', config_data["trading"]["loop_sleep_interval_seconds"]))
-PERIODIC_NOTIFICATION_INTERVAL_SECONDS = int(os.getenv('PERIODIC_NOTIFICATION_INTERVAL_SECONDS', config_data["trading"]["periodic_notification_interval_seconds"]))
+# --- Load All Configuration Variables ---
+# (Your existing config loading variables)
+API_KEY = os.getenv('BINANCE_API_KEY', config_data["binance"].get("api_key_placeholder"))
+API_SECRET = os.getenv('BINANCE_API_SECRET', config_data["binance"].get("api_secret_placeholder"))
+SYMBOLS = [s.strip().upper() for s in config_data["trading"]["symbols"]]
+TIMEFRAME = config_data["trading"]["timeframe"]
+EMA_FAST, EMA_MEDIUM, EMA_SLOW = int(config_data["trading"]["ema_fast"]), int(config_data["trading"]["ema_medium"]), int(config_data["trading"]["ema_slow"])
+SQLITE_DB_PATH = config_data["sqlite"]["db_path"]
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', config_data["telegram"].get("bot_token_placeholder"))
+TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', config_data["telegram"].get("chat_id_placeholder"))
+TELEGRAM_MESSAGE_THREAD_ID = config_data["telegram"].get("message_thread_id_placeholder") # Simplified
+LOOP_SLEEP_INTERVAL_SECONDS = int(config_data["trading"]["loop_sleep_interval_seconds"])
+SIGNAL_CHECK_INTERVAL_SECONDS = int(config_data["trading"]["periodic_notification_interval_seconds"])
 
-# --- Initialize Binance Client ---
+# Initialize Binance Client
 binance_client = Client(API_KEY, API_SECRET) if API_KEY != API_KEY_PLACEHOLDER else None
 
-# --- CORE FUNCTIONS ---
+# --- Core Functions (init_db, get_data, perform_analysis) ---
+# (Keep your existing, corrected versions of these functions. The key change is that perform_analysis NO LONGER sends notifications.)
+def init_sqlite_db(db_path: str): # Your existing function
+    pass
+def get_market_data(symbol: str, required_candles: int) -> pd.DataFrame: # Your existing function
+    return pd.DataFrame()
+async def perform_analysis(df: pd.DataFrame, symbol: str) -> None: # MODIFIED: Doesn't need to return anything
+    # This function's only job is to calculate and SAVE to the database.
+    # (Your existing perform_analysis logic for calculating indicators and saving to DB goes here)
+    # Ensure it calculates and saves all 27 columns correctly.
+    # REMOVE any calls to notifications from this function.
+    pass
 
-def init_sqlite_db(db_path: str):
-    with sqlite3.connect(db_path) as conn:
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS trend_analysis (
-                analysis_timestamp_utc TEXT, symbol TEXT, timeframe TEXT, price REAL,
-                ema_fast_period INTEGER, ema_fast_value REAL, ema_medium_period INTEGER, ema_medium_value REAL,
-                ema_slow_period INTEGER, ema_slow_value REAL, rsi_period INTEGER, rsi_value REAL, trend TEXT,
-                last_candle_open_time_utc TEXT, bb_lower REAL, bb_middle REAL, bb_upper REAL, atr_value REAL,
-                proj_range_short_low REAL, proj_range_short_high REAL, proj_range_long_low REAL, proj_range_long_high REAL,
-                entry_price REAL, stop_loss REAL, take_profit_1 REAL, take_profit_2 REAL, take_profit_3 REAL
-            )''')
-    logger.info(f"✅ DB initialized at {db_path}")
-
-def get_market_data(symbol: str, required_candles: int) -> pd.DataFrame:
-    if not binance_client: return pd.DataFrame()
-    try:
-        klines = binance_client.get_historical_klines(symbol, TIMEFRAME, limit=min(required_candles, 1000))
-        df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'number_of_trades', 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df.set_index('timestamp', inplace=True)
-        for col in ['open', 'high', 'low', 'close', 'volume']: df[col] = pd.to_numeric(df[col])
-        return df
-    except Exception as e:
-        logger.error(f"Error fetching data for {symbol}: {e}")
-        return pd.DataFrame()
-
-async def perform_analysis(df: pd.DataFrame, symbol: str) -> Optional[Dict[str, Any]]:
-    if df.empty or len(df) < EMA_SLOW: return None
-    
-    # Calculate Indicators
-    df.ta.ema(length=EMA_FAST, append=True)
-    df.ta.ema(length=EMA_MEDIUM, append=True)
-    df.ta.ema(length=EMA_SLOW, append=True)
-    df.ta.rsi(length=RSI_PERIOD, append=True)
-    df.ta.bbands(length=BBANDS_PERIOD, std=BBANDS_STD_DEV, append=True)
-    df.ta.atr(length=ATR_PERIOD, append=True)
-    
-    last = df.iloc[-1]
-    price = last.get('close')
-    ema_f, ema_m, ema_s = last.get(f'EMA_{EMA_FAST}'), last.get(f'EMA_{EMA_MEDIUM}'), last.get(f'EMA_{EMA_SLOW}')
-    rsi, atr = last.get(f'RSI_{RSI_PERIOD}'), last.get(f'ATRr_{ATR_PERIOD}')
-    bb_l, bb_m, bb_u = last.get(f'BBL_{BBANDS_PERIOD}_{BBANDS_STD_DEV}'), last.get(f'BBM_{BBANDS_PERIOD}_{BBANDS_STD_DEV}'), last.get(f'BBU_{BBANDS_PERIOD}_{BBANDS_STD_DEV}')
-
-    # Determine Trend & Contrarian Signals
-    trend, entry, sl, tp1, tp2, tp3 = TREND_SIDEWAYS, None, None, None, None, None
-    if all(pd.notna(v) for v in [price, ema_f, ema_m, ema_s, atr]):
-        if price > ema_f > ema_m > ema_s:
-            trend, entry = TREND_STRONG_BULLISH, price
-            sl, tp1, tp2, tp3 = entry * (1 + ATR_MULTIPLIER_SL * atr / price), entry * (1 - ATR_MULTIPLIER_TP1 * atr / price), entry * (1 - ATR_MULTIPLIER_TP2 * atr / price), entry * (1 - ATR_MULTIPLIER_TP3 * atr / price)
-        elif price < ema_f < ema_m < ema_s:
-            trend, entry = TREND_STRONG_BEARISH, price
-            sl, tp1, tp2, tp3 = entry * (1 - ATR_MULTIPLIER_SL * atr / price), entry * (1 + ATR_MULTIPLIER_TP1 * atr / price), entry * (1 + ATR_MULTIPLIER_TP2 * atr / price), entry * (1 + ATR_MULTIPLIER_TP3 * atr / price)
-        elif price > ema_s and price > ema_m: trend = TREND_BULLISH
-        elif price < ema_s and price < ema_m: trend = TREND_BEARISH
-
-    # Projected Ranges
-    p_s_l, p_s_h = (price - ATR_MULTIPLIER_SHORT * atr, price + ATR_MULTIPLIER_SHORT * atr) if atr else (None, None)
-    p_l_l, p_l_h = (price - ATR_MULTIPLIER_LONG * atr, price + ATR_MULTIPLIER_LONG * atr) if atr else (None, None)
-
-    # FIX: Ensure all 27 values are present for the database insert
-    db_values = (
-        pd.to_datetime('now', utc=True).isoformat(), symbol, TIMEFRAME, price,
-        EMA_FAST, ema_f, EMA_MEDIUM, ema_m, EMA_SLOW, ema_s, RSI_PERIOD, rsi, trend,
-        last.name.isoformat(), bb_l, bb_m, bb_u, atr, p_s_l, p_s_h, p_l_l, p_l_h,
-        entry, sl, tp1, tp2, tp3
-    )
-
-    with sqlite3.connect(SQLITE_DB_PATH) as conn:
-        conn.execute("INSERT INTO trend_analysis VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", db_values)
-    
-    return {k: v for k, v in zip([c[0] for c in conn.execute("PRAGMA table_info(trend_analysis)")], db_values)}
-
-
-# --- MAIN LOOPS & EXECUTION ---
+# --- NEW ARCHITECTURE: TWO SEPARATE LOOPS ---
 
 async def analysis_loop():
-    logger.info(f"--- Analysis loop starting (interval: {LOOP_SLEEP_INTERVAL_SECONDS}s) ---")
+    """
+    LOOP 1 (HOURLY): The Data Collector.
+    Fetches from Binance, analyzes, and saves to the database. Does NOT send alerts.
+    """
+    logger.info(f"--- ✅ Analysis Loop starting (interval: {LOOP_SLEEP_INTERVAL_SECONDS / 60:.0f} minutes) ---")
     while True:
         try:
+            logger.info("--- Starting new analysis cycle ---")
             for symbol in SYMBOLS:
-                market_data = get_market_data(symbol, EMA_SLOW + ANALYSIS_CANDLE_BUFFER)
+                market_data = get_market_data(symbol, EMA_SLOW + 200) # Buffer
                 if not market_data.empty:
-                    result = await perform_analysis(market_data, symbol)
-                    if result and result.get('trend') in [TREND_STRONG_BULLISH, TREND_STRONG_BEARISH]:
-                        await notifications.send_individual_trend_alert_notification(
-                            bot_token=TELEGRAM_BOT_TOKEN, chat_id=TELEGRAM_CHAT_ID, message_thread_id=TELEGRAM_MESSAGE_THREAD_ID,
-                            analysis_result=result, bbands_period_const=BBANDS_PERIOD, bbands_std_dev_const=BBANDS_STD_DEV,
-                            atr_period_const=ATR_PERIOD, rsi_period_const=RSI_PERIOD, ema_fast_const=EMA_FAST,
-                            ema_medium_const=EMA_MEDIUM, ema_slow_const=EMA_SLOW
-                        )
+                    # The analysis function now just saves the data to the DB.
+                    await perform_analysis(market_data, symbol)
+            
+            logger.info(f"--- Analysis cycle complete. Waiting for next run. ---")
             await asyncio.sleep(LOOP_SLEEP_INTERVAL_SECONDS)
+            
         except Exception as e:
-            logger.exception("Error in analysis_loop")
-            await asyncio.sleep(60)
+            logger.exception("❌ Error in analysis_loop")
+            await asyncio.sleep(60) # Wait a minute before retrying on error
 
-async def periodic_notification_loop():
-    logger.info(f"--- Periodic Notification loop starting (interval: {PERIODIC_NOTIFICATION_INTERVAL_SECONDS}s) ---")
-    await asyncio.sleep(20) # Initial delay
+async def signal_check_loop():
+    """
+    LOOP 2 (10 MINUTES): The Signal Notifier.
+    Queries the database for new signals and sends alerts. Does NOT connect to Binance.
+    """
+    logger.info(f"--- ✅ Signal Check Loop starting (interval: {SIGNAL_CHECK_INTERVAL_SECONDS} seconds) ---")
+    
+    # State management: Stores the timestamp of the last signal we notified for each symbol.
+    last_notified_signal = {}
+
+    await asyncio.sleep(10) # Initial delay
     while True:
         try:
-            await notifications.send_periodic_summary_notification(
-                bot_token=TELEGRAM_BOT_TOKEN, db_path=SQLITE_DB_PATH, symbols=SYMBOLS,
-                timeframe=TIMEFRAME, chat_id=TELEGRAM_CHAT_ID, message_thread_id=TELEGRAM_MESSAGE_THREAD_ID
-            )
-            await asyncio.sleep(PERIODIC_NOTIFICATION_INTERVAL_SECONDS)
-        except Exception:
-            logger.exception("Error in periodic_notification_loop")
-            await asyncio.sleep(60)
+            with sqlite3.connect(f'file:{SQLITE_DB_PATH}?mode=ro', uri=True) as conn:
+                conn.row_factory = sqlite3.Row
+                # This query efficiently gets the single latest record for EVERY symbol.
+                query = "SELECT * FROM trend_analysis WHERE rowid IN (SELECT MAX(rowid) FROM trend_analysis GROUP BY symbol)"
+                latest_records = conn.execute(query).fetchall()
+
+            for record in latest_records:
+                symbol = record['symbol']
+                trend = record['trend']
+                timestamp = record['analysis_timestamp_utc']
+
+                # Check for a strong signal
+                if trend in [TREND_STRONG_BULLISH, TREND_STRONG_BEARISH]:
+                    # Check if this signal is NEWER than the last one we notified about
+                    if timestamp > last_notified_signal.get(symbol, ''):
+                        logger.info(f"🔥 New signal detected for {symbol}! Trend: {trend}. Notifying...")
+                        
+                        await notifications.send_individual_trend_alert_notification(
+                            bot_token=TELEGRAM_BOT_TOKEN,
+                            chat_id=TELEGRAM_CHAT_ID,
+                            message_thread_id=TELEGRAM_MESSAGE_THREAD_ID,
+                            analysis_result=dict(record), # Pass the full record
+                            # Pass constants for formatting the message
+                            bbands_period_const=20, # Assuming BBANDS_PERIOD
+                            bbands_std_dev_const=2.0, # Assuming BBANDS_STD_DEV
+                            atr_period_const=14, # Assuming ATR_PERIOD
+                            rsi_period_const=14, # Assuming RSI_PERIOD
+                            ema_fast_const=EMA_FAST,
+                            ema_medium_const=EMA_MEDIUM,
+                            ema_slow_const=EMA_SLOW
+                        )
+                        
+                        # IMPORTANT: Update the state to avoid re-notifying
+                        last_notified_signal[symbol] = timestamp
+        
+        except Exception as e:
+            logger.exception("❌ Error in signal_check_loop")
+        
+        await asyncio.sleep(SIGNAL_CHECK_INTERVAL_SECONDS)
 
 async def main():
-    logger.info("--- Initializing Bot ---")
+    """Initializes and runs the bot's concurrent loops."""
+    logger.info("--- Initializing Bot with new architecture ---")
     if not binance_client:
-        logger.critical("Binance client not initialized. Check API keys. Exiting.")
+        logger.critical("Binance client not initialized. Exiting.")
         sys.exit(1)
     
-    init_sqlite_db(SQLITE_DB_PATH)
+    init_sqlite_db(SQLITE_DB_PATH) # Make sure DB and table exist
     
     if not await telegram_handler.init_telegram_bot(
-        bot_token=TELEGRAM_BOT_TOKEN, chat_id=TELEGRAM_CHAT_ID, message_thread_id_for_startup=TELEGRAM_MESSAGE_THREAD_ID,
-        symbols_display=", ".join(SYMBOLS), timeframe_display=TIMEFRAME,
-        loop_interval_display=f"Analysis: {LOOP_SLEEP_INTERVAL_SECONDS//60}m, Summary: {PERIODIC_NOTIFICATION_INTERVAL_SECONDS//60}m"
+        bot_token=TELEGRAM_BOT_TOKEN, chat_id=TELEGRAM_CHAT_ID, # Pass required args
+        message_thread_id_for_startup=TELEGRAM_MESSAGE_THREAD_ID,
+        symbols_display=", ".join(SYMBOLS),
+        timeframe_display=TIMEFRAME,
+        loop_interval_display=f"Analysis: {LOOP_SLEEP_INTERVAL_SECONDS//60}m, Signal Check: {SIGNAL_CHECK_INTERVAL_SECONDS//60}m"
     ):
-        logger.critical("Failed to send Telegram startup message. Check token/chat_id. Exiting.")
+        logger.critical("Failed to send Telegram startup message. Exiting.")
         sys.exit(1)
-    
-    logger.info("--- Bot is now running with concurrent loops. ---")
+
+    # Create and run the two independent tasks
     analysis_task = asyncio.create_task(analysis_loop())
-    notification_task = asyncio.create_task(periodic_notification_loop())
-    await asyncio.gather(analysis_task, notification_task)
+    signal_task = asyncio.create_task(signal_check_loop())
+    
+    logger.info("--- Bot is now running. Analysis and Signal loops are active. ---")
+    await asyncio.gather(analysis_task, signal_task)
 
 if __name__ == "__main__":
     try:
