@@ -47,7 +47,7 @@ async def send_individual_trend_alert_notification(
     # Append the Contrarian Signal details if they exist
     entry_price = analysis_result.get('entry_price')
     if entry_price is not None:
-        signal_type = "(Contrarian SHORT)" if "Bullish" in trend else "(Contrarian LONG)"
+        signal_type = "(📉 ENTRY SHORT)" if "Bullish" in trend else "(📈ENTRY LONG)"
         sl = analysis_result.get('stop_loss')
         tp1 = analysis_result.get('take_profit_1')
         
