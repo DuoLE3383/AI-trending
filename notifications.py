@@ -86,9 +86,7 @@ class TrendNotifier:
             raise
         return config
 
-    async def #send_startup_notification(self, chat_id: str, message_thread_id: Optional[int], symbols: List[str]):
-    # New, corrected code
-notifications.send_startup_message("Bot is starting up!")
+    async def send_startup_notification(self, chat_id: str, message_thread_id: Optional[int], symbols: List[str]):
 
         """Sends a notification when the bot starts up."""
         if not self.telegram_handler.is_configured():
