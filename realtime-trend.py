@@ -220,7 +220,7 @@ async def main():
     monitored_symbols_ref = {'symbols': set(STATIC_SYMBOLS)}
 
     
-        message_thread_id_for_startup=TELEGRAM_MESSAGE_THREAD_ID, symbols_display="static list initially",
+        #message_thread_id_for_startup=TELEGRAM_MESSAGE_THREAD_ID, symbols_display="static list initially",
         timeframe_display=TIMEFRAME,
         loop_interval_display=f"Analysis: {LOOP_SLEEP_INTERVAL_SECONDS//60}m, Signal Check: {SIGNAL_CHECK_INTERVAL_SECONDS//60}m"
     ):
