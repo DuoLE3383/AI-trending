@@ -9,7 +9,7 @@ pandas~=2.3
 
 # The official PyPI version 0.3.14b0 has a known import bug.
 # This command installs the latest, fixed version directly from GitHub.
-pandas-ta==0.3.13b0
+ft-pandas-ta~=0.3.15
 
 
 
