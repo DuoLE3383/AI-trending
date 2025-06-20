@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import pandas as pd
-import ft_pandas_ta as ta
+import pandas_ta as ta
 from binance.client import Client
 import os, sqlite3, time
 from binance.exceptions import BinanceAPIException, BinanceRequestException
