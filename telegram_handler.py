@@ -1,4 +1,5 @@
 # In your telegram_handler.py file
+from typing import Optional
 
 import logging
 from telegram import Bot, InlineKeyboardMarkup # <-- Import InlineKeyboardMarkup
