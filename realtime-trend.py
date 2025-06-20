@@ -369,9 +369,22 @@ async def main():
     # Attempt to send startup notification
     try:
         initial_symbols_display = "dynamic (fetching from Binance)" if DYN_SYMBOLS_ENABLED else "static list"
-        await notifications.send_startup_notification(
-            bot_token=TELEGRAM_BOT_TOKEN,
-            chat_id=TELEGRAM_CHAT_ID,
+        await 
+        # 1. Create an instance of your notification class.
+#    (Replace 'NotificationHandler', 'your_telegram_handler', and 'your_logger'
+#    with your actual class and variable names).
+notifier = NotificationHandler(
+    telegram_handler=your_telegram_handler, 
+    logger=your_logger
+)
+
+# 2. Call the method on the instance with the correct arguments.
+await notifier.send_startup_notification(
+    chat_id=TELEGRAM_CHAT_ID,
+    message_thread_id=your_message_thread_id,  # Provide your thread ID variable
+    symbols=your_symbols_list                  # Provide your symbols list variable
+)
+
             message_thread_id=TELEGRAM_MESSAGE_THREAD_ID,
             symbols_display=initial_symbols_display, # Reflect if dynamic is enabled
             timeframe_display=TIMEFRAME,
