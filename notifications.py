@@ -4,262 +4,285 @@ import asyncio
 import configparser
 from typing import List, Dict, Any, Optional, Tuple
 from typing_extensions import TypedDict
-# --- MODIFIED: Import button classes ---
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-import telegram_handler
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Bot
+from telegram.ext import Updater
 from datetime import datetime, timedelta
 
-# --- Configuration Loading ---
-config = configparser.ConfigParser()
-config.read('config.ini')
-
-# --- Settings ---
-log_level = config.get('settings', 'log_level', fallback='INFO').upper()
-NOTIFICATION_THRESHOLD_PERCENT = config.getfloat('settings', 'notification_threshold_percent', fallback=0.05)
-STATUS_UPDATE_INTERVAL_MINUTES = config.getint('settings', 'status_update_interval_minutes', fallback=10)
-LEVERAGE_MULTIPLIER = config.getint('settings', 'leverage_multiplier', fallback=5)
-
-# --- Initialize Logger ---
-logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-# --- In-memory State Stores ---
-last_notified_ranges: Dict[str, Dict[str, Optional[float]]] = {}
-last_notification_timestamp: Dict[str, pd.Timestamp] = {}
-
-# --- Define a structured type for analysis results ---
+# --- Type Definitions ---
 class AnalysisResult(TypedDict, total=False):
     symbol: str
     timeframe: str
-    # ... (rest of the class is unchanged) ...
+    price: float
+    rsi_val: float
+    rsi_interpretation: str
+    atr_value: float
+    ema_fast_val: float
+    ema_medium_val: float
+    ema_slow_val: float
     trend: str
+    entry_price: Optional[float]
+    stop_loss: Optional[float]
+    take_profit_1: Optional[float]
+    take_profit_2: Optional[float]
+    take_profit_3: Optional[float]
+    proj_range_short_low: float
+    proj_range_short_high: float
+    proj_range_long_low: float
+    proj_range_long_high: float
+    analysis_timestamp_utc: pd.Timestamp
 
-# --- Helper Functions (Mostly Unchanged) ---
-# _should_send_alert, _determine_trade_info, _format_level are unchanged.
-
-def _should_send_alert(symbol_key: str, new_ranges: Dict[str, Optional[float]]) -> bool:
-    """Determines if a notification should be sent based on range changes."""
-    previous_ranges = last_notified_ranges.get(symbol_key)
-    if not previous_ranges:
-        return True
-
-    for key, prev_val in previous_ranges.items():
-        curr_val = new_ranges.get(key)
-        if prev_val and curr_val and prev_val != 0:
-            if abs(curr_val - prev_val) / abs(prev_val) > NOTIFICATION_THRESHOLD_PERCENT:
-                logger.info(f"Threshold exceeded for {symbol_key} on '{key}'. Sending alert.")
-                return True
-    return False
-
-def _determine_trade_info(entry: Optional[float], tp1: Optional[float], original_trend: str) -> Tuple[Optional[str], str, str]:
-    """Determines trade direction and corrects the trend label if necessary."""
-    if not entry or not tp1:
-        return None, original_trend, ""
-    
-    bullish_emoji = config.get('messages', 'bullish_emoji', fallback='✅')
-    bearish_emoji = config.get('messages', 'bearish_emoji', fallback='❌')
-
-    if tp1 > entry:
-        direction = "Long"
-        corrected_label = f"{bullish_emoji} Bullish"
-    else:
-        direction = "Short"
-        corrected_label = f"{bearish_emoji} Bearish"
-
-    if original_trend not in corrected_label:
-        logger.warning(f"Correcting trend! Original='{original_trend}', but levels indicate a '{direction}' trade.")
-
-    return direction, corrected_label, f"({direction})"
-
-def _format_level(level_name: str, level_val: Optional[float], entry_val: float, emoji: str, direction: str) -> str:
-    """Formats a single SL or TP level with its percentage change."""
-    if not all([level_val, entry_val, direction]):
-        return ""
-
-    percentage = ((level_val - entry_val) / entry_val if direction == "Long" else (entry_val - level_val) / entry_val) * 100
-    leveraged_percentage = -abs(percentage * LEVERAGE_MULTIPLIER) if level_name == "SL" else abs(percentage * LEVERAGE_MULTIPLIER)
-
-    return f"{emoji} {level_name}: `${level_val:,.4f}` ({leveraged_percentage:+.2f}%)\n"
+# --- Module-level Helper Functions ---
+def _get_range_str(low: float, high: float, price: float) -> str:
+    """Formats a projected range string with percentage changes from the current price."""
+    if not price:
+        return f"`${low:,.4f} - ${high:,.4f}`"
+    low_pct = f"({((low - price) / price) * 100:+.2f}%)"
+    high_pct = f"({((high - price) / price) * 100:+.2f}%)"
+    return f"`${low:,.4f}` {low_pct} - `${high:,.4f}` {high_pct}"
 
 
-def _format_alert_message(result: AnalysisResult) -> str:
-    # This function is now simpler, as button creation is handled separately.
-    # The logic inside this function is exactly the same as before.
-    price_str = f"${result.get('price', 0):,.4f}"
-    rsi_str = f"{result.get('rsi_val', 0):.2f}"
-    atr_str = f"{result.get('atr_value', 0):.4f}"
-    entry_emoji = config.get('messages', 'entry_emoji', fallback='🎯')
-    sl_emoji = config.get('messages', 'sl_emoji', fallback='🛡️')
-    tp_emoji = config.get('messages', 'tp_emoji', fallback='💰')
-    
-    consts = config['constants']
-    direction, corrected_trend, trade_type_str = _determine_trade_info(
-        result.get('entry_price'), result.get('take_profit_1'), result.get('trend', 'N/A')
-    )
-
-    message_parts = [
-        f"*{result.get('symbol')} Trend Alert* ({result.get('timeframe')})\n",
-        f"🕒 Time: `{result.get('analysis_timestamp_utc', pd.Timestamp.now(tz='UTC')).strftime('%Y-%m-%d %H:%M:%S %Z')}`",
-        f"💲 Price: `{price_str}`",
-        f"📊 RSI ({consts.get('rsi_period')}): `{rsi_str}` ({result.get('rsi_interpretation', 'N/A')})",
-        f"📉 ATR ({consts.get('atr_period')}): `{atr_str}`\n",
-        f"📉 EMAs:",
-        f"  • Fast ({consts.get('ema_fast')}): `${result.get('ema_fast_val', 0):,.2f}`",
-        f"  • Medium ({consts.get('ema_medium')}): `${result.get('ema_medium_val', 0):,.2f}`",
-        f"  • Slow ({consts.get('ema_slow')}): `${result.get('ema_slow_val', 0):,.2f}`\n"
-    ]
-
-    entry_price = result.get('entry_price')
-    if entry_price and direction:
-        message_parts.append(f"{entry_emoji} Entry Price: `${entry_price:,.4f}` {trade_type_str}")
-        message_parts.append(_format_level("SL", result.get('stop_loss'), entry_price, sl_emoji, direction))
-        # ... (rest of the level formatting is the same) ...
-        message_parts.append(f"Leverage: x{LEVERAGE_MULTIPLIER} (Margin)\n")
-
-    def get_range_str(low: float, high: float, price: float) -> str:
-        # ... (this inner function is the same) ...
-        low_pct = f"({((low - price) / price) * 100:+.2f}%)" if price else ""
-        high_pct = f"({((high - price) / price) * 100:+.2f}%)" if price else ""
-        return f"`${low:,.4f}{low_pct} - ${high:,.4f}{high_pct}`"
-
-    short_range_str = get_range_str(result.get('proj_range_short_low', 0), result.get('proj_range_short_high', 0), result.get('price', 0))
-    long_range_str = get_range_str(result.get('proj_range_long_low', 0), result.get('proj_range_long_high', 0), result.get('price', 0))
-
-    message_parts.append(f"💡 Trend (4h): *{corrected_trend}* (Range: {short_range_str})")
-    message_parts.append(f"💡 Trend (8h): *{corrected_trend}* (Range: {long_range_str})")
-
-    return "\n".join(part for part in message_parts if part)
-
-
-# --- ADDED: New function to create the buttons ---
-def _create_alert_keyboard(symbol: str) -> InlineKeyboardMarkup:
-    """Creates the inline keyboard with buttons for an alert."""
-    buttons = []
-    
-    # Get link templates from config
-    tv_url_template = config.get('links', 'tradingview_url', fallback=None)
-    info_url = config.get('links', 'signal_info_url', fallback=None)
-
-    # Create TradingView button if the URL is configured
-    if tv_url_template:
-        # Replace the {symbol} placeholder with the actual symbol
-        tv_url = tv_url_template.format(symbol=symbol)
-        buttons.append(InlineKeyboardButton("📈 View on TradingView", url=tv_url))
-
-    # Create Signal Info button if the URL is configured
-    if info_url:
-        buttons.append(InlineKeyboardButton("ℹ️ Signal Info", url=info_url))
-        
-    # The keyboard is a list of lists, where each inner list is a row.
-    # We'll put the buttons in a single row here.
-    return InlineKeyboardMarkup([buttons]) if buttons else None
-
-
-# --- Main Notification Logic (MODIFIED) ---
-
-async def send_individual_trend_alert_notification(
-    chat_id: str,
-    message_thread_id: Optional[int],
-    analysis_result: AnalysisResult,
-):
+class TrendNotifier:
     """
-    Main function to process an analysis result and send a Telegram alert if necessary.
+    Handles trend analysis notifications, state management, and message formatting.
     """
-    if not telegram_handler.telegram_bot or chat_id == telegram_handler.TELEGRAM_CHAT_ID_PLACEHOLDER:
-        return
+    ## REFACTORED: Class constants for trade directions and levels
+    _LONG_TRADE = "Long"
+    _SHORT_TRADE = "Short"
+    _STOP_LOSS = "SL"
 
-    symbol = analysis_result.get('symbol', 'N/A')
-    timeframe = analysis_result.get('timeframe', 'N/A')
-    symbol_key = f"{symbol}_{timeframe}"
+    def __init__(self, config_path: str, telegram_handler: Any):
+        """
+        Initializes the TrendNotifier.
 
-    new_ranges = {
-        "short_low": analysis_result.get("proj_range_short_low"),
-        "short_high": analysis_result.get("proj_range_short_high"),
-        "long_low": analysis_result.get("proj_range_long_low"),
-        "long_high": analysis_result.get("proj_range_long_high")
-    }
+        Args:
+            config_path (str): Path to the configuration file.
+            telegram_handler (Any): An initialized instance of the telegram handler module.
+        """
+        self.config = self._load_config(config_path)
+        self.telegram_handler = telegram_handler
+        self.logger = logging.getLogger(__name__)
 
-    if not _should_send_alert(symbol_key, new_ranges):
-        last_ts = last_notification_timestamp.get(symbol_key)
-        if not last_ts or (pd.Timestamp.now(tz='UTC') - last_ts > timedelta(minutes=STATUS_UPDATE_INTERVAL_MINUTES)):
-            await send_no_signal_status_update(chat_id, message_thread_id, analysis_result)
-        return
+        # --- Settings ---
+        self.notification_threshold = self.config.getfloat('settings', 'notification_threshold_percent', fallback=0.05)
+        self.status_interval = timedelta(minutes=self.config.getint('settings', 'status_update_interval_minutes', fallback=10))
+        self.leverage = self.config.getint('settings', 'leverage_multiplier', fallback=5)
 
-    # --- Format message and create keyboard ---
-    message = _format_alert_message(analysis_result)
-    keyboard = _create_alert_keyboard(symbol) # <-- Create the buttons
+        # --- Emojis and Messages ---
+        self.emojis = self.config['emojis']
 
-    # --- Send notification with the keyboard ---
-    await telegram_handler.send_telegram_notification(
-        chat_id,
-        message,
-        message_thread_id=message_thread_id,
-        reply_markup=keyboard  # <-- Pass the keyboard here
-    )
+        # --- In-memory State Stores ---
+        ## REFACTORED: State is now managed as instance attributes
+        self.last_notified_ranges: Dict[str, Dict[str, Optional[float]]] = {}
+        self.last_notification_timestamp: Dict[str, pd.Timestamp] = {}
 
-    # --- Update State ---
-    last_notified_ranges[symbol_key] = new_ranges
-    last_notification_timestamp[symbol_key] = pd.Timestamp.now(tz='UTC')
-    await asyncio.sleep(0.5)
+    def _load_config(self, config_path: str) -> configparser.ConfigParser:
+        """Loads configuration from an INI file with error handling."""
+        config = configparser.ConfigParser()
+        try:
+            if not config.read(config_path):
+                raise FileNotFoundError(f"Configuration file not found at {config_path}")
+        except (configparser.Error, FileNotFoundError) as e:
+            logging.critical(f"Failed to load configuration: {e}")
+            raise
+        return config
 
-
-# --- Status and Shutdown Notifications (Unchanged) ---
-# ... (send_no_signal_status_update and send_shutdown_notification are unchanged) ...
-async def send_no_signal_status_update(chat_id: str, message_thread_id: Optional[int], analysis_result: AnalysisResult):
-    """Sends a simplified status update when no major signal is found for a while."""
-    symbol = analysis_result.get('symbol', 'N/A')
-    timeframe = analysis_result.get('timeframe', 'N/A')
-    price_str = f"${analysis_result.get('price', 0):,.4f}"
-    rsi_str = f"${analysis_result.get('rsi_val', 0):.2f}"
-    
-    message = (
-        f"⏳ *{symbol} Status Update* ({timeframe})\n\n"
-        f"No significant signal detected recently.\n\n"
-        f"*Current Analytics:*\n"
-        f"  • Price: `{price_str}`\n"
-        f"  • RSI: `{rsi_str}` ({analysis_result.get('rsi_interpretation', 'N/A')})\n\n"
-        f"🕒 Time: `{pd.Timestamp.now(tz='UTC').strftime('%Y-%m-%d %H:%M:%S %Z')}`"
-    )
-
-    logger.info(f"Sending {STATUS_UPDATE_INTERVAL_MINUTES}-minute status update for {symbol}_{timeframe}.")
-    await telegram_handler.send_telegram_notification(chat_id, message, message_thread_id=message_thread_id)
-    last_notification_timestamp[f"{symbol}_{timeframe}"] = pd.Timestamp.now(tz='UTC')
-    await asyncio.sleep(0.5)
-
-
-async def send_shutdown_notification(chat_id: str, message_thread_id: Optional[int], symbols_list: List[str]):
-    """Sends a notification when the bot is shut down."""
-    if not telegram_handler.telegram_bot or chat_id == telegram_handler.TELEGRAM_CHAT_ID_PLACEHOLDER:
-        return
-    shutdown_message = (f"🛑 Trend Analysis Bot for *{', '.join(symbols_list)}* stopped by user at "
-                        f"`{pd.Timestamp.now(tz='UTC').strftime('%Y-%m-%d %H:%M:%S %Z')}`.")
-    await telegram_handler.send_telegram_notification(chat_id, shutdown_message, message_thread_id=message_thread_id, suppress_print=True)
-    
-async def send_startup_notification(chat_id: str, message_thread_id: Optional[int], symbols_list: List[str]):
-    """Sends a notification when the bot starts up."""
-    if not telegram_handler.telegram_bot or chat_id == telegram_handler.TELEGRAM_CHAT_ID_PLACEHOLDER:
-        return
-
-    startup_time = pd.Timestamp.now(tz='UTC').strftime('%Y-%m-%d %H:%M:%S %Z')
-    
-    # Construct the startup message
-    startup_message = (
-        f"✅ *Trend Analysis Bot Started*\n\n"
-        f"Monitoring symbols: *{', '.join(symbols_list)}*\n"
-        f"Start Time: `{startup_time}`"
-    )
-    
-    logger.info("Attempting to send startup notification...")
-    try:
-        await telegram_handler.send_telegram_notification(
-            chat_id, 
-            startup_message, 
-            message_thread_id=message_thread_id, 
-            suppress_print=True
+    async def send_startup_notification(self, chat_id: str, message_thread_id: Optional[int], symbols: List[str]):
+        """Sends a notification when the bot starts up."""
+        if not self.telegram_handler.is_configured():
+            return
+        msg = (
+            f"✅ *Trend Analysis Bot Started*\n\n"
+            f"Monitoring symbols: *{', '.join(symbols)}*\n"
+            f"Start Time: `{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')}`"
         )
-        logger.info("Startup notification sent successfully.")
-    except Exception as e:
-        # Log the error but do not exit, allowing the bot to continue running
-        logger.critical(f"Could not send startup message to Telegram: {e}")
+        self.logger.info("Attempting to send startup notification...")
+        try:
+            await self.telegram_handler.send_telegram_notification(
+                chat_id, msg, message_thread_id=message_thread_id, suppress_print=True
+            )
+            self.logger.info("Startup notification sent successfully.")
+        except Exception as e:
+            self.logger.critical(f"Could not send startup message to Telegram: {e}")
 
+    async def send_shutdown_notification(self, chat_id: str, message_thread_id: Optional[int], symbols: List[str]):
+        """Sends a notification when the bot is shut down."""
+        if not self.telegram_handler.is_configured():
+            return
+        msg = (f"🛑 Trend Analysis Bot for *{', '.join(symbols)}* stopped by user at "
+               f"`{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')}`.")
+        await self.telegram_handler.send_telegram_notification(chat_id, msg, message_thread_id=message_thread_id)
+
+    # --- Private Helper Methods for Alerting ---
+
+    def _should_send_alert(self, symbol_key: str, new_ranges: Dict[str, Optional[float]]) -> bool:
+        """Determines if a notification should be sent based on range changes."""
+        previous_ranges = self.last_notified_ranges.get(symbol_key)
+        if not previous_ranges:
+            return True  # Always send if it's the first time
+
+        for key, prev_val in previous_ranges.items():
+            curr_val = new_ranges.get(key)
+            if prev_val and curr_val and prev_val != 0:
+                if abs(curr_val - prev_val) / abs(prev_val) > self.notification_threshold:
+                    self.logger.info(f"Threshold exceeded for {symbol_key} on '{key}'. Sending alert.")
+                    return True
+        return False
+
+    def _determine_trade_info(self, entry: Optional[float], tp1: Optional[float], original_trend: str) -> Tuple[Optional[str], str, str]:
+        """Determines trade direction and corrects the trend label if necessary."""
+        if not all([entry, tp1]):
+            return None, original_trend, ""
+
+        if tp1 > entry:
+            direction = self._LONG_TRADE
+            corrected_label = f"{self.emojis.get('bullish')} Bullish"
+        else:
+            direction = self._SHORT_TRADE
+            corrected_label = f"{self.emojis.get('bearish')} Bearish"
+
+        if original_trend not in corrected_label:
+            self.logger.warning(f"Correcting trend! Original='{original_trend}', but levels indicate a '{direction}' trade.")
+
+        return direction, corrected_label, f"({direction})"
+
+    def _format_level(self, level_name: str, level_val: Optional[float], entry_val: float, emoji: str, direction: str) -> str:
+        """Formats a single SL or TP level with its percentage change."""
+        if not all([level_val, entry_val, direction]):
+            return ""
+
+        percentage = ((level_val - entry_val) / entry_val) * 100
+        leveraged_percentage = -abs(percentage * self.leverage) if level_name == self._STOP_LOSS else abs(percentage * self.leverage)
+        return f"{emoji} {level_name}: `${level_val:,.4f}` ({leveraged_percentage:+.2f}%)\n"
+
+    def _create_alert_keyboard(self, symbol: str) -> Optional[InlineKeyboardMarkup]:
+        """Creates the inline keyboard with buttons for an alert."""
+        buttons = []
+        links = self.config['links']
+        
+        if tv_url_template := links.get('tradingview_url'):
+            buttons.append(InlineKeyboardButton("📈 View on TradingView", url=tv_url_template.format(symbol=symbol)))
+        if info_url := links.get('signal_info_url'):
+            buttons.append(InlineKeyboardButton("ℹ️ Signal Info", url=info_url))
+            
+        return InlineKeyboardMarkup([buttons]) if buttons else None
+
+    ## REFACTORED: Message formatting broken into smaller, clearer functions
+    def _format_header(self, r: AnalysisResult) -> str:
+        return f"*{r.get('symbol')} Trend Alert* ({r.get('timeframe')})\n"
+
+    def _format_analytics(self, r: AnalysisResult) -> str:
+        consts = self.config['constants']
+        return (
+            f"🕒 Time: `{r.get('analysis_timestamp_utc', datetime.now().astimezone()).strftime('%Y-%m-%d %H:%M:%S %Z')}`\n"
+            f"💲 Price: `${r.get('price', 0):,.4f}`\n"
+            f"📊 RSI ({consts.get('rsi_period')}): `{r.get('rsi_val', 0):.2f}` ({r.get('rsi_interpretation', 'N/A')})\n"
+            f"📉 ATR ({consts.get('atr_period')}): `{r.get('atr_value', 0):.4f}`\n"
+            f"📉 EMAs:\n"
+            f"  • Fast ({consts.get('ema_fast')}): `${r.get('ema_fast_val', 0):,.2f}`\n"
+            f"  • Medium ({consts.get('ema_medium')}): `${r.get('ema_medium_val', 0):,.2f}`\n"
+            f"  • Slow ({consts.get('ema_slow')}): `${r.get('ema_slow_val', 0):,.2f}`\n"
+        )
+
+    def _format_trade_levels(self, r: AnalysisResult, direction: str) -> str:
+        entry_price = r.get('entry_price')
+        if not entry_price or not direction:
+            return ""
+            
+        trade_type_str = f"({direction})"
+        levels = [
+            f"{self.emojis.get('entry')} Entry Price: `${entry_price:,.4f}` {trade_type_str}",
+            self._format_level("SL", r.get('stop_loss'), entry_price, self.emojis.get('sl'), direction),
+            self._format_level("TP1", r.get('take_profit_1'), entry_price, self.emojis.get('tp'), direction),
+            self._format_level("TP2", r.get('take_profit_2'), entry_price, self.emojis.get('tp'), direction),
+            self._format_level("TP3", r.get('take_profit_3'), entry_price, self.emojis.get('tp'), direction),
+            f"Leverage: x{self.leverage} (Margin)\n"
+        ]
+        return "\n".join(part for part in levels if part)
+
+    def _format_projected_ranges(self, r: AnalysisResult, corrected_trend: str) -> str:
+        price = r.get('price', 0)
+        short_range = _get_range_str(r.get('proj_range_short_low', 0), r.get('proj_range_short_high', 0), price)
+        long_range = _get_range_str(r.get('proj_range_long_low', 0), r.get('proj_range_long_high', 0), price)
+        
+        return (
+            f"💡 Trend (4h): *{corrected_trend}* (Range: {short_range})\n"
+            f"💡 Trend (8h): *{corrected_trend}* (Range: {long_range})"
+        )
+
+    def _format_alert_message(self, result: AnalysisResult) -> str:
+        """Constructs the full alert message from smaller pieces."""
+        direction, corrected_trend, _ = self._determine_trade_info(
+            result.get('entry_price'), result.get('take_profit_1'), result.get('trend', 'N/A')
+        )
+        
+        parts = [
+            self._format_header(result),
+            self._format_analytics(result),
+            self._format_trade_levels(result, direction),
+            self._format_projected_ranges(result, corrected_trend)
+        ]
+        return "\n".join(filter(None, parts))
+
+    async def _send_no_signal_status_update(self, chat_id: str, thread_id: Optional[int], result: AnalysisResult):
+        """Sends a simplified status update when no major signal is found."""
+        symbol, timeframe = result.get('symbol', 'N/A'), result.get('timeframe', 'N/A')
+        
+        ## FIXED: RSI value is now formatted as a number, not currency.
+        message = (
+            f"⏳ *{symbol} Status Update* ({timeframe})\n\n"
+            f"No significant signal change detected recently.\n\n"
+            f"*Current Analytics:*\n"
+            f"  • Price: `${result.get('price', 0):,.4f}`\n"
+            f"  • RSI: `{result.get('rsi_val', 0):.2f}` ({result.get('rsi_interpretation', 'N/A')})\n\n"
+            f"🕒 Time: `{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')}`"
+        )
+
+        self.logger.info(f"Sending status update for {symbol}_{timeframe}.")
+        await self.telegram_handler.send_telegram_notification(chat_id, message, message_thread_id=thread_id)
+        self.last_notification_timestamp[f"{symbol}_{timeframe}"] = pd.Timestamp.now(tz='UTC')
+
+    # --- Main Public Method ---
+
+    async def process_analysis_and_notify(self, chat_id: str, thread_id: Optional[int], result: AnalysisResult):
+        """
+        Main entry point to process an analysis result and send a Telegram alert if necessary.
+        """
+        if not self.telegram_handler.is_configured():
+            self.logger.warning("Telegram handler not configured. Skipping notification.")
+            return
+
+        symbol = result.get('symbol', 'N/A')
+        timeframe = result.get('timeframe', 'N/A')
+        symbol_key = f"{symbol}_{timeframe}"
+
+        new_ranges = {
+            "short_low": result.get("proj_range_short_low"),
+            "short_high": result.get("proj_range_short_high"),
+            "long_low": result.get("proj_range_long_low"),
+            "long_high": result.get("proj_range_long_high")
+        }
+
+        # Decide whether to send a full alert or a status update
+        if not self._should_send_alert(symbol_key, new_ranges):
+            last_ts = self.last_notification_timestamp.get(symbol_key)
+            if not last_ts or (pd.Timestamp.now(tz='UTC') - last_ts > self.status_interval):
+                await self._send_no_signal_status_update(chat_id, thread_id, result)
+            return
+
+        # Format message and create keyboard for a full alert
+        message = self._format_alert_message(result)
+        keyboard = self._create_alert_keyboard(symbol)
+
+        # Send the notification
+        await self.telegram_handler.send_telegram_notification(
+            chat_id,
+            message,
+            message_thread_id=thread_id,
+            reply_markup=keyboard
+        )
+
+        # Update state after successful notification
+        self.last_notified_ranges[symbol_key] = new_ranges
+        self.last_notification_timestamp[symbol_key] = pd.Timestamp.now(tz='UTC')
+        await asyncio.sleep(0.5) # Prevent rate-limiting
 
