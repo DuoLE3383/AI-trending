@@ -369,7 +369,7 @@ async def main():
     # Attempt to send startup notification
     try:
         initial_symbols_display = "dynamic (fetching from Binance)" if DYN_SYMBOLS_ENABLED else "static list"
-        await notifications.send_startup_notification(
+        await notifications.send_startup_message(
             bot_token=TELEGRAM_BOT_TOKEN,
             chat_id=TELEGRAM_CHAT_ID,
             message_thread_id=TELEGRAM_MESSAGE_THREAD_ID,
