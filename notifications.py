@@ -1,3 +1,5 @@
+# notifications.py
+
 import logging
 import pandas as pd
 import asyncio
@@ -5,7 +7,6 @@ import configparser
 from typing import List, Dict, Any, Optional, Tuple
 from typing_extensions import TypedDict
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Bot
-from telegram.ext import Updater
 from datetime import datetime, timedelta
 
 # --- Type Definitions ---
@@ -34,7 +35,7 @@ class AnalysisResult(TypedDict, total=False):
 # --- Module-level Helper Functions ---
 def _get_range_str(low: float, high: float, price: float) -> str:
     """Formats a projected range string with percentage changes from the current price."""
-    if not price:
+    if not price or price == 0:
         return f"`${low:,.4f} - ${high:,.4f}`"
     low_pct = f"({((low - price) / price) * 100:+.2f}%)"
     high_pct = f"({((high - price) / price) * 100:+.2f}%)"
@@ -87,7 +88,6 @@ class TrendNotifier:
         return config
 
     async def send_startup_notification(self, chat_id: str, message_thread_id: Optional[int], symbols: List[str]):
-
         """Sends a notification when the bot starts up."""
         if not self.telegram_handler.is_configured():
             return
@@ -113,13 +113,11 @@ class TrendNotifier:
                f"`{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')}`.")
         await self.telegram_handler.send_telegram_notification(chat_id, msg, message_thread_id=message_thread_id)
 
-    # --- Private Helper Methods for Alerting ---
-
     def _should_send_alert(self, symbol_key: str, new_ranges: Dict[str, Optional[float]]) -> bool:
         """Determines if a notification should be sent based on range changes."""
         previous_ranges = self.last_notified_ranges.get(symbol_key)
         if not previous_ranges:
-            return True  # Always send if it's the first time
+            return True
 
         for key, prev_val in previous_ranges.items():
             curr_val = new_ranges.get(key)
@@ -143,14 +141,12 @@ class TrendNotifier:
 
         if original_trend not in corrected_label:
             self.logger.warning(f"Correcting trend! Original='{original_trend}', but levels indicate a '{direction}' trade.")
-
         return direction, corrected_label, f"({direction})"
 
     def _format_level(self, level_name: str, level_val: Optional[float], entry_val: float, emoji: str, direction: str) -> str:
         """Formats a single SL or TP level with its percentage change."""
         if not all([level_val, entry_val, direction]):
             return ""
-
         percentage = ((level_val - entry_val) / entry_val) * 100
         leveraged_percentage = -abs(percentage * self.leverage) if level_name == self._STOP_LOSS else abs(percentage * self.leverage)
         return f"{emoji} {level_name}: `${level_val:,.4f}` ({leveraged_percentage:+.2f}%)\n"
@@ -167,7 +163,6 @@ class TrendNotifier:
             
         return InlineKeyboardMarkup([buttons]) if buttons else None
 
-    ## REFACTORED: Message formatting broken into smaller, clearer functions
     def _format_header(self, r: AnalysisResult) -> str:
         return f"*{r.get('symbol')} Trend Alert* ({r.get('timeframe')})\n"
 
@@ -188,7 +183,6 @@ class TrendNotifier:
         entry_price = r.get('entry_price')
         if not entry_price or not direction:
             return ""
-            
         trade_type_str = f"({direction})"
         levels = [
             f"{self.emojis.get('entry')} Entry Price: `${entry_price:,.4f}` {trade_type_str}",
@@ -204,7 +198,6 @@ class TrendNotifier:
         price = r.get('price', 0)
         short_range = _get_range_str(r.get('proj_range_short_low', 0), r.get('proj_range_short_high', 0), price)
         long_range = _get_range_str(r.get('proj_range_long_low', 0), r.get('proj_range_long_high', 0), price)
-        
         return (
             f"💡 Trend (4h): *{corrected_trend}* (Range: {short_range})\n"
             f"💡 Trend (8h): *{corrected_trend}* (Range: {long_range})"
@@ -215,7 +208,6 @@ class TrendNotifier:
         direction, corrected_trend, _ = self._determine_trade_info(
             result.get('entry_price'), result.get('take_profit_1'), result.get('trend', 'N/A')
         )
-        
         parts = [
             self._format_header(result),
             self._format_analytics(result),
@@ -227,8 +219,6 @@ class TrendNotifier:
     async def _send_no_signal_status_update(self, chat_id: str, thread_id: Optional[int], result: AnalysisResult):
         """Sends a simplified status update when no major signal is found."""
         symbol, timeframe = result.get('symbol', 'N/A'), result.get('timeframe', 'N/A')
-        
-        ## FIXED: RSI value is now formatted as a number, not currency.
         message = (
             f"⏳ *{symbol} Status Update* ({timeframe})\n\n"
             f"No significant signal change detected recently.\n\n"
@@ -237,12 +227,9 @@ class TrendNotifier:
             f"  • RSI: `{result.get('rsi_val', 0):.2f}` ({result.get('rsi_interpretation', 'N/A')})\n\n"
             f"🕒 Time: `{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')}`"
         )
-
         self.logger.info(f"Sending status update for {symbol}_{timeframe}.")
         await self.telegram_handler.send_telegram_notification(chat_id, message, message_thread_id=thread_id)
         self.last_notification_timestamp[f"{symbol}_{timeframe}"] = pd.Timestamp.now(tz='UTC')
-
-    # --- Main Public Method ---
 
     async def process_analysis_and_notify(self, chat_id: str, thread_id: Optional[int], result: AnalysisResult):
         """
@@ -252,8 +239,7 @@ class TrendNotifier:
             self.logger.warning("Telegram handler not configured. Skipping notification.")
             return
 
-        symbol = result.get('symbol', 'N/A')
-        timeframe = result.get('timeframe', 'N/A')
+        symbol, timeframe = result.get('symbol', 'N/A'), result.get('timeframe', 'N/A')
         symbol_key = f"{symbol}_{timeframe}"
 
         new_ranges = {
@@ -263,27 +249,20 @@ class TrendNotifier:
             "long_high": result.get("proj_range_long_high")
         }
 
-        # Decide whether to send a full alert or a status update
         if not self._should_send_alert(symbol_key, new_ranges):
             last_ts = self.last_notification_timestamp.get(symbol_key)
             if not last_ts or (pd.Timestamp.now(tz='UTC') - last_ts > self.status_interval):
                 await self._send_no_signal_status_update(chat_id, thread_id, result)
             return
 
-        # Format message and create keyboard for a full alert
         message = self._format_alert_message(result)
         keyboard = self._create_alert_keyboard(symbol)
 
-        # Send the notification
         await self.telegram_handler.send_telegram_notification(
-            chat_id,
-            message,
-            message_thread_id=thread_id,
-            reply_markup=keyboard
+            chat_id, message, message_thread_id=thread_id, reply_markup=keyboard
         )
 
-        # Update state after successful notification
         self.last_notified_ranges[symbol_key] = new_ranges
         self.last_notification_timestamp[symbol_key] = pd.Timestamp.now(tz='UTC')
-        await asyncio.sleep(0.5) # Prevent rate-limiting
+        await asyncio.sleep(0.5)
 
