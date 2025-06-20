@@ -1,5 +1,3 @@
-# realtime-trend.py
-
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -169,7 +167,7 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> None:
     df.ta.atr(length=ATR_PERIOD, append=True)
 
     required_cols = [
-        f'EMA_{EMA_FAST}', f'EMA_{EMA_MEDIUM}', f'EMA_{EMA_SLOW}',
+        f'EMA_{EMA_FAST}', f'EMA_{MEDIUM}', f'EMA_{SLOW}',
         f'RSI_{RSI_PERIOD}', f'ATRr_{ATR_PERIOD}',
         f'BBL_{BBANDS_PERIOD}_{BBANDS_STD_DEV}',
         f'BBM_{BBANDS_PERIOD}_{BBANDS_STD_DEV}',
@@ -181,7 +179,7 @@ async def perform_analysis(df: pd.DataFrame, symbol: str) -> None:
 
     last = df.iloc[-1]
     price = last.get('close')
-    ema_f, ema_m, ema_s = last.get(f'EMA_{EMA_FAST}'), last.get(f'EMA_{EMA_MEDIUM}'), last.get(f'EMA_{EMA_SLOW}')
+    ema_f, ema_m, ema_s = last.get(f'EMA_{EMA_FAST}'), last.get(f'EMA_{MEDIUM}'), last.get(f'EMA_{SLOW}')
     rsi, atr = last.get(f'RSI_{RSI_PERIOD}'), last.get(f'ATRr_{ATR_PERIOD}')
     bb_l, bb_m, bb_u = last.get(f'BBL_{BBANDS_PERIOD}_{BBANDS_STD_DEV}'), last.get(f'BBM_{BBANDS_PERIOD}_{BBANDS_STD_DEV}'), last.get(f'BBU_{BBANDS_PERIOD}_{BBANDS_STD_DEV}')
 
@@ -319,14 +317,53 @@ async def main():
         logger.critical(f"Failed to initialize handlers: {e}. Exiting.")
         sys.exit(1)
 
-    monitored_symbols_ref = {'symbols': set(STATIC_SYMBOLS)}
-    symbols_for_message = list(monitored_symbols_ref['symbols']) if not DYN_SYMBOLS_ENABLED else ["Dynamic (from Binance)"]
+    # --- New code to format the symbol list for the startup message ---
+    logger.info("Fetching initial symbol list for startup message...")
+    
+    # Start with the static symbols from your config
+    all_symbols = set(STATIC_SYMBOLS)
+    
+    # If dynamic symbols are enabled, fetch the full list from Binance
+    if DYN_SYMBOLS_ENABLED:
+        dynamic_symbols = fetch_and_filter_binance_symbols()
+        if dynamic_symbols:
+            all_symbols.update(dynamic_symbols)
+
+    # This is the list that the analysis loop will use
+    monitored_symbols_ref = {'symbols': all_symbols}
+
+    # Define your priority symbols
+    priority_symbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
+    
+    # Separate priority symbols from the rest
+    display_list = []
+    
+    # Use a copy of the set to calculate the 'other' count
+    remaining_symbols = all_symbols.copy()
+
+    # Add priority symbols to the display list if they exist in the full list
+    for symbol in priority_symbols:
+        if symbol in remaining_symbols:
+            # Add '#' to the first symbol only
+            display_list.append(f"#{symbol}" if not display_list else symbol)
+            remaining_symbols.discard(symbol)
+
+    # Add the count of the remaining symbols
+    other_symbols_count = len(remaining_symbols)
+    if other_symbols_count > 0:
+        display_list.append(f"(+{other_symbols_count} more)")
+
+    # Join them into a final string
+    formatted_symbols_str = ", ".join(display_list)
+    # --- End of new code block ---
 
     try:
+        # Pass both the new formatted string and the full list to the notification function
         await notifier.send_startup_notification(
             chat_id=TELEGRAM_CHAT_ID,
             message_thread_id=TELEGRAM_MESSAGE_THREAD_ID,
-            symbols=symbols_for_message
+            symbols_str=formatted_symbols_str, # Our new formatted string
+            symbols_full_list=list(all_symbols) # The complete list for the bot to use
         )
     except Exception as e:
         logger.critical(f"Failed to send Telegram startup message: {e}. Exiting.")
@@ -335,7 +372,7 @@ async def main():
     logger.info("--- Bot is now running. Analysis and Signal loops are active. ---")
     
     analysis_task = asyncio.create_task(analysis_loop(monitored_symbols_ref))
-    signal_task = asyncio.create_task(signal_check_loop(notifier=notifier)) # Pass notifier instance here
+    signal_task = asyncio.create_task(signal_check_loop(notifier=notifier))
     
     await asyncio.gather(analysis_task, signal_task)
 
