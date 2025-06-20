@@ -1,37 +1,60 @@
-# In your telegram_handler.py file
+import logging
+from telegram import Bot
+from telegram.ext import Updater
+from telegram.error import TelegramError
 from typing import Optional
 
-import logging
-from telegram import Bot, InlineKeyboardMarkup # <-- Import InlineKeyboardMarkup
-from telegram.error import TelegramError
-
+# --- Initialize Logger ---
 logger = logging.getLogger(__name__)
 
-# Assume telegram_bot = Bot(token="YOUR_TOKEN") is initialized elsewhere
+class TelegramHandler:
+    def __init__(self, api_token: str):
+        self.bot: Optional[Bot] = None
+        if api_token and api_token != 'YOUR_TELEGRAM_API_TOKEN':
+            try:
+                self.bot = Bot(token=api_token)
+                logger.info("Telegram Bot initialized successfully.")
+            except Exception as e:
+                logger.critical(f"Failed to initialize Telegram Bot: {e}")
+        else:
+            logger.warning("Telegram API token is not configured. Notifications will be disabled.")
 
-async def send_telegram_notification(
-    chat_id: str,
-    message: str,
-    message_thread_id: Optional[int] = None,
-    reply_markup: Optional[InlineKeyboardMarkup] = None, # <-- ADD THIS ARGUMENT
-    suppress_print: bool = False
-):
-    """
-    Sends a message to a specified Telegram chat, now with button support.
-    """
-    if not suppress_print:
-        logger.info(f"Sending Telegram notification to chat_id: {chat_id} (Topic: {message_thread_id})")
+    def is_configured(self) -> bool:
+        """Check if the bot was initialized successfully."""
+        return self.bot is not None
 
-    try:
-        await telegram_bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode='Markdown',
-            message_thread_id=message_thread_id,
-            reply_markup=reply_markup  # <-- PASS IT HERE
-        )
-    except TelegramError as e:
-        logger.error(f"Failed to send Telegram message: {e}")
-    except Exception as e:
-        logger.error(f"An unexpected error occurred in send_telegram_notification: {e}")
+    async def send_telegram_notification(
+        self,
+        chat_id: str,
+        message: str,
+        message_thread_id: Optional[int] = None,
+        reply_markup: Optional[object] = None,
+        suppress_print: bool = False
+    ):
+        """Sends a message to a specified Telegram chat."""
+        if not self.is_configured():
+            if not suppress_print:
+                print("--- TELEGRAM (Not Sent) ---\n"
+                      f"Chat ID: {chat_id}\n"
+                      f"Message: {message}\n"
+                      "-----------------------------")
+            return
 
+        try:
+            await self.bot.send_message(
+                chat_id=chat_id,
+                text=message,
+                parse_mode='Markdown',
+                reply_markup=reply_markup,
+                message_thread_id=message_thread_id
+            )
+        except TelegramError as e:
+            logger.error(f"Telegram Error: {e.message}")
+        except Exception as e:
+            logger.error(f"An unexpected error occurred when sending Telegram message: {e}")
+
+# You would then create an instance of this handler in your main script
+# config = configparser.ConfigParser()
+# config.read('config.ini')
+# telegram_api_token = config.get('telegram', 'api_token')
+# telegram_handler_instance = TelegramHandler(telegram_api_token)
