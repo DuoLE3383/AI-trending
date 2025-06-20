@@ -234,3 +234,32 @@ async def send_shutdown_notification(chat_id: str, message_thread_id: Optional[i
     shutdown_message = (f"🛑 Trend Analysis Bot for *{', '.join(symbols_list)}* stopped by user at "
                         f"`{pd.Timestamp.now(tz='UTC').strftime('%Y-%m-%d %H:%M:%S %Z')}`.")
     await telegram_handler.send_telegram_notification(chat_id, shutdown_message, message_thread_id=message_thread_id, suppress_print=True)
+    
+async def send_startup_notification(chat_id: str, message_thread_id: Optional[int], symbols_list: List[str]):
+    """Sends a notification when the bot starts up."""
+    if not telegram_handler.telegram_bot or chat_id == telegram_handler.TELEGRAM_CHAT_ID_PLACEHOLDER:
+        return
+
+    startup_time = pd.Timestamp.now(tz='UTC').strftime('%Y-%m-%d %H:%M:%S %Z')
+    
+    # Construct the startup message
+    startup_message = (
+        f"✅ *Trend Analysis Bot Started*\n\n"
+        f"Monitoring symbols: *{', '.join(symbols_list)}*\n"
+        f"Start Time: `{startup_time}`"
+    )
+    
+    logger.info("Attempting to send startup notification...")
+    try:
+        await telegram_handler.send_telegram_notification(
+            chat_id, 
+            startup_message, 
+            message_thread_id=message_thread_id, 
+            suppress_print=True
+        )
+        logger.info("Startup notification sent successfully.")
+    except Exception as e:
+        # Log the error but do not exit, allowing the bot to continue running
+        logger.critical(f"Could not send startup message to Telegram: {e}")
+
+
