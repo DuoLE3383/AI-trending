@@ -41,8 +41,8 @@ def _get_range_str(low: float, high: float, price: float) -> str:
     high_pct = f"({((high - price) / price) * 100:+.2f}%)"
     return f"`${low:,.4f}` {low_pct} - `${high:,.4f}` {high_pct}"
 
+class NotificationHandler:
 
-class TrendNotifier:
     """
     Handles trend analysis notifications, state management, and message formatting.
     NOTE: Your realtime-trend.py imports 'NotificationHandler'. You may need to rename this class.
