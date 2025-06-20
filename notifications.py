@@ -45,6 +45,7 @@ def _get_range_str(low: float, high: float, price: float) -> str:
 class TrendNotifier:
     """
     Handles trend analysis notifications, state management, and message formatting.
+    NOTE: Your realtime-trend.py imports 'NotificationHandler'. You may need to rename this class.
     """
     ## REFACTORED: Class constants for trade directions and levels
     _LONG_TRADE = "Long"
@@ -87,29 +88,39 @@ class TrendNotifier:
             raise
         return config
 
-    async def send_startup_notification(self, chat_id: str, message_thread_id: Optional[int], symbols: List[str]):
-        """Sends a notification when the bot starts up."""
+    # <<< --- EDITED METHOD --- >>>
+    async def send_startup_notification(self, chat_id: str, message_thread_id: Optional[int], symbols_str: str, symbols_full_list: List[str]):
+        """Sends a notification when the bot starts up, using the pre-formatted symbol string."""
         if not self.telegram_handler.is_configured():
             return
+        
+        # NOTE: The 'timeframe' setting is not available in this class.
+        # It would need to be passed from realtime-trend.py if you want to include it here.
+        # The message format is now updated to match your request.
         msg = (
-            f"✅ *Trend Analysis Bot Started*\n\n"
-            f"Monitoring symbols: *{', '.join(symbols)}*\n"
-            f"Start Time: `{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')}`"
+            f"📈 *Trend Analysis Bot Started*\n\n"
+            f"📊 Monitoring: *{symbols_str}* 🎯Most #Binance Pair List\n"
+            f"⚙️ Settings: Timeframe=15m\n" # Assuming 15m, as it's not passed directly
+            f"🕒 Time: `{pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S UTC')}`\n\n"
+            f"🔔 This will be updated every 10 minutes with the latest analysis results.🚨🚨 Keep Calm and follow @aisignalvip for more updates.\n\n"
+            f"💡 Tip: If you want to receive notifications in a specific topic, please set the topic ID in the config file."
         )
+        
         self.logger.info("Attempting to send startup notification...")
         try:
             await self.telegram_handler.send_telegram_notification(
                 chat_id, msg, message_thread_id=message_thread_id, suppress_print=True
             )
-            self.logger.info("Startup notification sent successfully.")
+            self.logger.info(f"Startup notification sent successfully. Monitoring {len(symbols_full_list)} symbols.")
         except Exception as e:
             self.logger.critical(f"Could not send startup message to Telegram: {e}")
+
 
     async def send_shutdown_notification(self, chat_id: str, message_thread_id: Optional[int], symbols: List[str]):
         """Sends a notification when the bot is shut down."""
         if not self.telegram_handler.is_configured():
             return
-        msg = (f"🛑 Trend Analysis Bot for *{', '.join(symbols)}* stopped by user at "
+        msg = (f"🛑 Trend Analysis Bot for *{len(symbols)} symbols* stopped by user at "
                f"`{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')}`.")
         await self.telegram_handler.send_telegram_notification(chat_id, msg, message_thread_id=message_thread_id)
 
