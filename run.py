@@ -112,7 +112,7 @@ async def main():
     init_sqlite_db(config.SQLITE_DB_PATH)
     
     try:
-        tg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN, logger=logger)
+        tg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN)
         notifier = NotificationHandler(telegram_handler=tg_handler, logger=logger)
     except Exception as e:
         logger.critical(f"Failed to initialize handlers: {e}. Exiting.")
