@@ -219,8 +219,7 @@ async def main():
     
     monitored_symbols_ref = {'symbols': set(STATIC_SYMBOLS)}
 
-    if not await telegram_handler.init_telegram_bot(
-        bot_token=TELEGRAM_BOT_TOKEN, chat_id=TELEGRAM_CHAT_ID,
+    
         message_thread_id_for_startup=TELEGRAM_MESSAGE_THREAD_ID, symbols_display="static list initially",
         timeframe_display=TIMEFRAME,
         loop_interval_display=f"Analysis: {LOOP_SLEEP_INTERVAL_SECONDS//60}m, Signal Check: {SIGNAL_CHECK_INTERVAL_SECONDS//60}m"
@@ -238,5 +237,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logger.info("Bot stopped by user.")
     finally:
-        asyncio.run(telegram_handler.close_session())
-        logger.info("--- Bot shutdown complete. ---")
+        
