@@ -80,7 +80,7 @@ class NotificationHandler:
         self.logger.info("Attempting to send startup notification...")
         try:
             # You may need to change 'send_message' to match your telegram_handler's method name
-            await self.telegram_handler.send_message(
+            await self.telegram_handler.send_notification(
                 chat_id, msg, message_thread_id=message_thread_id
             )
             self.logger.info(f"Startup notification sent successfully. Monitoring {len(symbols_full_list)} symbols.")
@@ -113,7 +113,7 @@ class NotificationHandler:
         
         try:
             # You may need to change 'send_message' to match your telegram_handler's method name
-            await self.telegram_handler.send_message(
+            await self.telegram_handler.send_notification(
                 chat_id, message, message_thread_id=message_thread_id
             )
             self.logger.info(f"Signal alert for {symbol} sent successfully.")
