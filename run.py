@@ -100,19 +100,28 @@ async def summary_loop(notifier: NotificationHandler):
         stats_msg = "🏆 **Strategy Performance Report (All-Time)** 🏆\n\n"
         if 'error' in stats:
             stats_msg += "Could not generate statistics."
+        
+
         elif stats['total_completed_trades'] > 0:
-            stats_msg += "
-                f"✅ **Win Rate:** `{stats['win_rate']}`\n"
-                f"❌ **Loss Rate:** `{stats['loss_rate']}`\n"
-                f"📊 **Completed Trades:** `{stats['total_completed_trades']}`"
-            "
-        else:
-            stats_msg += "
-            f"\n{separator}\n"
-            "💰 **New to Binance? Get a $100 Bonus!**\n"
-            "Sign up on the world's largest crypto exchange platform and earn a **100 USD trading fee rebate voucher!**\n"
-            "🔗 **Register Now:**\n"
-            f"https://www.binance.com/activity/referral-entry/CPA?ref=CPA\\_006MBW985P""
+    # Use parentheses to group the multi-line f-string
+        stats_msg += (
+        f"✅ **Win Rate:** `{stats['win_rate']}`\n"
+        f"❌ **Loss Rate:** `{stats['loss_rate']}`\n"
+        f"📊 **Completed Trades:** `{stats['total_completed_trades']}`"
+    )
+else:
+    # The footer also needs to be correctly formatted as a single string
+    separator = r"----------------------------------------"
+    link = r"https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P"
+    
+    stats_msg += (
+        f"\n{separator}\n"
+        "💰 **New to Binance? Get a $100 Bonus!**\n"
+        "Sign up on the world's largest crypto exchange platform and earn a **100 USD trading fee rebate voucher!**\n"
+        "🔗 **Register Now:**\n"
+        f"{link}"
+    )
+
 
         try:
             await notifier.telegram_handler.send_message(
