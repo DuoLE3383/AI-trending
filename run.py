@@ -105,7 +105,7 @@ async def summary_loop(notifier: NotificationHandler):
                 f"✅ **Win Rate:** `{stats['win_rate']}`\n"
                 f"❌ **Loss Rate:** `{stats['loss_rate']}`\n"
                 f"📊 **Completed Trades:** `{stats['total_completed_trades']}`"
-            
+            "
         else:
             stats_msg += "
             f"\n{separator}\n"
