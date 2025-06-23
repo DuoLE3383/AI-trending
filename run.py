@@ -114,10 +114,19 @@ async def main():
 
     init_sqlite_db(config.SQLITE_DB_PATH)
     
+        # In run.py inside async def main()
+
     try:
-        # Corrected initialization block
+        # This line is correct
         tg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN)
+        
+        # This line is now corrected to match the new notifications.py
         notifier = NotificationHandler(telegram_handler=tg_handler)
+        
+    except Exception as e:
+        logger.critical(f"Failed to initialize handlers: {e}. Exiting.")
+        sys.exit(1)
+
         
     except Exception as e:
         logger.critical(f"Failed to initialize handlers: {e}. Exiting.")
