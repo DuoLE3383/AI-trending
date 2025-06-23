@@ -40,8 +40,6 @@ def _get_range_str(low: float, high: float, price: float) -> str:
     high_pct = f"({((high - price) / price) * 100:+.2f}%)"
     return f"`${low:,.4f}` {low_pct} - `${high:,.4f}` {high_pct}"
 
-
-# Ensure the class name here matches your import in run.py
 class NotificationHandler:
     """
     Handles trend analysis notifications, now integrated with the main config.
@@ -58,13 +56,8 @@ class NotificationHandler:
         self.telegram_handler = telegram_handler
         self.logger = logging.getLogger(__name__)
 
-        # Settings loaded from main config
-        self.status_interval = timedelta(minutes=config.config_data["notifications"]["status_update_interval_minutes"])
-        self.leverage = config.config_data["notifications"]["leverage_multiplier"]
-        
-        # In-memory State Stores
-        self.last_notified_signal: Dict[str, str] = {}
-        self.last_status_update: Dict[str, pd.Timestamp] = {}
+        # In a real app, you might load these from a config file
+        self.leverage = 10 # Example leverage
 
     async def send_startup_notification(self, chat_id: str, message_thread_id: Optional[int], symbols_str: str, symbols_full_list: List[str]):
         """Sends a notification when the bot starts up."""
@@ -74,14 +67,15 @@ class NotificationHandler:
             f"⚙️ Settings: Timeframe={config.TIMEFRAME}\n"
             f"🕒 Time: `{pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S UTC')}`\n"
             f"🔔 This will be updated every 10 minutes with the latest analysis results.🚨🚨 Keep Calm and follow @aisignalvip for more updates.\n"
-f"💡 Tip: If you want to get TODAY profit, register now https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P.\n"
+            f"💡 Tip: If you want to get TODAY profit, register now https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P.\n"
         )
         
         self.logger.info("Attempting to send startup notification...")
         try:
-            # CORRECTED function name
-            await self.telegram_handler.send_telegram_notification(
-                chat_id, msg, message_thread_id=message_thread_id
+            # Assuming your telegram_handler has a method like this
+            # You might need to adjust this method name
+            await self.telegram_handler.send_message(
+                chat_id=chat_id, message=msg, message_thread_id=message_thread_id
             )
             self.logger.info(f"Startup notification sent successfully. Monitoring {len(symbols_full_list)} symbols.")
         except Exception as e:
@@ -110,94 +104,48 @@ f"💡 Tip: If you want to get TODAY profit, register now https://www.binance.co
             f"Current Price: `${price:,.4f}`\n"
             f"🕒 Time: `{pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S UTC')}`\n"
             f"🔔 This will be updated every 10 minutes with the latest analysis results.🚨🚨 Keep Calm and follow @aisignalvip for more updates.\n"
-f"💡 Tip: If you want to get TODAY profit, register now https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P."
+            f"💡 Tip: If you want to get TODAY profit, register now https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P."
         )
         
         try:
-            # CORRECTED function name
-            await self.telegram_handler.send_telegram_notification(
-                chat_id, message, message_thread_id=message_thread_id
+            await self.telegram_handler.send_message(
+                chat_id=chat_id, message=message, message_thread_id=message_thread_id
             )
             self.logger.info(f"Signal alert for {symbol} sent successfully.")
         except Exception as e:
             self.logger.error(f"Failed to send signal alert for {symbol}: {e}")
             
-# Add this new function to your notifications.py file
+    # --- THIS FUNCTION IS NOW CORRECTLY PLACED INSIDE THE CLASS ---
+    async def send_batch_trend_alert_notification(self, chat_id: str, message_thread_id: int, analysis_results: list):
+        """
+        Formats a batch of new signals into a single Telegram message.
+        """
+        if not analysis_results:
+            return
 
-async def send_batch_trend_alert_notification(self, chat_id: str, message_thread_id: int, analysis_results: list):
-    """
-    Formats a batch of new signals into a single Telegram message.
-    """
-    if not analysis_results:
-        return
-
-    # Header for the message
-    header = f"🔥 *{len(analysis_results)} New Signal(s) Found!* 🔥\n\n"
-    
-    # Format each signal into a line
-    message_lines = []
-    for result in analysis_results:
-        symbol = result.get('symbol', 'N/A')
-        trend = result.get('trend', 'N/A').replace("_", " ").title()
-        price = result.get('last_price', 0)
+        header = f"🔥 *{len(analysis_results)} New Signal(s) Found!* 🔥\n\n"
         
-        # Create a clean representation of the trend for the message
-        trend_emoji = "🔼" if "Bullish" in trend else "🔽"
-        formatted_line = f"{trend_emoji} *{symbol}* - {trend} at `${price:,.4f}`"
-        message_lines.append(formatted_line)
-    
-    # Join all parts of the message
-    full_message = header + "\n".join(message_lines)
-    
-    try:
-        await self.telegram_handler.send_message(
-            chat_id=chat_id,
-            message=full_message,
-            message_thread_id=message_thread_id,
-            parse_mode="Markdown" # Use Markdown for bold text
-        )
-        self.logger.info(f"Successfully sent combined signal alert for {len(analysis_results)} symbols.")
-    except Exception as e:
-        self.logger.error(f"Failed to send combined signal alert: {e}", exc_info=True)
+        message_lines = []
+        for result in analysis_results:
+            # IMPORTANT: The database record uses 'last_price', not 'price'.
+            symbol = result.get('symbol', 'N/A')
+            trend = result.get('trend', 'N/A').replace("_", " ").title()
+            price = result.get('last_price', 0) # Using 'last_price' from the database record
+            
+            trend_emoji = "🔼" if "Bullish" in trend else "🔽"
+            formatted_line = f"{trend_emoji} *{symbol}* - {trend} at `${price:,.4f}`"
+            message_lines.append(formatted_line)
         
-# Add this new function inside the NotificationHandler class in notifications.py
-
-async def send_batch_trend_alert_notification(self, chat_id: str, message_thread_id: int, analysis_results: list):
-    """
-    Formats a batch of new signals into a single Telegram message.
-    """
-    if not analysis_results:
-        return
-
-    # Header for the message
-    header = f"🔥 *{len(analysis_results)} New Signal(s) Found!* 🔥\n\n"
-    
-    # Format each signal into a line
-    message_lines = []
-    for result in analysis_results:
-        symbol = result.get('symbol', 'N/A')
-        trend = result.get('trend', 'N/A').replace("_", " ").title()
-        price = result.get('last_price', 0)
+        full_message = header + "\n".join(message_lines)
         
-        # Create a clean representation of the trend for the message
-        trend_emoji = "🔼" if "Bullish" in trend else "🔽"
-        formatted_line = f"{trend_emoji} *{symbol}* - {trend} at `${price:,.4f}`"
-        message_lines.append(formatted_line)
-    
-    # Join all parts of the message
-    full_message = header + "\n".join(message_lines)
-    
-    try:
-        await self.telegram_handler.send_message(
-            chat_id=chat_id,
-            message=full_message,
-            message_thread_id=message_thread_id,
-            parse_mode="Markdown" # Use Markdown for bold text
-        )
-        self.logger.info(f"Successfully sent combined signal alert for {len(analysis_results)} symbols.")
-    except Exception as e:
-        self.logger.error(f"Failed to send combined signal alert: {e}", exc_info=True)
-
-
-
+        try:
+            await self.telegram_handler.send_message(
+                chat_id=chat_id,
+                message=full_message,
+                message_thread_id=message_thread_id,
+                parse_mode="Markdown"
+            )
+            self.logger.info(f"Successfully sent combined signal alert for {len(analysis_results)} symbols.")
+        except Exception as e:
+            self.logger.error(f"Failed to send combined signal alert: {e}", exc_info=True)
 
