@@ -1,5 +1,4 @@
-# run.py - DÒNG MỚI ĐÃ SỬA
-from binance import AsyncClient as Client # Sử dụng client bất đồng bộ
+from binance import AsyncClient as Client
 
 import sys
 import logging
