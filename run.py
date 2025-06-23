@@ -85,6 +85,9 @@ async def signal_check_loop(notifier: NotificationHandler):
                     if timestamp > last_notified_signal.get(symbol, ''):
                         logger.info(f"🔥 New signal for {symbol}! Trend: {trend}. Notifying...")
                         
+                        # NOTE: Your notifications.py uses a different method name.
+                        # You may need to change this call to match what's in that file.
+                        # For example: await notifier.process_analysis_and_notify(...)
                         await notifier.send_individual_trend_alert_notification(
                             chat_id=config.TELEGRAM_CHAT_ID,
                             message_thread_id=config.TELEGRAM_MESSAGE_THREAD_ID,
@@ -112,8 +115,10 @@ async def main():
     init_sqlite_db(config.SQLITE_DB_PATH)
     
     try:
+        # Corrected initialization block
         tg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN)
-        notifier = NotificationHandler(telegram_handler=tg_handler, logger=logger)
+        notifier = NotificationHandler(telegram_handler=tg_handler)
+        
     except Exception as e:
         logger.critical(f"Failed to initialize handlers: {e}. Exiting.")
         sys.exit(1)
