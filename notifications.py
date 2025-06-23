@@ -72,15 +72,13 @@ class NotificationHandler:
             f"📈 *Trend Analysis Bot Started*\n\n"
             f"📊 Monitoring: *{symbols_str}* 🎯Most #Binance Pair List\n"
             f"⚙️ Settings: Timeframe={config.TIMEFRAME}\n"
-            f"🕒 Time: `{pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S UTC')}`\n\n"
-            f"🔔 This will be updated every 10 minutes with the latest analysis results.🚨🚨 Keep Calm and follow @aisignalvip for more updates.\n\n"
-            f"💡 Tip: If you want to receive notifications in a specific topic, please set the topic ID in the config file."
+            f"🕒 Time: `{pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S UTC')}`"
         )
         
         self.logger.info("Attempting to send startup notification...")
         try:
-            # You may need to change 'send_message' to match your telegram_handler's method name
-            await self.telegram_handler.send_notification(
+            # CORRECTED function name
+            await self.telegram_handler.send_telegram_notification(
                 chat_id, msg, message_thread_id=message_thread_id
             )
             self.logger.info(f"Startup notification sent successfully. Monitoring {len(symbols_full_list)} symbols.")
@@ -112,8 +110,8 @@ class NotificationHandler:
         )
         
         try:
-            # You may need to change 'send_message' to match your telegram_handler's method name
-            await self.telegram_handler.send_notification(
+            # CORRECTED function name
+            await self.telegram_handler.send_telegram_notification(
                 chat_id, message, message_thread_id=message_thread_id
             )
             self.logger.info(f"Signal alert for {symbol} sent successfully.")
