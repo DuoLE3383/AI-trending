@@ -6,7 +6,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from binance import AsyncClient as Clintimport config
+from binance import AsyncClient as Clintimport 
+import config
 from database_handler import init_sqlite_db
 from analysis_engine import process_symbol
 from telegram_handler import TelegramHandler
