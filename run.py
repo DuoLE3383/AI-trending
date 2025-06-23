@@ -17,7 +17,7 @@ from analysis_engine import perform_analysis
 from telegram_handler import TelegramHandler
 from notifications import NotificationHandler
 from updater import check_signal_outcomes
-from results import get_win_loss_stats
+from result import get_win_loss_stats
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger(__name__)
