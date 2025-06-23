@@ -5,7 +5,7 @@ import asyncio
 import time
 from binance.client import Client
 from dotenv import load_dotenv
-
+import sqlite3
 load_dotenv()
 
 import config
