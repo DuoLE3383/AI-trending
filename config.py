@@ -75,19 +75,17 @@ TREND_SIDEWAYS = "SIDEWAYS"
 # === 6. LOOP INTERVALS (tính bằng giây)
 # ==============================================================================
 # Thời gian nghỉ của vòng lặp phân tích chính
-LOOP_SLEEP_INTERVAL_SECONDS = 60
+LOOP_SLEEP_INTERVAL_SECONDS = 300
 
 # Tần suất vòng lặp kiểm tra tín hiệu mới trong DB để gửi
-SIGNAL_CHECK_INTERVAL_SECONDS = 10 # Nên để ngắn để gửi tín hiệu nhanh
+SIGNAL_CHECK_INTERVAL_SECONDS = 300 # Nên để ngắn để gửi tín hiệu nhanh
 
 # Tần suất vòng lặp cập nhật trạng thái trade (TP/SL)
-UPDATER_INTERVAL_SECONDS = 60
+UPDATER_INTERVAL_SECONDS = 600
 
 # Tần suất vòng lặp gửi báo cáo tổng kết
-SUMMARY_INTERVAL_SECONDS = 12 * 3600 # 12 giờ
+SUMMARY_INTERVAL_SECONDS = 3600 # 12 giờ
 
-# <<< BIẾN CÒN THIẾU MÀ BẠN CẦN THÊM VÀO >>>
-# Tần suất vòng lặp gửi thông báo "bot còn sống"
 HEARTBEAT_INTERVAL_SECONDS = 600 # 10 phút
 
 # ==============================================================================
