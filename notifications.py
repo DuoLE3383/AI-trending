@@ -139,7 +139,7 @@ class NotificationHandler:
         full_message = header + "\n".join(message_lines)
         
         try:
-            await self.telegram_handler.send_message(
+            await self.telegram_handler.send_notification(
                 chat_id=chat_id,
                 message=full_message,
                 message_thread_id=message_thread_id,
