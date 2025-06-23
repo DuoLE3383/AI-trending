@@ -7,7 +7,7 @@ import time
 import sqlite3
 from binance.client import Client
 from dotenv import load_dotenv
-
+from analysis_engine import process_symbol
 load_dotenv()
 
 import config
