@@ -127,10 +127,6 @@ async def main():
         logger.critical(f"Failed to initialize handlers: {e}. Exiting.")
         sys.exit(1)
 
-        
-    except Exception as e:
-        logger.critical(f"Failed to initialize handlers: {e}. Exiting.")
-        sys.exit(1)
 
     # --- Prepare for startup message and main loops ---
     logger.info("Fetching initial symbol list for startup message...")
