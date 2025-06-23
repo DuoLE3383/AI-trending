@@ -1,60 +1,37 @@
+# telegram_handler.py
+import httpx
 import logging
-from telegram import Bot
-from telegram.ext import Updater
-from telegram.error import TelegramError
-from typing import Optional
 
-# --- Initialize Logger ---
 logger = logging.getLogger(__name__)
 
 class TelegramHandler:
     def __init__(self, api_token: str):
-        self.bot: Optional[Bot] = None
-        if api_token and api_token != 'YOUR_TELEGRAM_API_TOKEN':
+        self.api_token = api_token
+        self.base_url = f"https://api.telegram.org/bot{self.api_token}"
+
+    async def send_message(self, chat_id: str, message: str, message_thread_id: str = None, parse_mode: str = "Markdown"):
+        url = f"{self.base_url}/sendMessage"
+        params = {
+            'chat_id': chat_id,
+            'text': message,
+            'parse_mode': parse_mode,
+            'disable_web_page_preview': True
+        }
+        if message_thread_id:
+            params['message_thread_id'] = message_thread_id
+
+        async with httpx.AsyncClient() as client:
             try:
-                self.bot = Bot(token=api_token)
-                logger.info("Telegram Bot initialized successfully.")
+                response = await client.post(url, json=params, timeout=20)
+                response.raise_for_status()
+                logger.debug("Telegram message sent successfully.")
+            except httpx.HTTPStatusError as e:
+                logger.error(f"Telegram API Error: {e.response.status_code} - {e.response.text}")
+                # Xử lý lỗi rate limit
+                if e.response.status_code == 429:
+                    retry_after = int(e.response.json().get('parameters', {}).get('retry_after', 30))
+                    logger.warning(f"Flood control exceeded. Retrying in {retry_after} seconds.")
+                    # Trong một hệ thống thực tế, bạn có thể muốn chờ và thử lại ở đây.
             except Exception as e:
-                logger.critical(f"Failed to initialize Telegram Bot: {e}")
-        else:
-            logger.warning("Telegram API token is not configured. Notifications will be disabled.")
+                logger.error(f"An unexpected error occurred when sending Telegram message: {e}")
 
-    def is_configured(self) -> bool:
-        """Check if the bot was initialized successfully."""
-        return self.bot is not None
-
-    async def send_telegram_notification(
-        self,
-        chat_id: str,
-        message: str,
-        message_thread_id: Optional[int] = None,
-        reply_markup: Optional[object] = None,
-        suppress_print: bool = False
-    ):
-        """Sends a message to a specified Telegram chat."""
-        if not self.is_configured():
-            if not suppress_print:
-                print("--- TELEGRAM (Not Sent) ---\n"
-                      f"Chat ID: {chat_id}\n"
-                      f"Message: {message}\n"
-                      "-----------------------------")
-            return
-
-        try:
-            await self.bot.send_message(
-                chat_id=chat_id,
-                text=message,
-                parse_mode='Markdown',
-                reply_markup=reply_markup,
-                message_thread_id=message_thread_id
-            )
-        except TelegramError as e:
-            logger.error(f"Telegram Error: {e.message}")
-        except Exception as e:
-            logger.error(f"An unexpected error occurred when sending Telegram message: {e}")
-
-# You would then create an instance of this handler in your main script
-# config = configparser.ConfigParser()
-# config.read('config.ini')
-# telegram_api_token = config.get('telegram', 'api_token')
-# telegram_handler_instance = TelegramHandler(telegram_api_token)
