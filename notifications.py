@@ -12,6 +12,7 @@ class NotificationHandler:
     def _get_common_footer(self) -> str:
         """Tạo phần footer chung chứa link giới thiệu để sử dụng trong nhiều thông báo."""
         separator = r"----------------------------------------"
+        # Lưu ý: Các ký tự đặc biệt của MarkdownV2 như . ! - phải được thoát bằng dấu \
         link = r"https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P"
         return (
             f"\n{separator}\n\n"
@@ -52,6 +53,7 @@ class NotificationHandler:
             symbol = result.get('symbol', 'N/A').replace('-', '\\-')
             trend = result.get('trend', 'N/A').replace("_", " ").title()
             price = result.get('last_price', 0)
+            # Thoát ký tự '.' để tránh lỗi MarkdownV2
             formatted_price = str(price).replace('.', '\\.')
             trend_emoji = "🔼" if "Bullish" in trend else "🔽"
             formatted_line = f"{trend_emoji} *{symbol}* \\- {trend} at `${formatted_price}`"
@@ -76,6 +78,7 @@ class NotificationHandler:
         if 'error' in stats:
             body = "\nCould not generate statistics due to an error."
         elif stats.get('total_completed_trades', 0) > 0:
+            # Thoát ký tự '.' trong tỷ lệ
             win_rate_str = str(stats['win_rate']).replace('.', '\\.')
             loss_rate_str = str(stats['loss_rate']).replace('.', '\\.')
             body = (
@@ -96,3 +99,26 @@ class NotificationHandler:
             self.logger.info("Successfully sent performance report to Telegram.")
         except Exception as e:
             self.logger.error(f"Failed to send performance report: {e}", exc_info=True)
+            
+    # <<< HÀM MỚI ĐÃ ĐƯỢC THÊM VÀO >>>
+    async def send_heartbeat_notification(self, symbols_count: int):
+        """Gửi tin nhắn 'nhịp tim' để xác nhận bot vẫn đang hoạt động."""
+        self.logger.info("Sending heartbeat notification...")
+        message = (
+            f"❤️ *Bot Status: ALIVE* ❤️\n\n"
+            f"The bot is running correctly and currently monitoring `{symbols_count}` symbols\\. "
+            f"No critical errors have been detected\\."
+        )
+        try:
+            await self.telegram_handler.send_message(
+                chat_id=config.TELEGRAM_CHAT_ID,
+                message=message,
+                message_thread_id=config.TELEGRAM_MESSAGE_THREAD_ID,
+                parse_mode="MarkdownV2",
+                # Gửi một cách "im lặng" để không làm phiền người dùng
+                disable_notification=True 
+            )
+            self.logger.info("Heartbeat notification sent successfully.")
+        except Exception as e:
+            self.logger.error(f"Failed to send heartbeat notification: {e}", exc_info=True)
+
