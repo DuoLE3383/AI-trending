@@ -1,18 +1,35 @@
-# notifications.py
 import logging
 from typing import List, Dict, Any
 from telegram_handler import TelegramHandler
 import config
 
 class NotificationHandler:
+    """
+    Handles the formatting and sending of all notifications to Telegram.
+    This class centralizes message creation and dispatching logic, making it
+    easier to manage different types of alerts and reports.
+    """
     def __init__(self, telegram_handler: TelegramHandler):
+        """
+        Initializes the NotificationHandler.
+
+        Args:
+            telegram_handler (TelegramHandler): An instance of the Telegram handler
+                                                 for sending messages.
+        """
         self.telegram_handler = telegram_handler
         self.logger = logging.getLogger(__name__)
 
     def _get_common_footer(self) -> str:
-        """Tạo phần footer chung chứa link giới thiệu để sử dụng trong nhiều thông báo."""
+        """
+        Creates a common footer containing a referral link to be used in various notifications.
+        
+        Note: MarkdownV2 special characters like '.', '!', '-' must be escaped with a backslash.
+        
+        Returns:
+            str: A formatted string for the message footer.
+        """
         separator = r"----------------------------------------"
-        # Lưu ý: Các ký tự đặc biệt của MarkdownV2 như . ! - phải được thoát bằng dấu \
         link = r"https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P"
         return (
             f"\n{separator}\n\n"
@@ -23,7 +40,12 @@ class NotificationHandler:
         )
 
     async def send_startup_notification(self, symbols_count: int):
-        """Gửi tin nhắn thông báo khi bot khởi động."""
+        """
+        Sends a notification message when the bot starts.
+
+        Args:
+            symbols_count (int): The number of trading symbols being monitored.
+        """
         self.logger.info("Preparing startup notification...")
         message_body = (
             f"🚀 *AI Trading Bot has been successfully activated\\!* 🚀\n\n"
@@ -43,7 +65,13 @@ class NotificationHandler:
             self.logger.error(f"Failed to send startup notification: {e}", exc_info=True)
 
     async def send_batch_trend_alert_notification(self, analysis_results: List[Dict[str, Any]]):
-        """Gửi thông báo tín hiệu theo lô. Lấy chat_id từ config."""
+        """
+        Sends a batch of signal notifications. Retrieves chat_id from the config.
+
+        Args:
+            analysis_results (List[Dict[str, Any]]): A list of dictionaries,
+                                                     each containing analysis results for a symbol.
+        """
         if not analysis_results:
             return
         self.logger.info(f"Preparing to send a batch of {len(analysis_results)} signals.")
@@ -53,11 +81,12 @@ class NotificationHandler:
             symbol = result.get('symbol', 'N/A').replace('-', '\\-')
             trend = result.get('trend', 'N/A').replace("_", " ").title()
             price = result.get('last_price', 0)
-            # Thoát ký tự '.' để tránh lỗi MarkdownV2
+            # Escape the '.' character to avoid MarkdownV2 errors
             formatted_price = str(price).replace('.', '\\.')
             trend_emoji = "🔼" if "Bullish" in trend else "🔽"
             formatted_line = f"{trend_emoji} *{symbol}* \\- {trend} at `${formatted_price}`"
             message_lines.append(formatted_line)
+        
         body = "\n".join(message_lines)
         full_message = header + "\n" + body + self._get_common_footer()
         try:
@@ -72,22 +101,28 @@ class NotificationHandler:
             self.logger.error(f"Could not send signal batch: {e}", exc_info=True)
 
     async def send_summary_report(self, stats: Dict[str, Any]):
-        """Định dạng và gửi báo cáo hiệu suất định kỳ."""
+        """
+        Formats and sends a periodic performance report.
+
+        Args:
+            stats (Dict[str, Any]): A dictionary containing performance statistics.
+        """
         self.logger.info("Preparing performance summary report...")
         header = "🏆 *Strategy Performance Report (All\\-Time)* 🏆\n"
         if 'error' in stats:
             body = "\nCould not generate statistics due to an error."
         elif stats.get('total_completed_trades', 0) > 0:
-            # Thoát ký tự '.' trong tỷ lệ
-            win_rate_str = str(stats['win_rate']).replace('.', '\\.')
-            loss_rate_str = str(stats['loss_rate']).replace('.', '\\.')
+            # Escape the '.' character in rates for MarkdownV2
+            win_rate_str = str(stats.get('win_rate', '0.0')).replace('.', '\\.')
+            loss_rate_str = str(stats.get('loss_rate', '0.0')).replace('.', '\\.')
             body = (
-                f"\n✅ *Win Rate:* `{win_rate_str}`"
-                f"\n❌ *Loss Rate:* `{loss_rate_str}`"
-                f"\n📊 *Completed Trades:* `{stats['total_completed_trades']}`"
+                f"\n✅ *Win Rate:* `{win_rate_str}%`"
+                f"\n❌ *Loss Rate:* `{loss_rate_str}%`"
+                f"\n📊 *Completed Trades:* `{stats.get('total_completed_trades', 0)}`"
             )
         else:
             body = "\nNo completed trades to analyze yet."
+        
         full_message = header + body + self._get_common_footer()
         try:
             await self.telegram_handler.send_message(
@@ -100,9 +135,14 @@ class NotificationHandler:
         except Exception as e:
             self.logger.error(f"Failed to send performance report: {e}", exc_info=True)
             
-    # <<< HÀM MỚI ĐÃ ĐƯỢC THÊM VÀO >>>
     async def send_heartbeat_notification(self, symbols_count: int):
-        """Gửi tin nhắn 'nhịp tim' để xác nhận bot vẫn đang hoạt động."""
+        """
+        Sends a 'heartbeat' message to confirm that the bot is still running.
+        This is sent silently to avoid disturbing the user.
+
+        Args:
+            symbols_count (int): The current number of symbols being monitored.
+        """
         self.logger.info("Sending heartbeat notification...")
         message = (
             f"❤️ *Bot Status: ALIVE* ❤️\n\n"
@@ -115,7 +155,7 @@ class NotificationHandler:
                 message=message,
                 message_thread_id=config.TELEGRAM_MESSAGE_THREAD_ID,
                 parse_mode="MarkdownV2",
-                # Gửi một cách "im lặng" để không làm phiền người dùng
+                # Send silently to avoid user notification spam
                 disable_notification=True 
             )
             self.logger.info("Heartbeat notification sent successfully.")
