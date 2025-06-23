@@ -65,8 +65,9 @@ async def analysis_loop(monitored_symbols_ref: dict):
             logger.exception("❌ A critical error occurred in analysis_loop. Restarting in 60 seconds...")
             await asyncio.sleep(60)
 
+# THIS IS THE CORRECT, UPDATED FUNCTION THAT BATCHES NOTIFICATIONS
 async def signal_check_loop(notifier: NotificationHandler):
-    """LOOP 2: The Signal Notifier."""
+    """LOOP 2: The Signal Notifier (with message batching)."""
     logger.info(f"--- ✅ Signal Check Loop starting (interval: {config.SIGNAL_CHECK_INTERVAL_SECONDS} seconds) ---")
     last_notified_signal = {}
     await asyncio.sleep(10) # Initial delay
@@ -78,25 +79,34 @@ async def signal_check_loop(notifier: NotificationHandler):
                 query = "SELECT * FROM trend_analysis WHERE rowid IN (SELECT MAX(rowid) FROM trend_analysis GROUP BY symbol)"
                 latest_records = conn.execute(query).fetchall()
 
+            # 1. Create a list to hold new signals for this cycle
+            new_signals_to_notify = []
+
             for record in latest_records:
                 symbol, trend, timestamp = record['symbol'], record['trend'], record['analysis_timestamp_utc']
                 
                 if trend in [config.TREND_STRONG_BULLISH, config.TREND_STRONG_BEARISH]:
                     if timestamp > last_notified_signal.get(symbol, ''):
-                        logger.info(f"🔥 New signal for {symbol}! Trend: {trend}. Notifying...")
-                        
-                        # NOTE: Your notifications.py uses a different method name.
-                        # You may need to change this call to match what's in that file.
-                        # For example: await notifier.process_analysis_and_notify(...)
-                        await notifier.send_individual_trend_alert_notification(
-                            chat_id=config.TELEGRAM_CHAT_ID,
-                            message_thread_id=config.TELEGRAM_MESSAGE_THREAD_ID,
-                            analysis_result=dict(record)
-                        )
+                        # 2. Instead of sending immediately, add the signal to our batch list
+                        new_signals_to_notify.append(dict(record))
+                        logger.info(f"🔥 Queued new signal for {symbol}! Trend: {trend}.")
+                        # Update the timestamp so we don't notify for this one again
                         last_notified_signal[symbol] = timestamp
+            
+            # 3. After checking all symbols, send ONE combined message if we have new signals
+            if new_signals_to_notify:
+                logger.info(f"--- Found {len(new_signals_to_notify)} new signals. Sending combined notification. ---")
+                
+                # This calls the new function that you must add to notifications.py
+                await notifier.send_batch_trend_alert_notification(
+                    chat_id=config.TELEGRAM_CHAT_ID,
+                    message_thread_id=config.TELEGRAM_MESSAGE_THREAD_ID,
+                    analysis_results=new_signals_to_notify
+                )
 
         except Exception:
             logger.exception("❌ Error in signal_check_loop. Will retry in next interval.")
+            
         await asyncio.sleep(config.SIGNAL_CHECK_INTERVAL_SECONDS)
 
 async def main():
@@ -114,19 +124,12 @@ async def main():
 
     init_sqlite_db(config.SQLITE_DB_PATH)
     
-        # In run.py inside async def main()
-
     try:
-        # This line is correct
         tg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN)
-        
-        # This line is now corrected to match the new notifications.py
         notifier = NotificationHandler(telegram_handler=tg_handler)
-        
     except Exception as e:
         logger.critical(f"Failed to initialize handlers: {e}. Exiting.")
         sys.exit(1)
-
 
     # --- Prepare for startup message and main loops ---
     logger.info("Fetching initial symbol list for startup message...")
@@ -177,19 +180,3 @@ if __name__ == "__main__":
         logger.info("Bot stopped by user via KeyboardInterrupt.")
     finally:
         logger.info("Bot application shutting down.")
-        
-# In run.py, update the end of your main() function
-
-async def main():
-    # ... all your initialization code ...
-    
-    logger.info("--- Bot is now running. Analysis, Signal, and Summary loops are active. ---")
-    
-    # Create tasks for all three loops
-    analysis_task = asyncio.create_task(analysis_loop(monitored_symbols_ref))
-    signal_task = asyncio.create_task(signal_check_loop(notifier=notifier))
-    summary_task = asyncio.create_task(summary_loop()) # <--- ADD THIS LINE
-    
-    # Gather all three tasks to run them concurrently
-    await asyncio.gather(analysis_task, signal_task, summary_task) # <--- UPDATE THIS LINE
-
