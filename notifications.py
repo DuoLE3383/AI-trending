@@ -5,10 +5,6 @@ from telegram_handler import TelegramHandler
 import config
 
 class NotificationHandler:
-    """
-    Quản lý việc tạo và gửi tất cả các loại thông báo qua Telegram.
-    Là nơi duy nhất chịu trách nhiệm về định dạng và nội dung tin nhắn.
-    """
     def __init__(self, telegram_handler: TelegramHandler):
         self.telegram_handler = telegram_handler
         self.logger = logging.getLogger(__name__)
