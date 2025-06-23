@@ -182,15 +182,65 @@ if __name__ == "__main__":
     finally:
         logger.info("Bot application shutting down.")
         
-async def updater_loop(binance_client: Client):
-    """LOOP 4: The Trade Outcome Updater."""
-    logger.info(f"--- ✅ Updater Loop starting (interval: 5 minutes) ---")
-    while True:
-        try:
-            await check_signal_outcomes(binance_client)
-        except Exception as e:
-            logger.error(f"❌ A critical error occurred in updater_loop: {e}")
+# In run.py, replace your existing main function with this one
 
-        # Run this check every 5 minutes
-        await asyncio.sleep(300) 
+async def main():
+    """Initializes and runs all the bot's concurrent loops."""
+    logger.info("--- Initializing Bot ---")
+
+    # Exit if Binance client failed to initialize
+    if not binance_client:
+        return
+
+    # Check for Telegram credentials
+    if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
+        logger.critical("Telegram BOT_TOKEN or CHAT_ID is missing in your .env file. Exiting.")
+        sys.exit(1)
+
+    # Initialize the database and handlers
+    init_sqlite_db(config.SQLITE_DB_PATH)
+    tg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN)
+    notifier = NotificationHandler(telegram_handler=tg_handler)
+
+    # --- THIS IS THE CORRECTED SECTION FOR SYMBOL SETUP ---
+    logger.info("Fetching initial symbol list for analysis...")
+    # Start with the static list from your config file
+    all_symbols = set(config.STATIC_SYMBOLS)
+    
+    # If dynamic symbols are enabled, fetch them from Binance and add them
+    if config.DYN_SYMBOLS_ENABLED:
+        logger.info("Dynamic symbols enabled. Fetching from Binance...")
+        dynamic_symbols = fetch_and_filter_binance_symbols(binance_client)
+        if dynamic_symbols:
+            all_symbols.update(dynamic_symbols)
+            logger.info(f"Added {len(dynamic_symbols)} dynamic symbols.")
+
+    # This dictionary is passed to the analysis loop so it knows what to monitor
+    monitored_symbols_ref = {'symbols': all_symbols}
+    logger.info(f"Bot will monitor a total of {len(all_symbols)} symbols.")
+    
+    # --- Send Startup Notification ---
+    # (This section can be customized as you had it before to format the symbol list)
+    try:
+        startup_message = f"📈 *Bot Started*\nMonitoring {len(all_symbols)} symbols."
+        await notifier.telegram_handler.send_message(
+            chat_id=config.TELEGRAM_CHAT_ID,
+            message=startup_message,
+            message_thread_id=config.TELEGRAM_MESSAGE_THREAD_ID,
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        logger.error(f"Failed to send startup message: {e}")
+
+    logger.info("--- Bot is now running. All loops are active. ---")
+    
+    # Create and run all tasks concurrently using the correctly prepared symbol list
+    await asyncio.gather(
+        analysis_loop(monitored_symbols_ref), # <-- This now uses the correct variable
+        signal_check_loop(notifier=notifier),
+        updater_loop(client=binance_client),
+        summary_loop(notifier=notifier)
+    )
+
+
 
