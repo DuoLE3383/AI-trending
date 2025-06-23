@@ -173,3 +173,28 @@ class NotificationHandler:
         except Exception as e:
             self.logger.error(f"Failed to send heartbeat notification: {e}", exc_info=True)
 
+# In your notifications.py file, inside the NotificationHandler class
+
+# You might need to import logging and config at the top of this file
+import logging
+import config
+
+logger = logging.getLogger(__name__)
+
+# ... inside the class ...
+async def send_startup_notification(self, symbols_count: int):
+    # --- ADD LOGS INSIDE THE FUNCTION ---
+    logger.info(">>> STEP 3: Entered 'send_startup_notification' function.")
+    
+    hostname = socket.gethostname()
+    safe_hostname = TelegramHandler.escape_markdownv2(hostname)
+    message = f"🚀 Bot startup successful on host `{safe_hostname}`\nMonitoring *{symbols_count}* symbols."
+    
+    logger.info(f">>> STEP 4: Preparing to send message to chat_id: {config.TELEGRAM_CHAT_ID}")
+    # ------------------------------------
+    
+    await self.telegram_handler.send_message(
+        chat_id=config.TELEGRAM_CHAT_ID,
+        message=message
+    )
+
