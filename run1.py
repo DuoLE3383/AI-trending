@@ -1,6 +1,8 @@
 import sys
 import logging
 import asyncio
+import time
+import sqlite3
 from binance.client import Client
 from dotenv import load_dotenv
 
@@ -22,61 +24,91 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 # --- Initialize Binance Client ---
-# Note: config.API_KEY now correctly reads from your .env file thanks to load_dotenv()
 if config.API_KEY and config.API_SECRET:
     binance_client = Client(config.API_KEY, config.API_SECRET)
     logger.info("Binance client initialized successfully.")
 else:
     binance_client = None
-    logger.critical("Binance API Key or Secret is missing in your .env file. Cannot start.")
-    sys.exit(1)
 
 # --- MAIN ASYNC LOOPS ---
 
+# LOOP 1: GATHERS AND ANALYZES MARKET DATA
 async def analysis_loop(monitored_symbols_ref: dict):
-    """LOOP 1: The Data Collector & Analyst."""
     logger.info(f"--- ✅ Analysis Loop starting (interval: {config.LOOP_SLEEP_INTERVAL_SECONDS / 60:.0f} minutes) ---")
-    # ... (The rest of your analysis_loop code remains the same as you had it) ...
-    # This loop calls perform_analysis from analysis_engine.py
-    # ...
+    last_symbol_update_time = 0
+    while True:
+        try:
+            current_time = time.time()
+            if config.DYN_SYMBOLS_ENABLED and (current_time - last_symbol_update_time > config.DYN_SYMBOLS_UPDATE_INTERVAL_SECONDS):
+                logger.info("--- Updating symbol list from Binance ---")
+                dynamic_symbols = fetch_and_filter_binance_symbols(binance_client)
+                if dynamic_symbols:
+                    monitored_symbols_ref['symbols'].update(dynamic_symbols)
+                    logger.info(f"--- Symbol list updated. Now monitoring {len(monitored_symbols_ref['symbols'])} symbols. ---")
+                last_symbol_update_time = current_time
+            
+            logger.info(f"--- Starting analysis cycle for {len(monitored_symbols_ref['symbols'])} symbols ---")
+            for symbol in list(monitored_symbols_ref['symbols']):
+                try:
+                    market_data = get_market_data(binance_client, symbol)
+                    if not market_data.empty:
+                        await perform_analysis(market_data, symbol)
+                    else:
+                        logger.warning(f"No valid market data to analyze for {symbol}. Skipping.")
+                except Exception as symbol_error:
+                    logger.error(f"❌ FAILED TO PROCESS SYMBOL: {symbol}. Error: {symbol_error}", exc_info=True)
+            logger.info(f"--- Analysis cycle complete. Sleeping for {config.LOOP_SLEEP_INTERVAL_SECONDS} seconds. ---")
+            await asyncio.sleep(config.LOOP_SLEEP_INTERVAL_SECONDS)
+        except Exception:
+            logger.exception("❌ A critical error occurred in analysis_loop. Restarting in 60 seconds...")
+            await asyncio.sleep(60)
 
+# LOOP 2: CHECKS FOR SIGNALS AND SENDS BATCHED NOTIFICATIONS
 async def signal_check_loop(notifier: NotificationHandler):
-    """LOOP 2: The Signal Notifier (with message batching)."""
     logger.info(f"--- ✅ Signal Check Loop starting (interval: {config.SIGNAL_CHECK_INTERVAL_SECONDS} seconds) ---")
-    # ... (This is the improved signal_check_loop that batches notifications) ...
-    # ... (It calls notifier.send_batch_trend_alert_notification) ...
+    last_notified_signal = {}
+    await asyncio.sleep(10)
+    while True:
+        try:
+            with sqlite3.connect(f'file:{config.SQLITE_DB_PATH}?mode=ro', uri=True) as conn:
+                conn.row_factory = sqlite3.Row
+                query = "SELECT * FROM trend_analysis WHERE rowid IN (SELECT MAX(rowid) FROM trend_analysis GROUP BY symbol)"
+                latest_records = conn.execute(query).fetchall()
+            new_signals_to_notify = []
+            for record in latest_records:
+                symbol, trend, timestamp = record['symbol'], record['trend'], record['analysis_timestamp_utc']
+                if trend in [config.TREND_STRONG_BULLISH, config.TREND_STRONG_BEARISH]:
+                    if timestamp > last_notified_signal.get(symbol, ''):
+                        new_signals_to_notify.append(dict(record))
+                        logger.info(f"🔥 Queued new signal for {symbol}! Trend: {trend}.")
+                        last_notified_signal[symbol] = timestamp
+            if new_signals_to_notify:
+                logger.info(f"--- Found {len(new_signals_to_notify)} new signals. Sending combined notification. ---")
+                await notifier.send_batch_trend_alert_notification(
+                    chat_id=config.TELEGRAM_CHAT_ID,
+                    message_thread_id=config.TELEGRAM_MESSAGE_THREAD_ID,
+                    analysis_results=new_signals_to_notify
+                )
+        except Exception:
+            logger.exception("❌ Error in signal_check_loop. Will retry in next interval.")
+        await asyncio.sleep(config.SIGNAL_CHECK_INTERVAL_SECONDS)
 
+# LOOP 3: CHECKS THE OUTCOME OF PAST TRADES (TP/SL)
 async def updater_loop(client: Client):
-    """LOOP 3: The Trade Outcome Updater."""
     logger.info(f"--- ✅ Updater Loop starting (interval: 5 minutes) ---")
     while True:
         try:
-            # This function checks for TP/SL hits on active trades
             await check_signal_outcomes(client)
         except Exception as e:
             logger.error(f"❌ A critical error occurred in updater_loop: {e}", exc_info=True)
-        # We can check for outcomes more frequently than we summarize
-        await asyncio.sleep(300) # Sleep for 5 minutes
+        await asyncio.sleep(300)
 
+# LOOP 4: SENDS PERIODIC SUMMARY AND PERFORMANCE REPORTS
 async def summary_loop(notifier: NotificationHandler):
-    """LOOP 4: The Periodic Summarizer & Performance Reporter."""
     logger.info(f"--- ✅ Summary Loop starting (interval: 12 hours) ---")
     while True:
-        # Initial wait before first summary
         await asyncio.sleep(60)
-        
-        # -- Generate Trend Summary --
-        logger.info("--- Generating periodic trend summary... ---")
-        trend_summary = get_analysis_summary(db_path=config.SQLITE_DB_PATH, time_period_hours=12)
-        summary_msg = "📊 *Hourly Trend Summary*\n"
-        if 'error' not in trend_summary and trend_summary.get('total_entries', 0) > 0:
-            for trend, count in trend_summary['trend_counts'].items():
-                summary_msg += f"- {trend.replace('_', ' ').title()}: {count}\n"
-        else:
-            summary_msg += "_No new trends recorded in the last 12 hours._"
-        
-        # -- Generate Performance Statistics --
-        logger.info("--- Generating Win/Loss performance stats... ---")
+        logger.info("--- Generating periodic summary and stats report... ---")
         stats = get_win_loss_stats(db_path=config.SQLITE_DB_PATH)
         stats_msg = "\n🏆 *Strategy Performance (All-Time)*\n"
         if 'error' not in stats and stats.get('total_completed_trades', 0) > 0:
@@ -87,49 +119,53 @@ async def summary_loop(notifier: NotificationHandler):
             )
         else:
             stats_msg += "_No completed trades to analyze yet._"
-
-        # -- Send Combined Report to Telegram --
         try:
             await notifier.telegram_handler.send_message(
                 chat_id=config.TELEGRAM_CHAT_ID,
-                message=summary_msg + stats_msg,
+                message=stats_msg,
                 message_thread_id=config.TELEGRAM_MESSAGE_THREAD_ID,
                 parse_mode="Markdown"
             )
             logger.info("Successfully sent periodic summary and stats report.")
         except Exception as e:
             logger.error(f"Failed to send summary report: {e}", exc_info=True)
-
-        # Sleep for 12 hours before the next report
         await asyncio.sleep(12 * 60 * 60)
 
+# THE MAIN FUNCTION THAT SETS UP AND STARTS EVERYTHING
 async def main():
-    """Initializes and runs all the bot's concurrent loops."""
     logger.info("--- Initializing Bot ---")
-
-    # Exit if Binance client failed to initialize
     if not binance_client:
-        # The specific error is already logged above
-        return
-
-    # Check for Telegram credentials
+        logger.critical("Binance client not initialized. Cannot fetch market data. Check API keys. Exiting.")
+        sys.exit(1)
     if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
         logger.critical("Telegram BOT_TOKEN or CHAT_ID is missing in your .env file. Exiting.")
         sys.exit(1)
-
-    # Initialize the database and handlers
     init_sqlite_db(config.SQLITE_DB_PATH)
     tg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN)
     notifier = NotificationHandler(telegram_handler=tg_handler)
-
-    # Send startup message
-    # ... (Your startup message code here, it can remain the same) ...
-
+    logger.info("Fetching initial symbol list for analysis...")
+    all_symbols = set(config.STATIC_SYMBOLS)
+    if config.DYN_SYMBOLS_ENABLED:
+        logger.info("Dynamic symbols enabled. Fetching from Binance...")
+        dynamic_symbols = fetch_and_filter_binance_symbols(binance_client)
+        if dynamic_symbols:
+            all_symbols.update(dynamic_symbols)
+            logger.info(f"Added {len(dynamic_symbols)} dynamic symbols.")
+    monitored_symbols_ref = {'symbols': all_symbols}
+    logger.info(f"Bot will monitor a total of {len(all_symbols)} symbols.")
+    try:
+        startup_message = f"📈 *Bot Started*\nMonitoring {len(all_symbols)} symbols."
+        await notifier.telegram_handler.send_message(
+            chat_id=config.TELEGRAM_CHAT_ID,
+            message=startup_message,
+            message_thread_id=config.TELEGRAM_MESSAGE_THREAD_ID,
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        logger.error(f"Failed to send startup message: {e}")
     logger.info("--- Bot is now running. All loops are active. ---")
-    
-    # Create and run all tasks concurrently
     await asyncio.gather(
-        analysis_loop({'symbols': set(config.STATIC_SYMBOLS)}),
+        analysis_loop(monitored_symbols_ref),
         signal_check_loop(notifier=notifier),
         updater_loop(client=binance_client),
         summary_loop(notifier=notifier)
