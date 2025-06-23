@@ -72,7 +72,10 @@ class NotificationHandler:
             f"📈 *Trend Analysis Bot Started*\n\n"
             f"📊 Monitoring: *{symbols_str}* 🎯Most #Binance Pair List\n"
             f"⚙️ Settings: Timeframe={config.TIMEFRAME}\n"
-            f"🕒 Time: `{pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S UTC')}`"
+            f"🕒 Time: `{pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S UTC')}`\n"
+            f"🔔 This will be updated every 10 minutes with the latest analysis results.🚨🚨 Keep Calm and follow @aisignalvip for more updates.
+\n"
+f"💡 Tip: If you want to receive notifications in a specific topic, please set the topic ID in the config file.\n"
         )
         
         self.logger.info("Attempting to send startup notification...")
