@@ -45,7 +45,7 @@ async def analysis_loop(symbols_to_monitor: set):
         logger.info(f"--- Analysis cycle complete. Sleeping for {config.LOOP_SLEEP_INTERVAL_SECONDS} seconds. ---")
         await asyncio.sleep(config.LOOP_SLEEP_INTERVAL_SECONDS)
 
-# LOOP 2: Kiểm tra và gửi tín hiệu
+# LOOP 2: Kiểm tra và gửi tín hiệu (Phiên bản tối ưu với Window Function)
 async def signal_check_loop(notifier: NotificationHandler):
     logger.info(f"--- ✅ Signal Check Loop starting (interval: {config.SIGNAL_CHECK_INTERVAL_SECONDS} seconds) ---")
     last_notified_signal_time = {}
@@ -53,8 +53,25 @@ async def signal_check_loop(notifier: NotificationHandler):
         try:
             with sqlite3.connect(f'file:{config.SQLITE_DB_PATH}?mode=ro', uri=True) as conn:
                 conn.row_factory = sqlite3.Row
-                query = "SELECT * FROM trend_analysis WHERE trend IN (?, ?) AND rowid IN (SELECT MAX(rowid) FROM trend_analysis GROUP BY symbol)"
+                
+                # === CÂU LỆNH SQL ĐÃ ĐƯỢC TỐI ƯU ===
+                # Sử dụng ROW_NUMBER() để xếp hạng các tín hiệu của mỗi symbol theo thời gian
+                # và chỉ lấy tín hiệu mới nhất (hạng 1).
+                query = """
+                WITH RankedSignals AS (
+                    SELECT
+                        *,
+                        ROW_NUMBER() OVER(PARTITION BY symbol ORDER BY analysis_timestamp_utc DESC) as rn
+                    FROM
+                        trend_analysis
+                )
+                SELECT *
+                FROM RankedSignals
+                WHERE
+                    rn = 1 AND trend IN (?, ?)
+                """
                 latest_strong_signals = conn.execute(query, (config.TREND_STRONG_BULLISH, config.TREND_STRONG_BEARISH)).fetchall()
+
             new_signals_to_notify = []
             for record in latest_strong_signals:
                 symbol, timestamp = record['symbol'], record['analysis_timestamp_utc']
@@ -62,11 +79,16 @@ async def signal_check_loop(notifier: NotificationHandler):
                     new_signals_to_notify.append(dict(record))
                     logger.info(f"🔥 Queued new signal for {symbol}! Trend: {record['trend']}.")
                     last_notified_signal_time[symbol] = timestamp
+            
             if new_signals_to_notify:
                 await notifier.send_batch_trend_alert_notification(new_signals_to_notify)
+
         except Exception as e:
             logger.exception(f"❌ Error in signal_check_loop: {e}")
+            
         await asyncio.sleep(config.SIGNAL_CHECK_INTERVAL_SECONDS)
+
+
 
 # LOOP 3: Tự động cập nhật kết quả trade (TP/SL)
 async def updater_loop(client: Client):
