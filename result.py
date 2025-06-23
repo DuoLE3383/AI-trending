@@ -34,4 +34,59 @@ async def summary_loop():
         
         # Sleep for 24 hours before the next summary
         await asyncio.sleep(600)
+        
+# Add this new function to your results.py file
 
+from collections import Counter
+
+def get_win_loss_stats(db_path: str):
+    """
+    Queries the database to calculate win/loss statistics based on signal outcomes.
+    """
+    conn = get_db_connection(db_path) # Assumes you have the get_db_connection from my earlier example
+    if not conn:
+        return {"error": "Could not connect to the database."}
+
+    try:
+        cursor = conn.cursor()
+        
+        # We only care about completed trades, so we ignore 'ACTIVE' ones.
+        query = "SELECT status FROM trend_analysis WHERE status != 'ACTIVE'"
+        cursor.execute(query)
+        
+        # Fetch all results; e.g., [('TP1_HIT',), ('SL_HIT',), ('TP1_HIT',)]
+        outcomes = [row['status'] for row in cursor.fetchall()]
+        
+        if not outcomes:
+            return {
+                "total_completed_trades": 0,
+                "win_rate": 0,
+                "loss_rate": 0,
+                "breakdown": {}
+            }
+
+        # Count the occurrences of each outcome status
+        status_counts = Counter(outcomes)
+        
+        # Define what counts as a "win" or a "loss"
+        wins = sum(count for status, count in status_counts.items() if 'TP' in status)
+        losses = status_counts.get('SL_HIT', 0)
+        
+        total_completed = wins + losses
+        
+        win_rate = (wins / total_completed) * 100 if total_completed > 0 else 0
+        loss_rate = (losses / total_completed) * 100 if total_completed > 0 else 0
+        
+        return {
+            "total_completed_trades": total_completed,
+            "win_rate": f"{win_rate:.2f}%",
+            "loss_rate": f"{loss_rate:.2f}%",
+            "breakdown": dict(status_counts)
+        }
+
+    except sqlite3.Error as e:
+        logger.error(f"❌ Failed to query database for stats: {e}")
+        return {"error": f"Failed to query database for stats: {e}"}
+    finally:
+        if conn:
+            conn.close()
