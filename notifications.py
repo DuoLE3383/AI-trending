@@ -1,7 +1,7 @@
-# notifications.py
+# notifications.py (Phiên bản đã sửa lỗi và cải thiện)
 import logging
 from telegram_handler import TelegramHandler
-import config  # Import config để lấy các thông tin cần thiết
+import config
 
 class NotificationHandler:
     def __init__(self, telegram_handler: TelegramHandler):
@@ -14,7 +14,6 @@ class NotificationHandler:
         """
         self.logger.info("Preparing startup notification...")
 
-        # Đây là nội dung tin nhắn bằng tiếng Anh
         message = (
             f"🚀 **AI Trading Bot has been successfully activated!**\n\n"
             f"✨ The bot is now live and analyzing **{symbols_count}** USDT pairs on the `{config.TIMEFRAME}` timeframe.\n"
@@ -39,17 +38,15 @@ class NotificationHandler:
 
     async def send_batch_trend_alert_notification(self, chat_id: str, message_thread_id: str, analysis_results: list):
         """
-        Gửi thông báo tín hiệu theo lô (không thay đổi).
+        Gửi thông báo tín hiệu theo lô với cấu trúc Header, Body, Footer.
         """
         if not analysis_results:
             return
 
-        header = f"🔥 *{len(analysis_results)} New Signal(s) Found!* 🔥\n
-        ----------------------------------------\n
-            💰 **New to Binance? Get a $100 Bonus!**\n
-            Sign up on the world's largest crypto exchange platform and earn a **100 USD trading fee rebate voucher!**\n
-            🔗 **Register Now:**\n
-            https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P"
+        # --- 1. Header ---
+        header = f"🔥 *{len(analysis_results)} New Signal(s) Found!* 🔥\n\n"
+
+        # --- 2. Body (Danh sách tín hiệu) ---
         message_lines = []
         for result in analysis_results:
             symbol = result.get('symbol', 'N/A')
@@ -57,18 +54,35 @@ class NotificationHandler:
             price = result.get('last_price', 0)
             
             trend_emoji = "🔼" if "Bullish" in trend else "🔽"
+            # Tạo dòng cho mỗi tín hiệu
             formatted_line = f"{trend_emoji} *{symbol}* - {trend} at `${price:,.4f}`"
-            📡 Get ready for real-time market signals!\n\n"
-            
             message_lines.append(formatted_line)
         
-        full_message = header + "\n".join(message_lines)
+        body = "\n".join(message_lines)
+
+        # --- 3. Footer ---
+        # Sử dụng 3 dấu ngoặc kép """...""" cho chuỗi đa dòng
+        footer = """
+----------------------------------------
+
+💰 **New to Binance? Get a $100 Bonus!**
+Sign up and earn a **100 USD trading fee rebate voucher!**
+
+🔗 **Register Now:**
+https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P
+"""
+
+        # --- 4. Ghép tất cả lại ---
+        full_message = header + body + footer
         
-        await self.telegram_handler.send_message(
-            chat_id=chat_id,
-            message=full_message,
-            message_thread_id=message_thread_id,
-            parse_mode="Markdown"
-        )
-        self.logger.info(f"Successfully sent combined signal alert for {len(analysis_results)} symbols.")
+        try:
+            await self.telegram_handler.send_message(
+                chat_id=chat_id,
+                message=full_message,
+                message_thread_id=message_thread_id,
+                parse_mode="Markdown"
+            )
+            self.logger.info(f"Successfully sent combined signal alert for {len(analysis_results)} symbols.")
+        except Exception as e:
+            self.logger.error(f"Could not send signal batch due to an error.")
 
