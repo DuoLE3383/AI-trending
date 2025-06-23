@@ -76,7 +76,7 @@ async def signal_check_loop(notifier: NotificationHandler):
 
 # LOOP 3: Tự động cập nhật kết quả trade (TP/SL)
 async def updater_loop(client: Client):
-    logger.info(f"--- ✅ Updater Loop starting (interval: {config.LOOP_SLEEP_INTERVAL_SECONDS/60:.0f} minutes) ---")
+    logger.info(f"--- ✅ Updater Loop starting (interval: {config.UPDATER_INTERVAL_SECONDS/60:.0f} minutes) ---")
     while True:
         try:
             await check_signal_outcomes(client)
