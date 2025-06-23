@@ -106,7 +106,21 @@ async def heartbeat_loop(notifier: NotificationHandler, symbols_to_monitor: set)
 
 # --- MAIN FUNCTION: BOT STARTUP AND MANAGEMENT ---
 async def main():
-    notifier = NotificationHandler(telegram_handler=tg_handler)
+    
+    notifiertg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN)
+        logger.info("Telegram handler initialized.")
+
+        # 2. THEN, create the Notification Handler and pass tg_handler to it.
+        notifier = NotificationHandler(telegram_handler=tg_handler)
+        logger.info("Notification handler initialized.")
+        
+        # -------------------------------------------
+
+        all_symbols = set(config.STATIC_SYMBOLS)
+        logger.info(f"Bot will monitor {len(all_symbols)} symbols.")
+
+        # This part sends the notification
+        await notifier.send_startup_notification(symbols_count=len(all_symbols)) = NotificationHandler(telegram_handler=tg_handler)
     all_symbols = set(config.STATIC_SYMBOLS)
     logger.info(f"Bot will monitor {len(all_symbols)} symbols.")
 
