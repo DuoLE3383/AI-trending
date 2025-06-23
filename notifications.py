@@ -74,7 +74,7 @@ class NotificationHandler:
             f"⚙️ Settings: Timeframe={config.TIMEFRAME}\n"
             f"🕒 Time: `{pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S UTC')}`\n"
             f"🔔 This will be updated every 10 minutes with the latest analysis results.🚨🚨 Keep Calm and follow @aisignalvip for more updates.\n"
-f"💡 Tip: If you want to receive notifications in a specific topic, please set the topic ID in the config file.\n"
+f"💡 Tip: If you want to get TODAY profit, register now https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P.\n"
         )
         
         self.logger.info("Attempting to send startup notification...")
