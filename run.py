@@ -107,7 +107,12 @@ async def summary_loop(notifier: NotificationHandler):
                 f"📊 **Completed Trades:** `{stats['total_completed_trades']}`"
             )
         else:
-            stats_msg += "No completed trades to analyze yet."
+            stats_msg += "
+            f"\n{separator}\n"
+            "💰 **New to Binance? Get a $100 Bonus!**\n"
+            "Sign up on the world's largest crypto exchange platform and earn a **100 USD trading fee rebate voucher!**\n"
+            "🔗 **Register Now:**\n"
+            f"https://www.binance.com/activity/referral-entry/CPA?ref=CPA\\_006MBW985P""
 
         try:
             await notifier.telegram_handler.send_message(
