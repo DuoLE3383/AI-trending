@@ -35,37 +35,10 @@ DEFAULT_CONFIG = {
         "loop_sleep_interval_seconds": 3600,
         "periodic_notification_interval_seconds": 600
     },
-    "dynamic_symbols": {
-        "enabled": True,
-        "quote_asset": "USDT",
-        "update_interval_hours": 24,
-        "exclude_substrings": ["UP", "DOWN", "BULL", "BEAR"]
-    },
-    "sqlite": {
-        "db_path": "trend_analysis.db"
-    },
-    "telegram": {}
-    # In your config.py file
-
-DEFAULT_CONFIG = {
-    "binance": {},
-    "trading": {
-        "symbols": ["BTCUSDT"],
-        "timeframe": "15m",
-        "ema_fast": 34,
-        "ema_medium": 89,
-        "ema_slow": 200,
-        "loop_sleep_interval_seconds": 3600,
-        "periodic_notification_interval_seconds": 600
-    },
-
-    # --- ADD THIS ENTIRE SECTION ---
     "notifications": {
         "status_update_interval_minutes": 10,
         "leverage_multiplier": 5
     },
-    # --------------------------------
-
     "dynamic_symbols": {
         "enabled": True,
         "quote_asset": "USDT",
@@ -76,10 +49,6 @@ DEFAULT_CONFIG = {
         "db_path": "trend_analysis.db"
     },
     "telegram": {}
-}
-
-# ... the rest of your config.py file ...
-
 }
 
 def load_config(config_path="config.json"):
@@ -116,5 +85,3 @@ DYN_SYMBOLS_ENABLED = config_data["dynamic_symbols"]["enabled"]
 DYN_SYMBOLS_QUOTE_ASSET = config_data["dynamic_symbols"]["quote_asset"]
 DYN_SYMBOLS_UPDATE_INTERVAL_SECONDS = config_data["dynamic_symbols"]["update_interval_hours"] * 3600
 DYN_SYMBOLS_EXCLUDE = config_data["dynamic_symbols"]["exclude_substrings"]
-
-
