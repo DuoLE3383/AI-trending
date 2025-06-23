@@ -1,4 +1,4 @@
-# run.py (Phiên bản đã tái cấu trúc sạch sẽ)
+# run.py (Phiên bản cuối cùng đã thêm Heartbeat Loop)
 import sys
 import logging
 import asyncio
@@ -37,7 +37,6 @@ async def analysis_loop(symbols_to_monitor: set):
         logger.info(f"--- Starting analysis cycle for {len(symbols_to_monitor)} symbols ---")
         for symbol in list(symbols_to_monitor):
             try:
-                # Gọi hàm xử lý chuyên biệt, không cần biết logic bên trong
                 await process_symbol(binance_client, symbol)
             except Exception as symbol_error:
                 logger.error(f"❌ A top-level error occurred for {symbol}: {symbol_error}", exc_info=True)
@@ -52,28 +51,17 @@ async def signal_check_loop(notifier: NotificationHandler):
         try:
             with sqlite3.connect(f'file:{config.SQLITE_DB_PATH}?mode=ro', uri=True) as conn:
                 conn.row_factory = sqlite3.Row
-                # Lấy các bản ghi mới nhất và có tín hiệu mạnh
-                query = """
-                SELECT * FROM trend_analysis
-                WHERE trend IN (?, ?) AND rowid IN (
-                    SELECT MAX(rowid) FROM trend_analysis GROUP BY symbol
-                )
-                """
+                query = "SELECT * FROM trend_analysis WHERE trend IN (?, ?) AND rowid IN (SELECT MAX(rowid) FROM trend_analysis GROUP BY symbol)"
                 latest_strong_signals = conn.execute(query, (config.TREND_STRONG_BULLISH, config.TREND_STRONG_BEARISH)).fetchall()
-
             new_signals_to_notify = []
             for record in latest_strong_signals:
                 symbol, timestamp = record['symbol'], record['analysis_timestamp_utc']
-                # Chỉ thông báo nếu tín hiệu này mới hơn tín hiệu đã thông báo trước đó
                 if timestamp > last_notified_signal_time.get(symbol, ''):
                     new_signals_to_notify.append(dict(record))
                     logger.info(f"🔥 Queued new signal for {symbol}! Trend: {record['trend']}.")
                     last_notified_signal_time[symbol] = timestamp
-            
             if new_signals_to_notify:
-                # Gọi hàm thông báo, không cần truyền chat_id hay định dạng gì cả
                 await notifier.send_batch_trend_alert_notification(new_signals_to_notify)
-
         except Exception as e:
             logger.exception(f"❌ Error in signal_check_loop: {e}")
         await asyncio.sleep(config.SIGNAL_CHECK_INTERVAL_SECONDS)
@@ -95,12 +83,22 @@ async def summary_loop(notifier: NotificationHandler):
         await asyncio.sleep(config.SUMMARY_INTERVAL_SECONDS)
         try:
             logger.info("--- Generating and sending performance report... ---")
-            # Bước 1: Lấy data
             stats = get_win_loss_stats(db_path=config.SQLITE_DB_PATH)
-            # Bước 2: Yêu cầu notifier gửi đi. XONG!
             await notifier.send_summary_report(stats)
         except Exception as e:
             logger.error(f"A critical error occurred in the summary_loop: {e}", exc_info=True)
+
+# <<< LOOP 5: VÒNG LẶP MỚI ĐỂ GỬI THÔNG BÁO "HEARTBEAT" >>>
+async def heartbeat_loop(notifier: NotificationHandler, symbols_to_monitor: set):
+    logger.info(f"--- ✅ Heartbeat Loop starting (interval: {config.HEARTBEAT_INTERVAL_SECONDS / 60:.0f} minutes) ---")
+    while True:
+        await asyncio.sleep(config.HEARTBEAT_INTERVAL_SECONDS)
+        try:
+            # Gọi hàm thông báo heartbeat mới
+            await notifier.send_heartbeat_notification(symbols_count=len(symbols_to_monitor))
+        except Exception as e:
+            logger.error(f"A critical error occurred in the heartbeat_loop: {e}", exc_info=True)
+
 
 # --- HÀM MAIN: KHỞI ĐỘNG VÀ QUẢN LÝ BOT ---
 async def main():
@@ -112,7 +110,6 @@ async def main():
     init_sqlite_db(config.SQLITE_DB_PATH)
     tg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN)
     notifier = NotificationHandler(telegram_handler=tg_handler)
-
     all_symbols = set(config.STATIC_SYMBOLS)
     logger.info(f"Bot will monitor {len(all_symbols)} symbols.")
 
@@ -121,12 +118,13 @@ async def main():
 
     logger.info("--- Bot is now running. All loops are active. ---")
     
-    # Chạy tất cả các vòng lặp song song
+    # <<< THÊM `heartbeat_loop` VÀO ĐỂ CHẠY SONG SONG >>>
     await asyncio.gather(
         analysis_loop(all_symbols),
         signal_check_loop(notifier=notifier),
         updater_loop(client=binance_client),
-        summary_loop(notifier=notifier)
+        summary_loop(notifier=notifier),
+        heartbeat_loop(notifier=notifier, symbols_to_monitor=all_symbols) # Thêm dòng này
     )
 
 if __name__ == "__main__":
