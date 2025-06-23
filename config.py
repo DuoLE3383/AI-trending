@@ -20,6 +20,13 @@ TIMEFRAME = "15m"
 STATIC_SYMBOLS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT"]
 DYN_SYMBOLS_ENABLED = True
 DYN_SYMBOLS_UPDATE_INTERVAL_SECONDS = 6 * 3600  # 6 giờ
+# config.py
+
+# ... (các biến cấu hình khác của bạn như EMA_FAST, EMA_SLOW, SQLITE_DB_PATH...)
+
+# SỐ LƯỢNG NẾN TỐI ĐA ĐỂ TẢI VỀ MỖI LẦN PHÂN TÍCH
+# Cần lớn hơn EMA_SLOW để các chỉ báo có đủ dữ liệu tính toán.
+DATA_FETCH_LIMIT = 500
 
 # === Analysis Strategy Parameters ===
 # EMA Settings
