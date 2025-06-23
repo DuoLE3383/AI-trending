@@ -5,6 +5,7 @@ import time
 import sqlite3
 from binance.client import Client
 from dotenv import load_dotenv
+from updater import check_signal_outcomes
 
 # Load environment variables first
 load_dotenv()
@@ -180,3 +181,16 @@ if __name__ == "__main__":
         logger.info("Bot stopped by user via KeyboardInterrupt.")
     finally:
         logger.info("Bot application shutting down.")
+        
+async def updater_loop(binance_client: Client):
+    """LOOP 4: The Trade Outcome Updater."""
+    logger.info(f"--- ✅ Updater Loop starting (interval: 5 minutes) ---")
+    while True:
+        try:
+            await check_signal_outcomes(binance_client)
+        except Exception as e:
+            logger.error(f"❌ A critical error occurred in updater_loop: {e}")
+
+        # Run this check every 5 minutes
+        await asyncio.sleep(300) 
+
