@@ -1,6 +1,6 @@
 # analysis_engine.py
 import pandas as pd
-import ft_pandas_ta as ta
+import pandas_ta as ta
 import sqlite3
 import logging
 from typing import Dict, Any
