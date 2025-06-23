@@ -55,7 +55,7 @@ TREND_BEARISH = "BEARISH"
 TREND_SIDEWAYS = "SIDEWAYS"
 
 # === Loop Intervals ===
-LOOP_SLEEP_INTERVAL_SECONDS = 10 * 60  # 10 phút
+UPDATER_INTERVAL_SECONDS = 10 * 60  # 10 phút
 SIGNAL_CHECK_INTERVAL_SECONDS = 60    # 1 phút
 
 # --- Placeholder values for safety check ---
