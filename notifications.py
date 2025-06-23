@@ -85,4 +85,37 @@ https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P
             self.logger.info(f"Successfully sent combined signal alert for {len(analysis_results)} symbols.")
         except Exception as e:
             self.logger.error(f"Could not send signal batch due to an error.")
+            
+            
+# In notifications.py
+
+class NotificationHandler:
+    # ... (init function and other methods are correct) ...
+
+    # --- CẢI TIẾN: Sửa lỗi Markdown trong footer ---
+    def _get_common_footer(self) -> str:
+        """
+        Tạo phần footer chung chứa link giới thiệu.
+        Đã sửa lỗi Markdown bằng cách "escape" các ký tự đặc biệt ('_' và '-').
+        """
+        # The separator line with escaped hyphens
+        separator = r"----------------------------------------"
+
+        # The link with an escaped underscore in the ref code
+        link = r"https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P"
+
+        # By using raw strings (r"...") we make it cleaner, but you could also write it as:
+        # separator = "\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\"
+        # link = "https://www.binance.com/activity/referral-entry/CPA?ref=CPA\\_006MBW985P"
+        
+        return (
+            f"\n{separator}\n\n"
+            "💰 **New to Binance? Get a $100 Bonus!**\n\n"
+            "Sign up on the world's largest crypto exchange platform and earn a **100 USD trading fee rebate voucher!**\n\n"
+            "🔗 **Register Now:**\n"
+            f"{link}"
+        )
+
+    # ... (the rest of your NotificationHandler class) ...
+
 
