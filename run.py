@@ -4,11 +4,12 @@ import asyncio
 import sqlite3
 from dotenv import load_dotenv
 
-# Tải các biến môi trường từ file .env
+# Load environment variables from .env file
 load_dotenv()
 
-# Import các module của dự án
-from binance import AsyncClient as Client
+# --- Project Module Imports ---
+# CHANGE: Use Client.create() for initialization, so we just import the class
+from binance import AsyncClient as Client 
 import config
 from database_handler import init_sqlite_db
 from analysis_engine import process_symbol
@@ -17,7 +18,7 @@ from notifications import NotificationHandler
 from updater import check_signal_outcomes
 from result import get_win_loss_stats
 
-# --- Cấu hình logging ---
+# --- Logging Configuration ---
 logging.basicConfig(
     level=logging.INFO, 
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
@@ -25,35 +26,28 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# --- Khởi tạo Binance Client ---
-if config.API_KEY and config.API_SECRET:
-    binance_client = Client(config.API_KEY, config.API_SECRET)
-    logger.info("Binance client initialized successfully.")
-else:
-    binance_client = None
-    logger.critical("API_KEY and API_SECRET not found in config. Cannot initialize Binance client.")
 
-# --- CÁC VÒNG LẶP (LOOPS) CỦA BOT ---
+# --- BOT LOOPS ---
 
-async def analysis_loop(symbols_to_monitor: set):
-    """VÒNG LẶP 1: Liên tục phân tích thị trường cho các symbol được chỉ định."""
+# CHANGE: The loop now accepts the client as an argument
+async def analysis_loop(client: Client, symbols_to_monitor: set):
+    """LOOP 1: Continuously analyzes the market for specified symbols."""
     logger.info(f"✅ Analysis Loop starting (interval: {config.LOOP_SLEEP_INTERVAL_SECONDS / 60:.0f} minutes)")
     while True:
         logger.info(f"--- Starting analysis cycle for {len(symbols_to_monitor)} symbols ---")
-        for symbol in list(symbols_to_monitor):
-            try:
-                await process_symbol(binance_client, symbol)
-            except Exception as e:
-                logger.error(f"❌ Unhandled error in process_symbol for {symbol}: {e}", exc_info=True)
+        tasks = [process_symbol(client, symbol) for symbol in list(symbols_to_monitor)]
+        await asyncio.gather(*tasks, return_exceptions=True) # Run symbols in parallel for speed
+        
         logger.info(f"--- Analysis cycle complete. Sleeping for {config.LOOP_SLEEP_INTERVAL_SECONDS} seconds. ---")
         await asyncio.sleep(config.LOOP_SLEEP_INTERVAL_SECONDS)
 
 async def signal_check_loop(notifier: NotificationHandler):
-    """VÒNG LẶP 2: Kiểm tra các tín hiệu mạnh mới nhất từ DB và gửi thông báo."""
+    """LOOP 2: Checks for the latest strong signals from the DB and sends notifications."""
     logger.info(f"✅ Signal Check Loop starting (interval: {config.SIGNAL_CHECK_INTERVAL_SECONDS} seconds)")
-    last_notified_signal_time = {} # Dictionary để theo dõi tín hiệu đã gửi của mỗi symbol
+    last_notified_signal_time = {} # Dictionary to track notified signals for each symbol
     while True:
         try:
+            # CHANGE: Using a safer read-only connection string
             with sqlite3.connect(f'file:{config.SQLITE_DB_PATH}?mode=ro', uri=True) as conn:
                 conn.row_factory = sqlite3.Row
                 query = """
@@ -61,7 +55,7 @@ async def signal_check_loop(notifier: NotificationHandler):
                     SELECT *, ROW_NUMBER() OVER(PARTITION BY symbol ORDER BY analysis_timestamp_utc DESC) as rn
                     FROM trend_analysis
                 )
-                SELECT * FROM RankedSignals WHERE rn = 1 AND trend IN (?, ?)
+                SELECT * FROM RankedSignals WHERE rn = 1 AND trend IN (?, ?) AND status = 'ACTIVE'
                 """
                 latest_strong_signals = conn.execute(query, (config.TREND_STRONG_BULLISH, config.TREND_STRONG_BEARISH)).fetchall()
 
@@ -80,7 +74,7 @@ async def signal_check_loop(notifier: NotificationHandler):
         await asyncio.sleep(config.SIGNAL_CHECK_INTERVAL_SECONDS)
 
 async def updater_loop(client: Client):
-    """VÒNG LẶP 3: Tự động kiểm tra và cập nhật kết quả của các tín hiệu đã mở (TP/SL)."""
+    """LOOP 3: Automatically checks and updates the outcome of open signals (TP/SL)."""
     logger.info(f"✅ Updater Loop starting (interval: {config.UPDATER_INTERVAL_SECONDS / 60:.0f} minutes)")
     while True:
         try:
@@ -90,10 +84,10 @@ async def updater_loop(client: Client):
         await asyncio.sleep(config.UPDATER_INTERVAL_SECONDS)
 
 async def summary_loop(notifier: NotificationHandler):
-    """VÒNG LẶP 4: Định kỳ gửi báo cáo tóm tắt hiệu suất."""
+    """LOOP 4: Periodically sends a performance summary report."""
     logger.info(f"✅ Performance Summary Loop starting (interval: {config.SUMMARY_INTERVAL_SECONDS / 3600:.0f} hours)")
     while True:
-        # Chờ hết khoảng thời gian rồi mới gửi để báo cáo đầu tiên không bị gửi ngay lúc khởi động
+        # Wait for the interval period before sending the first report
         await asyncio.sleep(config.SUMMARY_INTERVAL_SECONDS)
         try:
             logger.info("--- Generating and sending performance report... ---")
@@ -103,7 +97,7 @@ async def summary_loop(notifier: NotificationHandler):
             logger.error(f"❌ A critical error occurred in the summary_loop: {e}", exc_info=True)
 
 async def heartbeat_loop(notifier: NotificationHandler, symbols_to_monitor: set):
-    """VÒNG LẶP 5: Định kỳ gửi thông báo 'nhịp tim' để xác nhận bot vẫn hoạt động."""
+    """LOOP 5: Periodically sends a 'heartbeat' notification to confirm the bot is alive."""
     logger.info(f"✅ Heartbeat Loop starting (interval: {config.HEARTBEAT_INTERVAL_SECONDS / 3600:.0f} hours)")
     while True:
         await asyncio.sleep(config.HEARTBEAT_INTERVAL_SECONDS)
@@ -112,32 +106,44 @@ async def heartbeat_loop(notifier: NotificationHandler, symbols_to_monitor: set)
         except Exception as e:
             logger.error(f"❌ A critical error occurred in the heartbeat_loop: {e}", exc_info=True)
 
-# --- HÀM MAIN: KHỞI ĐỘNG VÀ QUẢN LÝ BOT ---
+# --- MAIN FUNCTION: BOT STARTUP AND MANAGEMENT ---
 async def main():
     logger.info("--- Initializing Bot ---")
-    if not binance_client:
-        logger.critical("Binance client not initialized. Check API keys. Exiting.")
-        sys.exit(1)
-
-    init_sqlite_db(config.SQLITE_DB_PATH)
-    tg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN)
-    notifier = NotificationHandler(telegram_handler=tg_handler)
-    all_symbols = set(config.STATIC_SYMBOLS)
-    logger.info(f"Bot will monitor {len(all_symbols)} symbols.")
-
-    # Gửi thông báo khởi động quan trọng
-    await notifier.send_startup_notification(symbols_count=len(all_symbols))
-
-    logger.info("--- Bot is now running. All loops are active. ---")
     
-    # Chạy tất cả các vòng lặp song song
-    await asyncio.gather(
-        analysis_loop(all_symbols),
-        signal_check_loop(notifier=notifier),
-        updater_loop(client=binance_client),
-        summary_loop(notifier=notifier),
-        heartbeat_loop(notifier=notifier, symbols_to_monitor=all_symbols)
-    )
+    # CHANGE: Initialize client within the async main function
+    client = None
+    if not (config.API_KEY and config.API_SECRET):
+        logger.critical("API_KEY and API_SECRET not found. Cannot initialize Binance client. Exiting.")
+        sys.exit(1)
+        
+    try:
+        client = await Client.create(config.API_KEY, config.API_SECRET)
+        logger.info("Binance client initialized successfully.")
+
+        init_sqlite_db(config.SQLITE_DB_PATH)
+        tg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN)
+        notifier = NotificationHandler(telegram_handler=tg_handler)
+        all_symbols = set(config.STATIC_SYMBOLS)
+        logger.info(f"Bot will monitor {len(all_symbols)} symbols.")
+
+        # Send a critical startup notification
+        await notifier.send_startup_notification(symbols_count=len(all_symbols))
+
+        logger.info("--- Bot is now running. All loops are active. ---")
+        
+        # Run all loops concurrently
+        await asyncio.gather(
+            analysis_loop(client, all_symbols),
+            signal_check_loop(notifier),
+            updater_loop(client),
+            summary_loop(notifier),
+            heartbeat_loop(notifier, all_symbols)
+        )
+    finally:
+        # CHANGE: Ensure the client connection is always closed gracefully
+        if client:
+            await client.close_connection()
+            logger.info("Binance client connection closed.")
 
 if __name__ == "__main__":
     try:
@@ -148,3 +154,4 @@ if __name__ == "__main__":
         logger.critical(f"A fatal error occurred in the main execution block: {main_exc}", exc_info=True)
     finally:
         logger.info("--- Bot application shutting down. ---")
+
