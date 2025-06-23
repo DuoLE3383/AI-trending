@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from binance import AsyncClient as Clintimport 
+from binance import AsyncClient as Client
 import config
 from database_handler import init_sqlite_db
 from analysis_engine import process_symbol
