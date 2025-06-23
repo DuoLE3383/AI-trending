@@ -72,6 +72,17 @@ class NotificationHandler:
             analysis_results (List[Dict[str, Any]]): A list of dictionaries,
                                                      each containing analysis results for a symbol.
         """
+        # Customize your message here
+        message = f"✅ Bot is running correctly.\nCurrently analyzing *{symbols_count}* symbols.\nNext status update in 10 minutes."
+        
+        # Use the escape function for any dynamic text if needed
+        # safe_message = TelegramHandler.escape_markdownv2(message)
+
+        await self.telegram_handler.send_message(
+            chat_id=config.TELEGRAM_CHAT_ID,
+            message=message
+        )
+        
         if not analysis_results:
             return
         self.logger.info(f"Preparing to send a batch of {len(analysis_results)} signals.")
