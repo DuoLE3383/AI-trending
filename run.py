@@ -1,22 +1,19 @@
-from binance import AsyncClient as Client
-
 import sys
 import logging
 import asyncio
 import sqlite3
-from binance.client import Client
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# --- Import các module của bot ---
-import config
+from binance import AsyncClient as Clintimport config
 from database_handler import init_sqlite_db
 from analysis_engine import process_symbol
 from telegram_handler import TelegramHandler
 from notifications import NotificationHandler
 from updater import check_signal_outcomes
 from result import get_win_loss_stats
+
 
 # --- Cấu hình logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
