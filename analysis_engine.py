@@ -142,7 +142,7 @@ async def process_symbol(client: Client, symbol: str) -> None:
     """
     try:
         # Bước 1: Lấy dữ liệu và tạo DataFrame
-        df = await get_market_data(client, symbol, TIMEFRAME, limit=DATA_FETCH_LIMIT)
+        df = await get_market_data(client, symbol, TIMEFRAME, limit=500)
         
         # Bước 2: Gọi hàm phân tích lõi với DataFrame vừa có
         _perform_analysis(df, symbol)
