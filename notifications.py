@@ -53,6 +53,12 @@ class NotificationHandler:
             
             trend_emoji = "🔼" if "Bullish" in trend else "🔽"
             formatted_line = f"{trend_emoji} *{symbol}* - {trend} at `${price:,.4f}`"
+            f"📡 Get ready for real-time market signals!\n\n"
+            f"----------------------------------------\n\n"
+            f"💰 **New to Binance? Get a $100 Bonus!**\n\n"
+            f"Sign up on the world's largest crypto exchange platform and earn a **100 USD trading fee rebate voucher!**\n\n"
+            f"🔗 **Register Now:**\n"
+            f"https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P"
             message_lines.append(formatted_line)
         
         full_message = header + "\n".join(message_lines)
