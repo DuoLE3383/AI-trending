@@ -7,9 +7,7 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# --- Project Module Imports ---
-# CHANGE: Use Client.create() for initialization, so we just import the class
-from binance import AsyncClient as Client 
+from binance import AsyncClient 
 import config
 from database_handler import init_sqlite_db
 from analysis_engine import process_symbol
