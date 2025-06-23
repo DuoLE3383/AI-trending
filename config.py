@@ -85,3 +85,7 @@ DYN_SYMBOLS_ENABLED = config_data["dynamic_symbols"]["enabled"]
 DYN_SYMBOLS_QUOTE_ASSET = config_data["dynamic_symbols"]["quote_asset"]
 DYN_SYMBOLS_UPDATE_INTERVAL_SECONDS = config_data["dynamic_symbols"]["update_interval_hours"] * 3600
 DYN_SYMBOLS_EXCLUDE = config_data["dynamic_symbols"]["exclude_substrings"]
+# Add this line to your config.py file
+
+MIN_ATR_PERCENT = 0.5  # Minimum volatility of 0.5% required to consider a trade. Adjust as needed.
+
