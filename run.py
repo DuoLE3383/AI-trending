@@ -1,4 +1,6 @@
-# run.py (Phiên bản cuối cùng đã thêm Heartbeat Loop)
+# run.py - DÒNG MỚI ĐÃ SỬA
+from binance import AsyncClient as Client # Sử dụng client bất đồng bộ
+
 import sys
 import logging
 import asyncio
