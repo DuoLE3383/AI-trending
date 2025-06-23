@@ -10,7 +10,7 @@ from config import *
 # Import data retrieval function
 from market_data_handler import get_market_data
 # Import AsyncClient for correct type hinting
-from binance.client import AsyncClient
+from binance import AsyncClient
 
 logger = logging.getLogger(__name__)
 
