@@ -23,12 +23,12 @@ DYN_SYMBOLS_UPDATE_INTERVAL_SECONDS = 6 * 3600  # 6 giờ
 
 # === Analysis Strategy Parameters ===
 # EMA Settings
-EMA_FAST = 10
-EMA_MEDIUM = 20
-EMA_SLOW = 50
+EMA_FAST = 34
+EMA_MEDIUM = 89
+EMA_SLOW = 200
 
 # RSI Settings
-RSI_PERIOD = 14
+RSI_PERIOD = 13
 
 # Bollinger Bands Settings
 BBANDS_PERIOD = 20
@@ -39,7 +39,7 @@ ATR_PERIOD = 14
 
 # --- Cài đặt cho chiến lược nâng cao ---
 # Volatility Filter: Tín hiệu sẽ bị bỏ qua nếu biến động (ATR) dưới mức này
-MIN_ATR_PERCENT = 0.4  # Yêu cầu biến động tối thiểu 0.4%
+MIN_ATR_PERCENT = 0.8  # Yêu cầu biến động tối thiểu 0.4%
 
 # Trade Parameter Multipliers (dựa trên ATR)
 ATR_MULTIPLIER_SL = 1.5   # StopLoss = 1.5 * ATR
