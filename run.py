@@ -177,3 +177,19 @@ if __name__ == "__main__":
         logger.info("Bot stopped by user via KeyboardInterrupt.")
     finally:
         logger.info("Bot application shutting down.")
+        
+# In run.py, update the end of your main() function
+
+async def main():
+    # ... all your initialization code ...
+    
+    logger.info("--- Bot is now running. Analysis, Signal, and Summary loops are active. ---")
+    
+    # Create tasks for all three loops
+    analysis_task = asyncio.create_task(analysis_loop(monitored_symbols_ref))
+    signal_task = asyncio.create_task(signal_check_loop(notifier=notifier))
+    summary_task = asyncio.create_task(summary_loop()) # <--- ADD THIS LINE
+    
+    # Gather all three tasks to run them concurrently
+    await asyncio.gather(analysis_task, signal_task, summary_task) # <--- UPDATE THIS LINE
+
