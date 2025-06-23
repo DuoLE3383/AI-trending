@@ -99,7 +99,7 @@ f"💡 Tip: If you want to get TODAY profit, register now https://www.binance.co
         tp3 = analysis_result.get('take_profit_3')
 
         message = (
-            f"{trend}\n\n"
+            f"🚨🚨{trend}\n"
             f"Symbol: *{symbol}*\n"
             f"Entry: `${entry:,.4f}`\n"
             f"StopLoss: `${sl:,.4f}`\n"
@@ -108,7 +108,9 @@ f"💡 Tip: If you want to get TODAY profit, register now https://www.binance.co
             f"TakeProfit 3: `${tp3:,.4f}`\n\n"
             f"Leverage: x{self.leverage}\n"
             f"Current Price: `${price:,.4f}`\n"
-            f"🕒 Time: `{pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S UTC')}`"
+            f"🕒 Time: `{pd.to_datetime('now', utc=True).strftime('%Y-%m-%d %H:%M:%S UTC')}`\n"
+            f"🔔 This will be updated every 10 minutes with the latest analysis results.🚨🚨 Keep Calm and follow @aisignalvip for more updates.\n"
+f"💡 Tip: If you want to get TODAY profit, register now https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P."
         )
         
         try:
