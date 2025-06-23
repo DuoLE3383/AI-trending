@@ -30,13 +30,17 @@ else:
     binance_client = None
 
 # --- CÁC VÒNG LẶP (LOOPS) CỦA BOT ---
+# In run.py
 
-# LOOP 1: Phân tích thị trường
+# ... (imports and other code) ...
+
+# LOOP 1: Phân tích thị trường (đã được đơn giản hóa)
 async def analysis_loop(symbols_to_monitor: set):
     logger.info(f"--- ✅ Analysis Loop starting (interval: {config.LOOP_SLEEP_INTERVAL_SECONDS / 60:.0f} minutes) ---")
     while True:
         logger.info(f"--- Starting analysis cycle for {len(symbols_to_monitor)} symbols ---")
         for symbol in list(symbols_to_monitor):
+
             try:
                 await perform_analysis(binance_client, symbol)
             except Exception as symbol_error:
