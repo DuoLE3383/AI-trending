@@ -1,3 +1,5 @@
+# In your file named: results.py
+
 def analyze_entries(entries):
   """
   Analyzes a list of entries to count the occurrences of each result.
@@ -16,30 +18,8 @@ def analyze_entries(entries):
   for entry in entries:
     if 'result' in entry:
       result = entry['result']
-      if result in result_counts:
-        result_counts[result] += 1
-      else:
-        result_counts[result] = 1
+      # Add the result to the dictionary and increment its count
+      result_counts[result] = result_counts.get(result, 0) + 1
+      
   return result_counts
-
-# --- Example Usage ---
-
-# Example list of entries
-example_entries = [
-    {'entry_id': 1, 'data': '...', 'result': 'win'},
-    {'entry_id': 2, 'data': '...', 'result': 'loss'},
-    {'entry_id': 3, 'data': '...', 'result': 'win'},
-    {'entry_id': 4, 'data': '...', 'result': 'draw'},
-    {'entry_id': 5, 'data': '...', 'result': 'win'},
-    {'entry_id': 6, 'data': '...', 'result': 'loss'},
-]
-
-# Analyze the example entries
-analysis = analyze_entries(example_entries)
-
-# Print the results
-print(f"Total number of entries: {len(example_entries)}")
-print("Result breakdown:")
-for result, count in analysis.items():
-  print(f"- {result}: {count}")
 
