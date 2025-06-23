@@ -13,7 +13,8 @@ load_dotenv()
 import config
 from database_handler import init_sqlite_db
 from market_data_handler import get_market_data
-from analysis_engine import perform_analysis
+
+from analysis_engine import process_symbol
 from telegram_handler import TelegramHandler
 from notifications import NotificationHandler
 from updater import check_signal_outcomes
