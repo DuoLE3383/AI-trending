@@ -121,3 +121,43 @@ f"💡 Tip: If you want to get TODAY profit, register now https://www.binance.co
             self.logger.info(f"Signal alert for {symbol} sent successfully.")
         except Exception as e:
             self.logger.error(f"Failed to send signal alert for {symbol}: {e}")
+            
+# Add this new function to your notifications.py file
+
+async def send_batch_trend_alert_notification(self, chat_id: str, message_thread_id: int, analysis_results: list):
+    """
+    Formats a batch of new signals into a single Telegram message.
+    """
+    if not analysis_results:
+        return
+
+    # Header for the message
+    header = f"🔥 *{len(analysis_results)} New Signal(s) Found!* 🔥\n\n"
+    
+    # Format each signal into a line
+    message_lines = []
+    for result in analysis_results:
+        symbol = result.get('symbol', 'N/A')
+        trend = result.get('trend', 'N/A').replace("_", " ").title()
+        price = result.get('last_price', 0)
+        
+        # Create a clean representation of the trend for the message
+        trend_emoji = "🔼" if "Bullish" in trend else "🔽"
+        formatted_line = f"{trend_emoji} *{symbol}* - {trend} at `${price:,.4f}`"
+        message_lines.append(formatted_line)
+    
+    # Join all parts of the message
+    full_message = header + "\n".join(message_lines)
+    
+    try:
+        await self.telegram_handler.send_message(
+            chat_id=chat_id,
+            message=full_message,
+            message_thread_id=message_thread_id,
+            parse_mode="Markdown" # Use Markdown for bold text
+        )
+        self.logger.info(f"Successfully sent combined signal alert for {len(analysis_results)} symbols.")
+    except Exception as e:
+        self.logger.error(f"Failed to send combined signal alert: {e}", exc_info=True)
+
+
