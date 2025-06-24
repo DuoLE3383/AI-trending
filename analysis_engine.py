@@ -7,6 +7,11 @@ from typing import Dict, Any
 
 # Import a_variables from config.py
 from config import *
+# Ensure SIGNAL_TABLE_NAME is imported from config.py
+try:
+    SIGNAL_TABLE_NAME
+except NameError:
+    from config import SIGNAL_TABLE_NAME
 # Import data retrieval function
 from market_data_handler import get_market_data
 # Import AsyncClient for correct type hinting
@@ -19,8 +24,8 @@ def _save_signal_to_db(signal_data: Dict[str, Any]) -> None:
     Private function to save a signal to the SQLite database.
     Separating this logic keeps the main function cleaner.
     """
-    sql_insert = """
-    INSERT INTO trend_analysis (
+    sql_insert = f"""
+    INSERT INTO {SIGNAL_TABLE_NAME} (
         analysis_timestamp_utc, symbol, timeframe, last_price,
         ema_fast_len, ema_fast_val, ema_medium_len, ema_medium_val, ema_slow_len, ema_slow_val,
         rsi_len, rsi_val, trend, kline_open_time,
@@ -28,7 +33,7 @@ def _save_signal_to_db(signal_data: Dict[str, Any]) -> None:
         entry_price, stop_loss, take_profit_1, take_profit_2, take_profit_3, status
     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     """
-    
+
     db_values = (
         signal_data['analysis_time'], signal_data['symbol'], signal_data['timeframe'], signal_data['price'],
         signal_data['ema_fast_len'], signal_data['ema_fast_val'], signal_data['ema_medium_len'], signal_data['ema_medium_val'], signal_data['ema_slow_len'], signal_data['ema_slow_val'],
@@ -49,8 +54,8 @@ def _perform_analysis(df: pd.DataFrame, symbol: str) -> None:
     Performs technical analysis on a given DataFrame.
     This is the core processing logic, with no network or I/O operations.
     """
-    if df.empty or len(df) < EMA_FAST:
-        logger.warning(f"ing analysis for {symbol}: not enough data points ({len(df)} rows).")
+    if df.empty or len(df) < EMA_SLOW:
+        logger.warning(f"Skipping analysis for {symbol}: not enough data points ({len(df)} rows).")
         return
 
     # --- 1. Calculate technical indicators ---
@@ -72,18 +77,18 @@ def _perform_analysis(df: pd.DataFrame, symbol: str) -> None:
     atr_value = last.get(f'ATRr_{ATR_PERIOD}')
     # ROBUSTNESS: Ensure atr_value is not None before using it
     if atr_value is None:
-        logger.warning(f"ing analysis for {symbol}: ATR value is None.")
+        logger.warning(f"Skipping analysis for {symbol}: ATR value is None.")
         return
         
     atr_percent = (atr_value / price) * 100 if price > 0 else 0
     if atr_percent < MIN_ATR_PERCENT:
-        logger.debug(f"{symbol}: ing. Low volatility (ATR: {atr_percent:.2f}%).")
+        logger.debug(f"{symbol}: Skipping. Low volatility (ATR: {atr_percent:.2f}%).")
         return
 
     current_volume = last.get('volume')
     volume_sma = last.get(f'VOLUME_SMA_{VOLUME_SMA_PERIOD}')
     if current_volume is None or volume_sma is None or current_volume < (volume_sma * MIN_VOLUME_RATIO):
-        logger.debug(f"{symbol}: ing. Low volume (Current: {current_volume} < SMA: {volume_sma}).")
+        logger.debug(f"{symbol}: Skipping. Low volume (Current: {current_volume} < SMA: {volume_sma}).")
         return
 
     # --- 3. Trend determination logic ---
@@ -94,7 +99,7 @@ def _perform_analysis(df: pd.DataFrame, symbol: str) -> None:
     
     # ROBUSTNESS: Ensure EMA values exist before comparing them to prevent TypeError
     if any(v is None for v in [price, ema_f, ema_m, ema_s]):
-        logger.warning(f"ing trend analysis for {symbol}: One or more EMA values are None.")
+        logger.warning(f"Skipping trend analysis for {symbol}: One or more EMA values are None.")
         return
 
     # Trend conditions
