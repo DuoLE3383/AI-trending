@@ -18,3 +18,5 @@ httpx~=0.27                # Async HTTP client
 dateparser~=1.2            # Flexible date parsing
 python-dotenv~=1.1.0       # Load .env config
 setuptools~=69.5           # Build system requirement
+scikit-learn~=1.5
+joblib~=1.5
