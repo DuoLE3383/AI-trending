@@ -14,7 +14,7 @@ from analysis_engine import process_symbol
 from telegram_handler import TelegramHandler
 from notifications import NotificationHandler
 from updater import check_signal_outcomes
-from result import get_win_loss_stats
+from results import get_win_loss_stats
 
 # --- Logging Configuration ---
 logging.basicConfig(
