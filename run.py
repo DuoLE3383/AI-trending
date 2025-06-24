@@ -15,11 +15,8 @@ from database_handler import init_sqlite_db
 from analysis_engine import process_symbol
 from telegram_handler import TelegramHandler
 from notifications import NotificationHandler
-# Corrected import from 'result.py'
 from result import get_win_loss_stats
-# Import functions from updater.py
 from updater import get_usdt_futures_symbols, check_signal_outcomes
-
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -32,22 +29,35 @@ logger = logging.getLogger(__name__)
 
 # --- BOT LOOPS ---
 
+# --- NEW HELPER FUNCTION ---
+async def process_symbol_with_semaphore(semaphore: asyncio.Semaphore, client: AsyncClient, symbol: str):
+    """Acquires the semaphore before processing a symbol to limit concurrency."""
+    async with semaphore:
+        await process_symbol(client, symbol)
+
 async def analysis_loop(client: AsyncClient, symbols_to_monitor: set):
-    """LOOP 1: Continuously analyzes the market for specified symbols."""
+    """LOOP 1: Continuously analyzes the market for specified symbols with controlled concurrency."""
     logger.info(f"✅ Analysis Loop starting (interval: {config.LOOP_SLEEP_INTERVAL_SECONDS / 60:.0f} minutes)")
+    
+    # --- CHANGE: Create a semaphore to limit concurrent requests ---
+    # This will allow a maximum of 10 data requests to run at the same time.
+    CONCURRENT_REQUESTS = 10 
+    semaphore = asyncio.Semaphore(CONCURRENT_REQUESTS)
+    
     while True:
-        logger.info(f"--- Starting analysis cycle for {len(symbols_to_monitor)} symbols ---")
-        # Create a task for each symbol to run them concurrently
-        tasks = [process_symbol(client, symbol) for symbol in list(symbols_to_monitor)]
+        logger.info(f"--- Starting analysis cycle for {len(symbols_to_monitor)} symbols (max {CONCURRENT_REQUESTS} at a time) ---")
+        
+        # --- CHANGE: Use the new helper function with the semaphore ---
+        tasks = [process_symbol_with_semaphore(semaphore, client, symbol) for symbol in list(symbols_to_monitor)]
         await asyncio.gather(*tasks, return_exceptions=True)
         
         logger.info(f"--- Analysis cycle complete. Sleeping for {config.LOOP_SLEEP_INTERVAL_SECONDS} seconds. ---")
         await asyncio.sleep(config.LOOP_SLEEP_INTERVAL_SECONDS)
 
 async def signal_check_loop(notifier: NotificationHandler):
-    """LOOP 2: Checks for the latest strong signals from the DB and sends notifications."""
+    # This function remains unchanged
     logger.info(f"✅ Signal Check Loop starting (interval: {config.SIGNAL_CHECK_INTERVAL_SECONDS} seconds)")
-    last_notified_signal_time = {} # Dictionary to track notified signals for each symbol
+    last_notified_signal_time = {}
     while True:
         try:
             with sqlite3.connect(f'file:{config.SQLITE_DB_PATH}?mode=ro', uri=True) as conn:
@@ -66,7 +76,6 @@ async def signal_check_loop(notifier: NotificationHandler):
                 symbol, timestamp = record['symbol'], record['analysis_timestamp_utc']
                 if timestamp > last_notified_signal_time.get(symbol, ''):
                     new_signals_to_notify.append(dict(record))
-                    # --- TYPO CORRECTED HERE ---
                     last_notified_signal_time[symbol] = timestamp
                     logger.info(f"🔥 Queued new signal for {symbol} ({record['trend']}).")
             
@@ -77,7 +86,7 @@ async def signal_check_loop(notifier: NotificationHandler):
         await asyncio.sleep(config.SIGNAL_CHECK_INTERVAL_SECONDS)
 
 async def updater_loop(client: AsyncClient):
-    """LOOP 3: Automatically checks and updates the outcome of open signals (TP/SL)."""
+    # This function remains unchanged
     logger.info(f"✅ Updater Loop starting (interval: {config.UPDATER_INTERVAL_SECONDS / 60:.0f} minutes)")
     while True:
         try:
@@ -87,7 +96,7 @@ async def updater_loop(client: AsyncClient):
         await asyncio.sleep(config.UPDATER_INTERVAL_SECONDS)
 
 async def summary_loop(notifier: NotificationHandler):
-    """LOOP 4: Periodically sends a performance summary report."""
+    # This function remains unchanged
     logger.info(f"✅ Performance Summary Loop starting (interval: {config.SUMMARY_INTERVAL_SECONDS / 3600:.0f} hours)")
     while True:
         await asyncio.sleep(config.SUMMARY_INTERVAL_SECONDS)
@@ -99,7 +108,7 @@ async def summary_loop(notifier: NotificationHandler):
             logger.error(f"❌ A critical error occurred in the summary_loop: {e}", exc_info=True)
 
 async def heartbeat_loop(notifier: NotificationHandler, symbols_to_monitor: set):
-    """LOOP 5: Periodically sends a 'heartbeat' notification to confirm the bot is alive."""
+    # This function remains unchanged
     logger.info(f"✅ Heartbeat Loop starting (interval: {config.HEARTBEAT_INTERVAL_SECONDS / 3600:.0f} hours)")
     while True:
         await asyncio.sleep(config.HEARTBEAT_INTERVAL_SECONDS)
@@ -111,7 +120,7 @@ async def heartbeat_loop(notifier: NotificationHandler, symbols_to_monitor: set)
 
 # --- MAIN FUNCTION: BOT STARTUP AND MANAGEMENT ---
 async def main():
-    """Initializes and runs all bot components."""
+    # This function remains unchanged
     logger.info("--- Initializing Bot ---")
     
     client = None
@@ -120,7 +129,6 @@ async def main():
         sys.exit(1)
         
     try:
-        # Initialize clients and handlers
         client = await AsyncClient.create(config.API_KEY, config.API_SECRET)
         logger.info("Binance client initialized successfully.")
         
@@ -128,7 +136,6 @@ async def main():
         tg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN)
         notifier = NotificationHandler(telegram_handler=tg_handler)
         
-        # Fetch the dynamic list of symbols to trade
         all_symbols = await get_usdt_futures_symbols(client)
         if not all_symbols:
             logger.critical("Could not fetch a list of symbols to trade. Exiting.")
@@ -137,7 +144,6 @@ async def main():
         logger.info(f"Bot will monitor {len(all_symbols)} symbols.")
         await notifier.send_startup_notification(symbols_count=len(all_symbols))
 
-        # Start all concurrent loops
         logger.info("--- Bot is now running. All loops are active. ---")
         await asyncio.gather(
             analysis_loop(client, all_symbols),
@@ -156,6 +162,7 @@ async def main():
 
 
 if __name__ == "__main__":
+    # This block remains unchanged
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
