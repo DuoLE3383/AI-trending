@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 
 # Tải các biến môi trường từ file .env
+BASE_DIR = os.path.dirname(os.path.abspath(__file__)) # Define BASE_DIR for absolute paths
 load_dotenv()
 
 # ==============================================================================
@@ -17,7 +18,9 @@ TELEGRAM_MESSAGE_THREAD_ID = os.getenv("TELEGRAM_MESSAGE_THREAD_ID") # ID của 
 # ==============================================================================
 # === 2. DATABASE
 # ==============================================================================
-SQLITE_DB_PATH = "trend_analysis.db"
+SQLITE_DB_PATH = os.path.join(BASE_DIR, 'trading_data.db') # Use absolute path
+SIGNAL_TABLE_NAME = "trend_analysis" # Define SIGNAL_TABLE_NAME
+TRAINING_RESULTS_TABLE_NAME = "training_results" # Define TRAINING_RESULTS_TABLE_NAME
 
 # ==============================================================================
 # === 3. SYMBOL & MARKET DATA SETTINGS
