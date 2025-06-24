@@ -1,34 +1,20 @@
-# ===================================================================
-#  Core Data Analysis & Quantitative Libraries
-# ===================================================================
+# === Core Data & Technical Analysis ===
 numpy~=2.3
 pandas~=2.3
+ft-pandas-ta~=0.3.15  # Technical indicators (TA)
 
-# Technical analysis indicators (forked & fixed version)
-ft-pandas-ta~=0.3.15
-
-
-# ===================================================================
-#  Machine Learning & Training Libraries
-# ===================================================================
-tensorflow~=2.16
+# === Machine Learning ===
 scikit-learn~=1.5
 joblib~=1.4
+tensorflow>=<2.15 
+# === API & Database Clients ===
+python-binance~=1.0.29     # Binance API
+python-telegram-bot~=22.1  # Telegram Bot API
+pymongo~=4.13              # MongoDB connector
+sqlite-utils~=3.36         # SQLite helper tools
 
-
-# ===================================================================
-#  API Clients & Database Connectors
-# ===================================================================
-python-binance~=1.0.29
-python-telegram-bot~=22.1
-pymongo~=4.13
-sqlite-utils~=3.36
-
-
-# ===================================================================
-#  Utility Libraries
-# ===================================================================
-dateparser~=1.2
-python-dotenv~=1.1.0
-httpx~=0.27
-setuptools~=69.5
+# === Utilities ===
+httpx~=0.27                # Async HTTP client
+dateparser~=1.2            # Flexible date parsing
+python-dotenv~=1.1.0       # Load .env config
+setuptools~=69.5           # Build system requirement
