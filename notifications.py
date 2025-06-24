@@ -150,13 +150,11 @@ import socket
 logger = logging.getLogger(__name__)
 
 class NotificationHandler:
-    """
-    Handles the formatting and sending of all notifications to Telegram.
-    """
     def __init__(self, telegram_handler: TelegramHandler):
         self.telegram_handler = telegram_handler
+        self.logger = logger  # Thêm nếu bạn muốn dùng self.logger
 
-    async def send_startup_notification(logger, self, symbols_count: int):
+    async def send_startup_notification(self, symbols_count: int):
         """Sends a startup notification with a photo."""
         self.logger.info("Preparing startup notification with photo...")
         try:
@@ -166,7 +164,7 @@ class NotificationHandler:
                 f"The bot is now live and analyzing `{symbols_count}` pairs on the `{timeframe_escaped}` timeframe\\."
             )
             photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png"
-            
+
             await self.telegram_handler.send_photo(
                 chat_id=config.TELEGRAM_CHAT_ID,
                 photo=photo_url,
@@ -177,7 +175,6 @@ class NotificationHandler:
             self.logger.info("Startup notification with photo sent successfully.")
         except Exception as e:
             self.logger.error(f"Failed to send startup notification: {e}", exc_info=True)
-
     # --- THIS IS THE UPDATED FUNCTION ---
     async def send_batch_trend_alert_notification(self, analysis_results: List[Dict[str, Any]]):
         """
