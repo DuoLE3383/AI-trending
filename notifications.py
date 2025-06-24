@@ -28,7 +28,7 @@ class NotificationHandler:
 
     async def _send_to_both(self, message: str, thread_id: int = None, parse_mode: str = "MarkdownV2"):
         try:
-            # Gửi vào group (hỗ trợ MarkdownV2)
+            # Gửi vào group với định dạng Markdown
             await self.telegram_handler.send_message(
                 chat_id=config.TELEGRAM_CHAT_ID,
                 message=message,
@@ -37,15 +37,22 @@ class NotificationHandler:
             )
             self.logger.info("✅ Sent to group.")
 
-            # Gửi vào channel dưới dạng text đơn giản
-            plain_text = message.replace("*", "").replace("_", "").replace("`", "")
+            # Gửi vào channel với nội dung thường (không Markdown)
+            plain_message = self.strip_markdown(message)
             await self.telegram_handler.send_message(
                 chat_id=config.TELEGRAM_CHANNEL_ID,
-                message=plain_text
+                message=plain_message
             )
             self.logger.info("✅ Sent to channel.")
         except Exception as e:
             self.logger.error(f"❌ Failed to send to both group and channel: {e}", exc_info=True)
+
+    def strip_markdown(self, text: str) -> str:
+        # Loại bỏ MarkdownV2 characters để gửi vào channel an toàn
+        for ch in r"_*[]()~`>#+-=|{}!.":
+            text = text.replace(ch, "")
+        return text
+
 
 
     async def _send_photo_to_both(self, photo: str, caption: str, thread_id: int = None, parse_mode: str = "MarkdownV2"):
@@ -59,15 +66,17 @@ class NotificationHandler:
             )
             self.logger.info("✅ Photo sent to group.")
 
-            # Send to channel WITHOUT parse_mode to avoid issues
+            # Caption cho channel nên xóa Markdown nếu có
+            plain_caption = self.strip_markdown(caption)
             await self.telegram_handler.send_photo(
                 chat_id=config.TELEGRAM_CHANNEL_ID,
                 photo=photo,
-                caption=caption
+                caption=plain_caption
             )
             self.logger.info("✅ Photo sent to channel.")
         except Exception as e:
             self.logger.error(f"❌ Failed to send photo to both group and channel: {e}", exc_info=True)
+
 
     async def send_startup_notification(self, symbols_count: int):
         self.logger.info("Preparing startup notification with photo...")
