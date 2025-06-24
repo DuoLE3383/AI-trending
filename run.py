@@ -55,12 +55,19 @@ async def signal_check_loop(notifier: NotificationHandler):
         try:
             with sqlite3.connect(f'file:{config.SQLITE_DB_PATH}?mode=ro', uri=True) as conn:
                 conn.row_factory = sqlite3.Row
-                query = "SELECT * FROM trend_analysis WHERE rn = 1 AND trend LIKE 'STRONG_%' AND status = 'ACTIVE'"
-                latest_strong_signals = conn.execute(
-                    "WITH RankedSignals AS ("
-                    "SELECT *, ROW_NUMBER() OVER(PARTITION BY symbol ORDER BY analysis_timestamp_utc DESC) as rn FROM trend_analysis"
-                    f") {query}"
-                ).fetchall()
+                
+                # --- CORRECTED SQL QUERY for compatibility with older SQLite versions ---
+                query = """
+                SELECT t1.* FROM trend_analysis t1
+                WHERE t1.analysis_timestamp_utc = (
+                    SELECT MAX(t2.analysis_timestamp_utc)
+                    FROM trend_analysis t2
+                    WHERE t2.symbol = t1.symbol
+                )
+                AND t1.trend IN (?, ?) AND t1.status = 'ACTIVE';
+                """
+                
+                latest_strong_signals = conn.execute(query, (config.TREND_STRONG_BULLISH, config.TREND_STRONG_BEARISH)).fetchall()
 
             for record in latest_strong_signals:
                 if record['analysis_timestamp_utc'] > last_notified_signal_time.get(record['symbol'], ''):
@@ -101,7 +108,6 @@ async def heartbeat_loop(notifier: NotificationHandler, symbols_to_monitor: set)
         except Exception as e:
             logger.error(f"❌ A critical error occurred in the heartbeat_loop: {e}", exc_info=True)
 
-# --- NEW LOOP TO NOTIFY ABOUT CLOSED TRADES ---
 async def outcome_check_loop(notifier: NotificationHandler):
     """LOOP 6: Checks for recently closed trades and sends notifications."""
     logger.info(f"✅ Trade Outcome Notification Loop starting (interval: {config.SIGNAL_CHECK_INTERVAL_SECONDS} seconds)")
@@ -165,7 +171,7 @@ async def main():
             updater_loop(client),
             summary_loop(notifier),
             heartbeat_loop(notifier, all_symbols),
-            outcome_check_loop(notifier) # <-- Added the new loop here
+            outcome_check_loop(notifier)
         )
     except Exception as main_exc:
         logger.critical(f"A fatal error occurred in the main execution block: {main_exc}", exc_info=True)
