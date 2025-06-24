@@ -80,7 +80,7 @@ class NotificationHandler:
 
         await self.telegram_handler.send_message(
             chat_id=config.TELEGRAM_CHAT_ID,
-            message=message
+            text=message
         )
         
         if not analysis_results:
@@ -163,7 +163,7 @@ class NotificationHandler:
         try:
             await self.telegram_handler.send_message(
                 chat_id=config.TELEGRAM_CHAT_ID,
-                message=message,
+                text=message,
                 message_thread_id=config.TELEGRAM_MESSAGE_THREAD_ID,
                 parse_mode="MarkdownV2",
                 # Send silently to avoid user notification spam
@@ -195,6 +195,6 @@ async def send_startup_notification(self, symbols_count: int):
     
     await self.telegram_handler.send_message(
         chat_id=config.TELEGRAM_CHAT_ID,
-        message=message
+        text=message
     )
 
