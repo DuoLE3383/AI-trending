@@ -185,7 +185,7 @@ class NotificationHandler:
         
         self.logger.info(f"Preparing to send a batch of {len(analysis_results)} detailed signals.")
         
-        message_parts = [f"✅ *{len(analysis_results)} New Signal(s) Found\\!* 🔥"]
+        message_parts = [f"✅ {len(analysis_results)} New Signal(s) Found\!* 🔥"]
         
         for result in analysis_results:
             # Helper function to safely format and escape numbers
@@ -204,17 +204,17 @@ class NotificationHandler:
             tp2 = format_and_escape(result.get('take_profit_2'))
             tp3 = format_and_escape(result.get('take_profit_3'))
             
-            trend_emoji = "🔼" if "Bullish" in result.get('trend', '') else "🔽"
+            trend_emoji = "🔽" if "Bullish" in result.get('trend', '') else "🔼"
 
             # Build the detailed message string for one signal
             signal_detail = (
                 f"\n\n----------------------------------------\n\n"
-                f"{trend_emoji} *{symbol}* \\- {trend}\n"
-                f"*Entry:* `{entry_price}`\n"
-                f"*SL:* `{stop_loss}`\n"
-                f"*TP1:* `{tp1}`\n"
-                f"*TP2:* `{tp2}`\n"
-                f"*TP3:* `{tp3}`"
+                f" {trend}{symbol} {trend_emoji}  \n"
+                f"📌Entry: {entry_price}\n"
+                f"❌SL: {stop_loss}\n"
+                f"🎯TP1: {tp1}\n"
+                f"🎯TP2: {tp2}\n"
+                f"🎯TP3: {tp3}"
             )
             message_parts.append(signal_detail)
         
