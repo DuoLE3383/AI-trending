@@ -37,13 +37,30 @@ async def analysis_loop(client: AsyncClient, symbols_to_monitor: set):
     semaphore = asyncio.Semaphore(CONCURRENT_REQUESTS)
     
     async def process_with_semaphore(symbol: str):
-        async with semaphore:
-            await process_symbol(client, symbol)
+        """Wrapper to process a symbol with semaphore and detailed error handling."""
+        try:
+            async with semaphore:
+                await process_symbol(client, symbol)
+            return None # Indicate success
+        except Exception as e:
+            return (symbol, e) # On failure, return the symbol and the exception
 
     while True:
         logger.info(f"--- Starting analysis cycle for {len(symbols_to_monitor)} symbols (max {CONCURRENT_REQUESTS} at a time) ---")
-        tasks = [process_with_semaphore(symbol) for symbol in list(symbols_to_monitor)]
-        await asyncio.gather(*tasks, return_exceptions=True)
+        tasks = [process_with_semaphore(symbol) for symbol in symbols_to_monitor]
+        results = await asyncio.gather(*tasks)
+
+        # Check for and log any exceptions that were caught by our wrapper
+        failed_count = 0
+        for res in results:
+            if res is not None:
+                failed_count += 1
+                symbol, error = res
+                logger.error(f"Failed to process symbol '{symbol}' during analysis: {error}", exc_info=False)
+        
+        if failed_count > 0:
+            logger.warning(f"{failed_count} symbols failed to process in this cycle.")
+
         logger.info(f"--- Analysis cycle complete. symbols_count={len(symbols_to_monitor)} PAIRS. Sleeping for {config.LOOP_SLEEP_INTERVAL_SECONDS} seconds. ---")
         await asyncio.sleep(config.LOOP_SLEEP_INTERVAL_SECONDS)
 
