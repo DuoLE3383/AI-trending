@@ -26,48 +26,9 @@ class NotificationHandler:
         except Exception:
             return '—'
 
-    # async def _send_to_both(self, message: str, thread_id: int = None, parse_mode: str = "MarkdownV2"):
-    #     try:
-    #         await self.telegram_handler.send_message(
-    #             chat_id=config.TELEGRAM_CHAT_ID,
-    #             message=message,
-    #             message_thread_id=thread_id,
-    #             parse_mode=parse_mode
-    #         )
-    #         self.logger.info("✅ Sent to group.")
-
-    #         await self.telegram_handler.send_message(
-    #             chat_id=config.TELEGRAM_CHANNEL_ID,
-    #             message=message,
-    #             parse_mode=parse_mode
-    #         )
-    #         self.logger.info("✅ Sent to channel.")
-    #     except Exception as e:
-    #         self.logger.error(f"❌ Failed to send to both group and channel: {e}", exc_info=True)
-
-    # async def _send_photo_to_both(self, photo: str, caption: str, thread_id: int = None, parse_mode: str = "MarkdownV2"):
-    #     try:
-    #         await self.telegram_handler.send_photo(
-    #             chat_id=config.TELEGRAM_CHAT_ID,
-    #             photo=photo,
-    #             caption=caption,
-    #             message_thread_id=thread_id,
-    #             parse_mode=parse_mode
-    #         )
-    #         self.logger.info("✅ Photo sent to group.")
-
-    #         await self.telegram_handler.send_photo(
-    #             chat_id=config.TELEGRAM_CHANNEL_ID,
-    #             photo=photo,
-    #             caption=caption,
-    #             parse_mode=parse_mode
-    #         )
-    #         self.logger.info("✅ Photo sent to channel.")
-    #     except Exception as e:
-    #         self.logger.error(f"❌ Failed to send photo to both group and channel: {e}", exc_info=True)
     async def _send_to_both(self, message: str, thread_id: int = None, parse_mode: str = "MarkdownV2"):
         try:
-            # Send to group with thread
+            # Send to group with thread ID
             await self.telegram_handler.send_message(
                 chat_id=config.TELEGRAM_CHAT_ID,
                 message=message,
@@ -76,11 +37,10 @@ class NotificationHandler:
             )
             self.logger.info("✅ Sent to group.")
 
-            # Send to channel without thread
+            # Send to channel WITHOUT thread ID and parse_mode for safety
             await self.telegram_handler.send_message(
                 chat_id=config.TELEGRAM_CHANNEL_ID,
-                message=message,
-                parse_mode=parse_mode
+                message=message
             )
             self.logger.info("✅ Sent to channel.")
         except Exception as e:
@@ -88,7 +48,6 @@ class NotificationHandler:
 
     async def _send_photo_to_both(self, photo: str, caption: str, thread_id: int = None, parse_mode: str = "MarkdownV2"):
         try:
-            # Group with thread
             await self.telegram_handler.send_photo(
                 chat_id=config.TELEGRAM_CHAT_ID,
                 photo=photo,
@@ -98,12 +57,11 @@ class NotificationHandler:
             )
             self.logger.info("✅ Photo sent to group.")
 
-            # Channel without thread
+            # Send to channel WITHOUT parse_mode to avoid issues
             await self.telegram_handler.send_photo(
                 chat_id=config.TELEGRAM_CHANNEL_ID,
                 photo=photo,
-                caption=caption,
-                parse_mode=parse_mode
+                caption=caption
             )
             self.logger.info("✅ Photo sent to channel.")
         except Exception as e:
@@ -115,13 +73,13 @@ class NotificationHandler:
             timeframe_escaped = TelegramHandler.escape_markdownv2(config.TIMEFRAME)
             caption_text = (
                 f"🚀 *AI Trading Bot Activated* 🚀\n\n"
-                f"The bot is now live and analyzing `{symbols_count}` pairs on the `{timeframe_escaped}` timeframe\\.\n\n"
-                f"📡 Get ready for real\-time market signals every 10 minutes\\!\n\n"
-                f"💰 *New to #Binance\? Get a \\$100 Bonus\\!*\\n"
-                f"Sign up and earn a *100 USD trading fee rebate voucher\\!*\\n\n"
-                f"🔗 *Register Now\:*\n"
-                f"https://www\.binance\.com/activity/referral\-entry/CPA\?ref\=CPA\_006MBW985P\n\n"
-                f"\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-"
+                f"The bot is now live and analyzing `{symbols_count}` pairs on the `{timeframe_escaped}` timeframe.\n\n"
+                f"📡 Get ready for real-time market signals every 10 minutes!\n\n"
+                f"💰 New to Binance? Get a $100 Bonus!*\n"
+                f"Sign up and earn a 100 USD trading fee rebate voucher!*\n\n"
+                f"🔗 Register Now:\n"
+                f"https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P\n\n"
+                f"----------------------------------------------"
             )
             photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
             await self._send_photo_to_both(photo=photo_url, caption=caption_text, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
@@ -134,7 +92,7 @@ class NotificationHandler:
 
         self.logger.info(f"Preparing to send a batch of {len(analysis_results)} detailed signals.")
 
-        message_parts = [f"🆘 {len(analysis_results)} New Signal(s) Found! 🔥"]
+        message_parts = [f"🖘 {len(analysis_results)} New Signal(s) Found! 🔥"]
 
         for result in analysis_results:
             symbol = TelegramHandler.escape_markdownv2(result.get('symbol', 'N/A'))
@@ -147,7 +105,7 @@ class NotificationHandler:
             tp2 = self.format_and_escape(result.get('take_profit_2'))
             tp3 = self.format_and_escape(result.get('take_profit_3'))
 
-            trend_emoji = "🔼" if "Bullish" in trend_raw else "🔽"
+            trend_emoji = "🔼" if "Bullish" in trend_raw else "🔻"
 
             signal_detail = (
                 f"\n\n----------------------------------------\n\n"
@@ -166,7 +124,7 @@ class NotificationHandler:
 
     async def send_summary_report(self, stats: Dict[str, Any]):
         self.logger.info("Preparing performance summary report...")
-        header = "🏆 *Strategy Performance Report (All\\-Time)* 🏆\n"
+        header = "🏆 *Strategy Performance Report (All-Time)* 🏆\n"
 
         if stats.get('total_completed_trades', 0) > 0:
             win_rate = TelegramHandler.escape_markdownv2(f"{stats.get('win_rate', 0.0):.2f}")
@@ -186,8 +144,8 @@ class NotificationHandler:
         self.logger.info("Sending heartbeat notification...")
         message = (
             f"✅ Bot Status: ALIVE\n\n"
-            f"The bot is running correctly and currently monitoring `{symbols_count}` symbols\\. "
-            f"No critical errors have been detected\\."
+            f"The bot is running correctly and currently monitoring `{symbols_count}` symbols. "
+            f"No critical errors have been detected."
         )
         await self._send_to_both(message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
