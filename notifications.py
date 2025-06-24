@@ -28,7 +28,7 @@ class NotificationHandler:
 
     async def _send_to_both(self, message: str, thread_id: int = None, parse_mode: str = "MarkdownV2"):
         try:
-            # Send to group with thread ID
+            # Gửi vào group (hỗ trợ MarkdownV2)
             await self.telegram_handler.send_message(
                 chat_id=config.TELEGRAM_CHAT_ID,
                 message=message,
@@ -37,14 +37,16 @@ class NotificationHandler:
             )
             self.logger.info("✅ Sent to group.")
 
-            # Send to channel WITHOUT thread ID and parse_mode for safety
+            # Gửi vào channel dưới dạng text đơn giản
+            plain_text = message.replace("*", "").replace("_", "").replace("`", "")
             await self.telegram_handler.send_message(
                 chat_id=config.TELEGRAM_CHANNEL_ID,
-                message=message
+                message=plain_text
             )
             self.logger.info("✅ Sent to channel.")
         except Exception as e:
             self.logger.error(f"❌ Failed to send to both group and channel: {e}", exc_info=True)
+
 
     async def _send_photo_to_both(self, photo: str, caption: str, thread_id: int = None, parse_mode: str = "MarkdownV2"):
         try:
