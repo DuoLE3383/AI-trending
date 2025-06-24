@@ -106,56 +106,39 @@ async def heartbeat_loop(notifier: NotificationHandler, symbols_to_monitor: set)
 
 # --- MAIN FUNCTION: BOT STARTUP AND MANAGEMENT ---
 async def main():
-    
-    notifiertg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN)
-        logger.info("Telegram handler initialized.")
-
-        # 2. THEN, create the Notification Handler and pass tg_handler to it.
-        notifier = NotificationHandler(telegram_handler=tg_handler)
-        logger.info("Notification handler initialized.")
-        
-        # -------------------------------------------
-
-        all_symbols = set(config.STATIC_SYMBOLS)
-        logger.info(f"Bot will monitor {len(all_symbols)} symbols.")
-
-        # This part sends the notification
-        await notifier.send_startup_notification(symbols_count=len(all_symbols)) = NotificationHandler(telegram_handler=tg_handler)
-    all_symbols = set(config.STATIC_SYMBOLS)
-    logger.info(f"Bot will monitor {len(all_symbols)} symbols.")
-
-    # --- ADD LOGS AROUND THE CALL ---
-    logger.info(">>> STEP 1: Preparing to call startup notification function...")
-    await notifier.send_startup_notification(symbols_count=len(all_symbols))
-    logger.info("<<< STEP 2: Call to startup notification function is complete.")
-    # --------------------------------
-
-    logger.info("--- Bot is now running. All loops are active. ---")
-    #...
     logger.info("--- Initializing Bot ---")
     
-    # CHANGE: Initialize client within the async main function
+    # Initialize the Binance client variable
     client = None
+
+    # Check for API keys before doing anything else
     if not (config.API_KEY and config.API_SECRET):
-        logger.critical("API_KEY and API_SECRET not found. Cannot initialize Binance client. Exiting.")
+        logger.critical("API_KEY and API_SECRET not found in config. Cannot start. Exiting.")
         sys.exit(1)
         
     try:
+        # 1. Initialize the Binance client
         client = await Client.create(config.API_KEY, config.API_SECRET)
         logger.info("Binance client initialized successfully.")
 
+        # 2. Initialize the database and notification handlers
         init_sqlite_db(config.SQLITE_DB_PATH)
         tg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN)
+        logger.info("Telegram handler initialized.")
         notifier = NotificationHandler(telegram_handler=tg_handler)
+        logger.info("Notification handler initialized.")
+        
+        # 3. Get the list of symbols to monitor
         all_symbols = set(config.STATIC_SYMBOLS)
         logger.info(f"Bot will monitor {len(all_symbols)} symbols.")
 
-        # Send a critical startup notification
+        # 4. Send a startup notification
+        logger.info("Sending startup notification...")
         await notifier.send_startup_notification(symbols_count=len(all_symbols))
+        logger.info("Startup notification sent.")
 
+        # 5. Start the main application loops
         logger.info("--- Bot is now running. All loops are active. ---")
-        
-        # Run all loops concurrently
         await asyncio.gather(
             analysis_loop(client, all_symbols),
             signal_check_loop(notifier),
@@ -163,19 +146,21 @@ async def main():
             summary_loop(notifier),
             heartbeat_loop(notifier, all_symbols)
         )
+
+    except Exception as main_exc:
+        # Log any exceptions that occur during runtime
+        logger.critical(f"A fatal error occurred in the main execution block: {main_exc}", exc_info=True)
+
     finally:
-        # CHANGE: Ensure the client connection is always closed gracefully
+        # This block will run even if an error occurs, ensuring a graceful shutdown
         if client:
             await client.close_connection()
             logger.info("Binance client connection closed.")
+        logger.info("--- Bot application shutting down. ---")
 
+# This part remains the same
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Bot stopped by user (Ctrl+C).")
-    except Exception as main_exc:
-        logger.critical(f"A fatal error occurred in the main execution block: {main_exc}", exc_info=True)
-    finally:
-        logger.info("--- Bot application shutting down. ---")
-
