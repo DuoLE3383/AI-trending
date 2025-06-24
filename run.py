@@ -1,3 +1,4 @@
+# run.py
 import sys
 import logging
 import asyncio
@@ -7,14 +8,17 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-from binance import AsyncClient as Client
+# --- Project Module Imports ---
+from binance import AsyncClient
 import config
 from database_handler import init_sqlite_db
 from analysis_engine import process_symbol
 from telegram_handler import TelegramHandler
 from notifications import NotificationHandler
-from updater import check_signal_outcomes
-from results import get_win_loss_stats
+from result import get_win_loss_stats
+# Import the new function from updater.py
+from updater import get_usdt_futures_symbols, check_signal_outcomes
+
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -27,14 +31,14 @@ logger = logging.getLogger(__name__)
 
 # --- BOT LOOPS ---
 
-# CHANGE: The loop now accepts the client as an argument
-async def analysis_loop(client: Client, symbols_to_monitor: set):
+async def analysis_loop(client: AsyncClient, symbols_to_monitor: set):
     """LOOP 1: Continuously analyzes the market for specified symbols."""
     logger.info(f"✅ Analysis Loop starting (interval: {config.LOOP_SLEEP_INTERVAL_SECONDS / 60:.0f} minutes)")
     while True:
         logger.info(f"--- Starting analysis cycle for {len(symbols_to_monitor)} symbols ---")
+        # Create a task for each symbol to run them concurrently
         tasks = [process_symbol(client, symbol) for symbol in list(symbols_to_monitor)]
-        await asyncio.gather(*tasks, return_exceptions=True) # Run symbols in parallel for speed
+        await asyncio.gather(*tasks, return_exceptions=True)
         
         logger.info(f"--- Analysis cycle complete. Sleeping for {config.LOOP_SLEEP_INTERVAL_SECONDS} seconds. ---")
         await asyncio.sleep(config.LOOP_SLEEP_INTERVAL_SECONDS)
@@ -45,7 +49,6 @@ async def signal_check_loop(notifier: NotificationHandler):
     last_notified_signal_time = {} # Dictionary to track notified signals for each symbol
     while True:
         try:
-            # CHANGE: Using a safer read-only connection string
             with sqlite3.connect(f'file:{config.SQLITE_DB_PATH}?mode=ro', uri=True) as conn:
                 conn.row_factory = sqlite3.Row
                 query = """
@@ -62,7 +65,7 @@ async def signal_check_loop(notifier: NotificationHandler):
                 symbol, timestamp = record['symbol'], record['analysis_timestamp_utc']
                 if timestamp > last_notified_signal_time.get(symbol, ''):
                     new_signals_to_notify.append(dict(record))
-                    last_notified_signal_time[symbol] = timestamp
+                    last_not_ified_signal_time[symbol] = timestamp
                     logger.info(f"🔥 Queued new signal for {symbol} ({record['trend']}).")
             
             if new_signals_to_notify:
@@ -71,7 +74,7 @@ async def signal_check_loop(notifier: NotificationHandler):
             logger.error(f"❌ Error in signal_check_loop: {e}", exc_info=True)
         await asyncio.sleep(config.SIGNAL_CHECK_INTERVAL_SECONDS)
 
-async def updater_loop(client: Client):
+async def updater_loop(client: AsyncClient):
     """LOOP 3: Automatically checks and updates the outcome of open signals (TP/SL)."""
     logger.info(f"✅ Updater Loop starting (interval: {config.UPDATER_INTERVAL_SECONDS / 60:.0f} minutes)")
     while True:
@@ -85,7 +88,6 @@ async def summary_loop(notifier: NotificationHandler):
     """LOOP 4: Periodically sends a performance summary report."""
     logger.info(f"✅ Performance Summary Loop starting (interval: {config.SUMMARY_INTERVAL_SECONDS / 3600:.0f} hours)")
     while True:
-        # Wait for the interval period before sending the first report
         await asyncio.sleep(config.SUMMARY_INTERVAL_SECONDS)
         try:
             logger.info("--- Generating and sending performance report... ---")
@@ -104,40 +106,36 @@ async def heartbeat_loop(notifier: NotificationHandler, symbols_to_monitor: set)
         except Exception as e:
             logger.error(f"❌ A critical error occurred in the heartbeat_loop: {e}", exc_info=True)
 
+
 # --- MAIN FUNCTION: BOT STARTUP AND MANAGEMENT ---
 async def main():
+    """Initializes and runs all bot components."""
     logger.info("--- Initializing Bot ---")
     
-    # Initialize the Binance client variable
     client = None
-
-    # Check for API keys before doing anything else
     if not (config.API_KEY and config.API_SECRET):
-        logger.critical("API_KEY and API_SECRET not found in config. Cannot start. Exiting.")
+        logger.critical("API_KEY and API_SECRET not found. Cannot start. Exiting.")
         sys.exit(1)
         
     try:
-        # 1. Initialize the Binance client
-        client = await Client.create(config.API_KEY, config.API_SECRET)
+        # Initialize clients and handlers
+        client = await AsyncClient.create(config.API_KEY, config.API_SECRET)
         logger.info("Binance client initialized successfully.")
-
-        # 2. Initialize the database and notification handlers
+        
         init_sqlite_db(config.SQLITE_DB_PATH)
         tg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN)
-        logger.info("Telegram handler initialized.")
         notifier = NotificationHandler(telegram_handler=tg_handler)
-        logger.info("Notification handler initialized.")
         
-        # 3. Get the list of symbols to monitor
-        all_symbols = set(config.STATIC_SYMBOLS)
+        # Fetch the dynamic list of symbols to trade
+        all_symbols = await get_usdt_futures_symbols(client)
+        if not all_symbols:
+            logger.critical("Could not fetch a list of symbols to trade. Exiting.")
+            sys.exit(1)
+        
         logger.info(f"Bot will monitor {len(all_symbols)} symbols.")
-
-        # 4. Send a startup notification
-        logger.info("Sending startup notification...")
         await notifier.send_startup_notification(symbols_count=len(all_symbols))
-        logger.info("Startup notification sent.")
 
-        # 5. Start the main application loops
+        # Start all concurrent loops
         logger.info("--- Bot is now running. All loops are active. ---")
         await asyncio.gather(
             analysis_loop(client, all_symbols),
@@ -146,19 +144,15 @@ async def main():
             summary_loop(notifier),
             heartbeat_loop(notifier, all_symbols)
         )
-
     except Exception as main_exc:
-        # Log any exceptions that occur during runtime
         logger.critical(f"A fatal error occurred in the main execution block: {main_exc}", exc_info=True)
-
     finally:
-        # This block will run even if an error occurs, ensuring a graceful shutdown
         if client:
             await client.close_connection()
             logger.info("Binance client connection closed.")
         logger.info("--- Bot application shutting down. ---")
 
-# This part remains the same
+
 if __name__ == "__main__":
     try:
         asyncio.run(main())
