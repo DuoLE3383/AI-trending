@@ -182,41 +182,43 @@ class NotificationHandler:
         except Exception as e:
             self.logger.error(f"Failed to send startup notification: {e}", exc_info=True)
     # --- THIS IS THE UPDATED FUNCTION ---
+    def escape_markdownv2_without_dot(text: str) -> str:
+        escape_chars = r"_*[]()~`>#+-=|{}!"  # bỏ dấu chấm `.`
+        for ch in escape_chars:
+            text = text.replace(ch, f"\\{ch}")
+        return text
+
+    def format_and_escape(value, precision=5):
+        if value is None:
+            return '—'
+        formatted_value = f"{value:.{precision}f}"
+        return self.escape_markdownv2_without_dot(formatted_value)
+
+
     async def send_batch_trend_alert_notification(self, analysis_results: List[Dict[str, Any]]):
         """
         Sends a detailed notification for new signals, including SL and TP levels.
         """
         if not analysis_results:
             return
-        
+
         self.logger.info(f"Preparing to send a batch of {len(analysis_results)} detailed signals.")
-        
+
         message_parts = [f"🆘 {len(analysis_results)} New Signal(s) Found! 🔥"]
-        
+
         for result in analysis_results:
-            # Helper function to safely format and escape numbers
-            def format_and_escape(value, precision=5):
-                if value is None:
-                    return 'N/A'
-                formatted_value = f"{value:.{precision}f}"
-                def escape_markdownv2_without_dot(text: str) -> str:
-                    escape_chars = r"_*[]()~`>#+-=|{}!"  # bỏ dấu `.`
-                    for ch in escape_chars:
-                        text = text.replace(ch, f"\\{ch}")
-                    return text
-
-            # Extract and format all necessary data
             symbol = TelegramHandler.escape_markdownv2(result.get('symbol', 'N/A'))
-            trend = TelegramHandler.escape_markdownv2(result.get('trend', 'N/A').replace("_", " ").title())
-            entry_price = format_and_escape(result.get('entry_price'))
-            stop_loss = format_and_escape(result.get('stop_loss'))
-            tp1 = format_and_escape(result.get('take_profit_1'))
-            tp2 = format_and_escape(result.get('take_profit_2'))
-            tp3 = format_and_escape(result.get('take_profit_3'))
+            trend_raw = result.get('trend', 'N/A').replace("_", " ").title()
+            trend = TelegramHandler.escape_markdownv2(trend_raw)
             
-            trend_emoji = "🔽" if "Bullish" in result.get('trend', '') else "🔼"
+            entry_price = self.format_and_escape(result.get('entry_price'))
+            stop_loss = self.format_and_escape(result.get('stop_loss'))
+            tp1 = self.format_and_escape(result.get('take_profit_1'))
+            tp2 = self.format_and_escape(result.get('take_profit_2'))
+            tp3 = self.format_and_escape(result.get('take_profit_3'))
 
-            # Build the detailed message string for one signal
+            trend_emoji = "🔼" if "Bullish" in trend_raw else "🔽"
+
             signal_detail = (
                 f"\n\n----------------------------------------\n\n"
                 f" #{trend} // {trend_emoji} // {symbol} \n"
@@ -226,8 +228,9 @@ class NotificationHandler:
                 f"🎯TP2: {tp2}\n"
                 f"🎯TP3: {tp3}"
             )
+
             message_parts.append(signal_detail)
-        
+
         full_message = "".join(message_parts)
 
         try:
@@ -239,6 +242,7 @@ class NotificationHandler:
             self.logger.info(f"Successfully sent detailed signal alert for {len(analysis_results)} symbols.")
         except Exception as e:
             self.logger.error(f"Could not send detailed signal batch: {e}", exc_info=True)
+
 
     async def send_summary_report(self, stats: Dict[str, Any]):
         """Formats and sends a periodic performance report."""
