@@ -15,7 +15,7 @@ from database_handler import init_sqlite_db
 from analysis_engine import process_symbol
 from telegram_handler import TelegramHandler
 from notifications import NotificationHandler
-from result import get_win_loss_stats
+from results import get_win_loss_stats
 # Import the new function from updater.py
 from updater import get_usdt_futures_symbols, check_signal_outcomes
 
