@@ -79,7 +79,7 @@ TREND_SIDEWAYS = "SIDEWAYS"
 LOOP_SLEEP_INTERVAL_SECONDS = 600 # 10 phút
 
 # Tần suất vòng lặp kiểm tra tín hiệu mới trong DB để gửi (Đã rút ngắn)
-SIGNAL_CHECK_INTERVAL_SECONDS = 60 # 1 phút (Để nhận thông báo tín hiệu nhanh hơn)
+SIGNAL_CHECK_INTERVAL_SECONDS = 300 # 1 phút (Để nhận thông báo tín hiệu nhanh hơn)
 
 # Tần suất vòng lặp cập nhật trạng thái trade TP/SL (Đã rút ngắn)
 UPDATER_INTERVAL_SECONDS = 300 # 5 phút (Để kiểm tra thắng/thua nhanh hơn)
