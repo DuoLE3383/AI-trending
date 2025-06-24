@@ -9,16 +9,19 @@ from market_data_handler import get_market_data
 logger = logging.getLogger(__name__)
 
 
+# In updater.py
+
 async def get_usdt_futures_symbols(client: AsyncClient) -> set:
     """
     Fetches all actively trading USDT-margined perpetual futures symbols from Binance.
-    This is called once at startup to create the list of pairs to monitor.
     """
     logger.info("Fetching all active USDT perpetual futures symbols from Binance...")
     try:
-        # Use get_futures_exchange_info() for the Futures market
-        exchange_info = await client.get_futures_exchange_info()
+        # --- THIS IS THE FINAL, CORRECTED METHOD NAME ---
+        # The correct method for the Futures API is fapi_get_exchange_info()
+        exchange_info = await client.fapi_get_exchange_info()
         
+        # The rest of this logic is correct and will work with the data returned.
         symbols = {
             s['symbol'] for s in exchange_info['symbols']
             if s.get('contractType') == 'PERPETUAL' 
