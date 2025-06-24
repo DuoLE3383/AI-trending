@@ -84,7 +84,7 @@ async def check_signal_outcomes(client: AsyncClient) -> None:
     for signal in active_signals:
         # Using .get() provides a default value to prevent errors if a key is missing
         symbol = signal['symbol']
-        trend = signal.get('trend')
+        trend = signal('trend')
         sl = signal.get('stop_loss')
         tp1 = signal.get('take_profit_1')
 
