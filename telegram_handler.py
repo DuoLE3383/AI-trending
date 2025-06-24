@@ -20,16 +20,16 @@ class TelegramHandler:
         escape_chars = r'([_*\[\]()~`>#+\-=|{}.!])'
         return re.sub(escape_chars, r'\\\1', text)
 
-    async def send_message(self, chat_id: str, message: str, **kwargs):
+    async def send_message(self, chat_id: str, text: str, **kwargs):
         """Sends a text-only message."""
         url = f"{self.base_url}/sendMessage"
-        params = {'chat_id': chat_id, 'text': message, **kwargs}
-        
-        # PHIÊN BẢN DEBUG: Tạm thời bỏ qua try/except để thấy lỗi thật
+        params = {'chat_id': chat_id, 'text': text, **kwargs}
+
         async with httpx.AsyncClient() as client:
             response = await client.post(url, json=params, timeout=20)
-            response.raise_for_status() # Sẽ crash nếu có lỗi
+            response.raise_for_status()
         logger.info("Telegram text message sent successfully.")
+
 
 
     async def send_photo(
