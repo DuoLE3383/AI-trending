@@ -273,7 +273,7 @@ class NotificationHandler:
         message = (
             f"✅ Bot Status: ALIVE\n\n"
             f"The bot is running correctly and currently monitoring `{symbols_count}` symbols. "
-            f"No critical errors have been detected."
+            f"AI traning signal."
         )
         await self._send_to_both(message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
