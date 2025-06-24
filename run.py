@@ -160,9 +160,10 @@ async def main():
         if not all_symbols:
             logger.critical("Could not fetch a list of symbols to trade. Exiting.")
             sys.exit(1)
-        
-        logger.info(f"Bot will monitor {len(all_symbols)} symbols.")
+        logger.info(f"Bot will monitor {len(all_symbols)} symbols.") # Moved outside the error check
+        logger.info(f"Symbols to monitor: {all_symbols}") # Added logging for the fetched symbols
         await notifier.send_startup_notification(symbols_count=len(all_symbols))
+        logger.info("Startup notification sent successfully.") # Added success log
 
         logger.info("--- Bot is now running. All loops are active. ---")
         await asyncio.gather(
