@@ -141,5 +141,3 @@ class NotificationHandler:
             self.logger.info(f"Successfully sent outcome notification for {symbol}.")
         except Exception as e:
             self.logger.error(f"Failed to send trade outcome notification for {trade_details['symbol']}: {e}", exc_info=True)
-
-�
