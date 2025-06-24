@@ -61,17 +61,17 @@ class NotificationHandler:
             return
             
         logger.info(f"Preparing to send a batch of {len(analysis_results)} signals.")
-        header = f"🔥 *{len(analysis_results)} New Signal(s) Found\\!* 🔥\n"
+        header = f"🔥 {len(analysis_results)} New Signal Found\!* 🔥\n"
         message_lines = []
         
         for result in analysis_results:
             symbol = TelegramHandler.escape_markdownv2(result.get('symbol', 'N/A'))
             trend = TelegramHandler.escape_markdownv2(result.get('trend', 'N/A').replace("_", " ").title())
             price = result.get('last_price', 0)
-            formatted_price = TelegramHandler.escape_markdownv2(f"{price:.4f}") # Format and escape price
+            formatted_price = TelegramHandler.escape_markdownv2(f"{price:.5f}") # Format and escape price
             
-            trend_emoji = "🔼" if "Bullish" in result.get('trend', '') else "🔽"
-            formatted_line = f"{trend_emoji} *{symbol}* \\- {trend} at `${formatted_price}`"
+            trend_emoji = "💹" if "Bullish" in result.get('trend', '') else "🔻"
+            formatted_line = f"{trend_emoji} {symbol} 🆘 {trend} 📌 ENTRY: ${formatted_price}"
             message_lines.append(formatted_line)
         
         body = "\n".join(message_lines)
