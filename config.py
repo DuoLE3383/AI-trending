@@ -24,7 +24,7 @@ SQLITE_DB_PATH = "trend_analysis.db"
 # ==============================================================================
 TIMEFRAME = "1h"
 # Số lượng nến tối đa để tải về mỗi lần phân tích
-DATA_FETCH_LIMIT = 300 # Đã cập nhật theo yêu cầu trong file cũ của bạn
+DATA_FETCH_LIMIT = 500 # Đã cập nhật theo yêu cầu trong file cũ của bạn
 
 # --- Cài đặt cho việc lấy symbol động ---
 # Đã BẬT chế độ lấy cặp giao dịch tự động từ Binance.
@@ -58,10 +58,10 @@ MIN_VOLUME_RATIO = 1.0 # Volume hiện tại phải >= 1.0 * Volume SMA
 MIN_ATR_PERCENT = 1.3
 
 # Trade Parameter Multipliers (dựa trên ATR)
-ATR_MULTIPLIER_SL = 1.5   # StopLoss = 1.5 * ATR
-ATR_MULTIPLIER_TP1 = 1.5  # TakeProfit 1 = 1.0 * ATR
-ATR_MULTIPLIER_TP2 = 2.0  # TakeProfit 2 = 2.0 * ATR
-ATR_MULTIPLIER_TP3 = 3.0  # TakeProfit 3 = 3.0 * ATR
+ATR_MULTIPLIER_SL = 2.5   
+ATR_MULTIPLIER_TP1 = 2.8 
+ATR_MULTIPLIER_TP2 = 3.3  
+ATR_MULTIPLIER_TP3 = 4.0  
 
 # ==============================================================================
 # === 5. TREND DEFINITIONS
