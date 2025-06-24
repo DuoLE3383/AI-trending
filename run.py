@@ -162,8 +162,16 @@ async def main():
             sys.exit(1)
         
         logger.info(f"Bot will monitor {len(all_symbols)} symbols.")
-        logger.info(f"Sending startup notification with {len(all_symbols)} symbols")
-        await notifier.send_startup_notification(symbols_count=len(all_symbols))
+        logger.info(f"Sending startup notification with {len(all_symbols)} symbols")max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                await notifier.send_startup_notification(symbols_count=len(all_symbols))
+                break  # Thành công thì thoát loop
+            except Exception as e:
+                print(f"[Retry {attempt+1}/{max_retries}] ❌ Failed to send startup notification: {e}")
+                if attempt == max_retries - 1:
+                    raise  # Quăng lỗi nếu thử lần cuối vẫn thất bại
+                await asyncio.sleep(2)  # Đợi 2 giây rồi thử lại
 
         logger.info("--- Bot is now running. All loops are active. ---")
         await asyncio.gather(
