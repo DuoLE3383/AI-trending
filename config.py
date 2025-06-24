@@ -24,7 +24,7 @@ SQLITE_DB_PATH = "trend_analysis.db"
 # ==============================================================================
 TIMEFRAME = "1h"
 # Số lượng nến tối đa để tải về mỗi lần phân tích
-DATA_FETCH_LIMIT = 300 # Đã cập nhật theo yêu cầu trong file cũ của bạn
+DATA_FETCH_LIMIT = 500 # Đã cập nhật theo yêu cầu trong file cũ của bạn
 
 # --- Cài đặt cho việc lấy symbol động ---
 # Đã BẬT chế độ lấy cặp giao dịch tự động từ Binance.
