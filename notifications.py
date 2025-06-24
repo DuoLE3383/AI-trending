@@ -185,11 +185,11 @@ class NotificationHandler:
         
         self.logger.info(f"Preparing to send a batch of {len(analysis_results)} detailed signals.")
         
-        message_parts = [f"✅ {len(analysis_results)} New Signal(s) Found\!* 🔥"]
+        message_parts = [f"🆘 {len(analysis_results)} New Signal(s) Found! 🔥"]
         
         for result in analysis_results:
             # Helper function to safely format and escape numbers
-            def format_and_escape(value, precision=4):
+            def format_and_escape(value, precision=5):
                 if value is None:
                     return 'N/A'
                 formatted_value = f"{value:.{precision}f}"
@@ -209,7 +209,7 @@ class NotificationHandler:
             # Build the detailed message string for one signal
             signal_detail = (
                 f"\n\n----------------------------------------\n\n"
-                f" {trend}{symbol} {trend_emoji}  \n"
+                f" #{trend} // {trend_emoji} // {symbol} \n"
                 f"📌Entry: {entry_price}\n"
                 f"❌SL: {stop_loss}\n"
                 f"🎯TP1: {tp1}\n"
