@@ -199,7 +199,11 @@ class NotificationHandler:
                 if value is None:
                     return 'N/A'
                 formatted_value = f"{value:.{precision}f}"
-                return TelegramHandler.escape_markdownv2(formatted_value)
+                def escape_markdownv2_without_dot(text: str) -> str:
+                    escape_chars = r"_*[]()~`>#+-=|{}!"  # bỏ dấu `.`
+                    for ch in escape_chars:
+                        text = text.replace(ch, f"\\{ch}")
+                    return text
 
             # Extract and format all necessary data
             symbol = TelegramHandler.escape_markdownv2(result.get('symbol', 'N/A'))
