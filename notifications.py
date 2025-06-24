@@ -40,7 +40,7 @@ class NotificationHandler:
         )
         link = "https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P"
         footer = (
-            f"\n\n----------------------------------------\n"
+            f"\n\n\\----------------------------------------\\\n"
             f"Receive a *100 USD trading fee rebate voucher* each: {link}"
         )
         full_message = message_body + footer# Footer can be added if desired
