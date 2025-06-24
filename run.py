@@ -21,7 +21,7 @@ from updater import get_usdt_futures_symbols, check_signal_outcomes
 
 # --- Logging Configuration ---
 logging.basicConfig(
-    level=logging.INFO, 
+    level=logging.DEBUG, 
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
     datefmt='%Y-%m-%d %H:%M:%S'
 )
