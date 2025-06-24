@@ -26,6 +26,46 @@ class NotificationHandler:
         except Exception:
             return '—'
 
+    async def _send_to_both(self, message: str, thread_id: int = None, parse_mode: str = "MarkdownV2"):
+        try:
+            await self.telegram_handler.send_message(
+                chat_id=config.TELEGRAM_CHAT_ID,
+                message=message,
+                message_thread_id=thread_id,
+                parse_mode=parse_mode
+            )
+            self.logger.info("✅ Sent to group.")
+
+            await self.telegram_handler.send_message(
+                chat_id=config.TELEGRAM_CHANNEL_ID,
+                message=message,
+                parse_mode=parse_mode
+            )
+            self.logger.info("✅ Sent to channel.")
+        except Exception as e:
+            self.logger.error(f"❌ Failed to send to both group and channel: {e}", exc_info=True)
+
+    async def _send_photo_to_both(self, photo: str, caption: str, thread_id: int = None, parse_mode: str = "MarkdownV2"):
+        try:
+            await self.telegram_handler.send_photo(
+                chat_id=config.TELEGRAM_CHAT_ID,
+                photo=photo,
+                caption=caption,
+                message_thread_id=thread_id,
+                parse_mode=parse_mode
+            )
+            self.logger.info("✅ Photo sent to group.")
+
+            await self.telegram_handler.send_photo(
+                chat_id=config.TELEGRAM_CHANNEL_ID,
+                photo=photo,
+                caption=caption,
+                parse_mode=parse_mode
+            )
+            self.logger.info("✅ Photo sent to channel.")
+        except Exception as e:
+            self.logger.error(f"❌ Failed to send photo to both group and channel: {e}", exc_info=True)
+
     async def send_startup_notification(self, symbols_count: int):
         self.logger.info("Preparing startup notification with photo...")
         try:
@@ -34,22 +74,14 @@ class NotificationHandler:
                 f"🚀 *AI Trading Bot Activated* 🚀\n\n"
                 f"The bot is now live and analyzing `{symbols_count}` pairs on the `{timeframe_escaped}` timeframe\\.\n\n"
                 f"📡 Get ready for real\-time market signals every 10 minutes\\!\n\n"
-                f"💰 *New to Binance\\? Get a \\$100 Bonus\\!*\\n"
+                f"💰 *New to Binance\? Get a \\$100 Bonus\\!*\\n"
                 f"Sign up and earn a *100 USD trading fee rebate voucher\\!*\\n\n"
                 f"🔗 *Register Now\:*\n"
                 f"https://www\.binance\.com/activity/referral\-entry/CPA\?ref\=CPA\_006MBW985P\n\n"
-                f"\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-"
+                f"\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-"
             )
             photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
-
-            await self.telegram_handler.send_photo(
-                chat_id=config.TELEGRAM_CHAT_ID,
-                photo=photo_url,
-                caption=caption_text,
-                message_thread_id=config.TELEGRAM_MESSAGE_THREAD_ID,
-                parse_mode="MarkdownV2"
-            )
-            self.logger.info("Startup notification with photo sent successfully.")
+            await self._send_photo_to_both(photo=photo_url, caption=caption_text, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
         except Exception as e:
             self.logger.error(f"Failed to send startup notification: {e}", exc_info=True)
 
@@ -87,16 +119,7 @@ class NotificationHandler:
             message_parts.append(signal_detail)
 
         full_message = "".join(message_parts)
-
-        try:
-            await self.telegram_handler.send_message(
-                chat_id=config.TELEGRAM_CHAT_ID,
-                message=full_message,
-                message_thread_id=config.TELEGRAM_MESSAGE_THREAD_ID
-            )
-            self.logger.info(f"Successfully sent detailed signal alert for {len(analysis_results)} symbols.")
-        except Exception as e:
-            self.logger.error(f"Could not send detailed signal batch: {e}", exc_info=True)
+        await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
     async def send_summary_report(self, stats: Dict[str, Any]):
         self.logger.info("Preparing performance summary report...")
@@ -114,16 +137,7 @@ class NotificationHandler:
             body = "\nNo completed trades to analyze yet."
 
         full_message = header + body
-
-        try:
-            await self.telegram_handler.send_message(
-                chat_id=config.TELEGRAM_CHAT_ID,
-                message=full_message,
-                message_thread_id=config.TELEGRAM_MESSAGE_THREAD_ID
-            )
-            self.logger.info("Successfully sent performance report to Telegram.")
-        except Exception as e:
-            self.logger.error(f"Failed to send performance report: {e}", exc_info=True)
+        await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
     async def send_heartbeat_notification(self, symbols_count: int):
         self.logger.info("Sending heartbeat notification...")
@@ -132,16 +146,7 @@ class NotificationHandler:
             f"The bot is running correctly and currently monitoring `{symbols_count}` symbols\\. "
             f"No critical errors have been detected\\."
         )
-        try:
-            await self.telegram_handler.send_message(
-                chat_id=config.TELEGRAM_CHAT_ID,
-                message=message,
-                message_thread_id=config.TELEGRAM_MESSAGE_THREAD_ID,
-                disable_notification=True
-            )
-            self.logger.info("Heartbeat notification sent successfully.")
-        except Exception as e:
-            self.logger.error(f"Failed to send heartbeat notification: {e}", exc_info=True)
+        await self._send_to_both(message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
     async def send_trade_outcome_notification(self, trade_details: Dict[str, Any]):
         self.logger.info(f"Preparing outcome notification for {trade_details['symbol']}...")
@@ -159,11 +164,6 @@ class NotificationHandler:
                 f"Outcome: `{status}`"
             )
 
-            await self.telegram_handler.send_message(
-                chat_id=config.TELEGRAM_CHAT_ID,
-                message=message,
-                message_thread_id=config.TELEGRAM_MESSAGE_THREAD_ID
-            )
-            self.logger.info(f"Successfully sent outcome notification for {symbol}.")
+            await self._send_to_both(message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
         except Exception as e:
             self.logger.error(f"Failed to send trade outcome notification for {trade_details['symbol']}: {e}", exc_info=True)
