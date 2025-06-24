@@ -22,7 +22,7 @@ SQLITE_DB_PATH = "trend_analysis.db"
 # ==============================================================================
 # === 3. SYMBOL & MARKET DATA SETTINGS
 # ==============================================================================
-TIMEFRAME = "1h"
+TIMEFRAME = "15m"
 # Số lượng nến tối đa để tải về mỗi lần phân tích
 DATA_FETCH_LIMIT = 300 # Đã cập nhật theo yêu cầu trong file cũ của bạn
 
