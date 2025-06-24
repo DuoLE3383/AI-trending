@@ -162,7 +162,8 @@ async def main():
             sys.exit(1)
         
         logger.info(f"Bot will monitor {len(all_symbols)} symbols.")
-        logger.info(f"Sending startup notification with {len(all_symbols)} symbols")max_retries = 3
+        logger.info(f"Sending startup notification with {len(all_symbols)} symbols")
+        max_retries = 3
         for attempt in range(max_retries):
             try:
                 await notifier.send_startup_notification(symbols_count=len(all_symbols))
