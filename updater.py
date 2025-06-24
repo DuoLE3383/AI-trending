@@ -19,7 +19,7 @@ async def get_usdt_futures_symbols(client: AsyncClient) -> set:
     try:
         # --- THIS IS THE FINAL, CORRECTED METHOD NAME ---
         # The correct method for the Futures API is fapi_get_exchange_info()
-        exchange_info = await client.fapi_get_exchange_info()
+        exchange_info = await client.api_get_exchange_info()
         
         # The rest of this logic is correct and will work with the data returned.
         symbols = {
