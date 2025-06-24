@@ -14,7 +14,7 @@ async def get_market_data(client: Client, symbol: str, timeframe: str, limit: in
         logger.info(f"--- [DEBUG] Sending API request for symbol='{symbol}', interval='{timeframe}', limit={limit}")
         # ================================
 
-        klines = await client.get_klines(symbol=symbol, interval=timeframe, limit=limit)
+        klines = await client.futures_klines(symbol=symbol, interval=timeframe, limit=limit)
         
         # === LOG DEBUG MỚI THÊM VÀO ===
         logger.info(f"--- [DEBUG] Received raw API response for {symbol}. Number of klines (rows) = {len(klines)}")
