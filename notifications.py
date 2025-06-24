@@ -36,7 +36,7 @@ class NotificationHandler:
         message_body = (
             f"🚀 *AI Trading Bot has been successfully activated\\!* 🚀\n\n"
             f"✨ The bot is now live and analyzing `{symbols_count}` USDT pairs on the `{timeframe_escaped}` timeframe\\.\n"
-            f"📡 Get ready for real\\-time market signals\\!"
+            f"📡 Get ready for real\\-time market signals\\!Receive a 100 USD trading fee rebate voucher each: https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P"
         )
         full_message = message_body # Footer can be added if desired
 
