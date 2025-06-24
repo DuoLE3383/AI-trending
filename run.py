@@ -171,7 +171,8 @@ async def main():
             updater_loop(client),
             summary_loop(notifier),
             heartbeat_loop(notifier, all_symbols),
-            outcome_check_loop(notifier)
+            outcome_check_loop(notifier),
+            training_loop()  # 🧠 Model training every 8h
         )
     except Exception as main_exc:
         logger.critical(f"A fatal error occurred in the main execution block: {main_exc}", exc_info=True)
@@ -187,3 +188,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Bot stopped by user (Ctrl+C).")
+
