@@ -2,6 +2,7 @@
 import httpx
 import logging
 import re
+from typing import Union
 
 logger = logging.getLogger(__name__)
 
@@ -14,37 +15,53 @@ class TelegramHandler:
 
     @staticmethod
     def escape_markdownv2(text: str) -> str:
-        """
-        Escapes text for Telegram's MarkdownV2 parse mode.
-        """
         if not isinstance(text, str):
             text = str(text)
         escape_chars = r'([_*\[\]()~`>#+\-=|{}.!])'
         return re.sub(escape_chars, r'\\\1', text)
 
-    async def send_message(self, chat_id: str, message: str, message_thread_id: str = None, parse_mode: str = "MarkdownV2"):
-        """
-        Sends a message to a given Telegram chat.
-        This version uses 'message' as the parameter name.
-        """
+    async def send_message(self, chat_id: str, message: str, **kwargs):
+        """Sends a text-only message."""
         url = f"{self.base_url}/sendMessage"
-        params = {
-            'chat_id': chat_id,
-            'text': message,  # The API requires the key 'text', but our function uses 'message'
-            'parse_mode': parse_mode,
-            'disable_web_page_preview': True
-        }
-        if message_thread_id:
-            params['message_thread_id'] = message_thread_id
-
+        params = {'chat_id': chat_id, 'text': message, **kwargs}
+        
+        # PHIÊN BẢN DEBUG: Tạm thời bỏ qua try/except để thấy lỗi thật
         async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(url, json=params, timeout=20)
-                response.raise_for_status()
-                logger.info("Telegram message sent successfully.")
-            except httpx.HTTPStatusError as e:
-                logger.error(f"Telegram API Error: {e.response.status_code} - {e.response.text}")
-            except httpx.RequestError as e:
-                logger.error(f"An error occurred while requesting Telegram API: {e}")
-            except Exception as e:
-                logger.error(f"An unexpected error occurred when sending Telegram message: {e}")
+            response = await client.post(url, json=params, timeout=20)
+            response.raise_for_status() # Sẽ crash nếu có lỗi
+        logger.info("Telegram text message sent successfully.")
+
+
+    async def send_photo(
+        self, 
+        chat_id: str, 
+        photo: Union[str, bytes], 
+        caption: str = "", 
+        **kwargs
+    ):
+        """Sends a photo with a caption."""
+        url = f"{self.base_url}/sendPhoto"
+        
+        data = {'chat_id': chat_id, 'caption': caption, **kwargs}
+        files = None
+        
+        if isinstance(photo, str):
+            data['photo'] = photo
+        elif isinstance(photo, bytes):
+            files = {'photo': ('image.png', photo, 'image/png')}
+        else:
+            logger.error("Invalid photo type. Must be a URL (str) or bytes.")
+            return
+
+        # PHIÊN BẢN DEBUG: Tạm thời bỏ qua try/except để thấy lỗi thật
+        async with httpx.AsyncClient() as client:
+            if files:
+                response = await client.post(url, data=data, files=files, timeout=30)
+            else:
+                response = await client.post(url, json=data, timeout=30)
+            
+            # Dòng này sẽ làm chương trình CRASH nếu Telegram trả về lỗi (ví dụ: 400, 403)
+            # và cho chúng ta thấy traceback đầy đủ.
+            response.raise_for_status() 
+
+        logger.info("Telegram photo sent successfully.")
