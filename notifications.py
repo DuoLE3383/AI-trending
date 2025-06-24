@@ -169,7 +169,7 @@ class NotificationHandler:
                 f"https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P\n\n"
                 f"\\----------------------------------------\\\n"
             )
-            photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png"
+            photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
 
             await self.telegram_handler.send_photo(
                 chat_id=config.TELEGRAM_CHAT_ID,
