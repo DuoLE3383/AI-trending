@@ -44,7 +44,7 @@ async def analysis_loop(client: AsyncClient, symbols_to_monitor: set):
         logger.info(f"--- Starting analysis cycle for {len(symbols_to_monitor)} symbols (max {CONCURRENT_REQUESTS} at a time) ---")
         tasks = [process_with_semaphore(symbol) for symbol in list(symbols_to_monitor)]
         await asyncio.gather(*tasks, return_exceptions=True)
-        logger.info(f"--- Analysis cycle complete. Sleeping for {config.LOOP_SLEEP_INTERVAL_SECONDS} seconds. ---")
+        logger.info(f"--- Analysis cycle complete. symbols_count={len(symbols_to_monitor)} PAIRS. Sleeping for {config.LOOP_SLEEP_INTERVAL_SECONDS} seconds. ---")
         await asyncio.sleep(config.LOOP_SLEEP_INTERVAL_SECONDS)
 
 async def signal_check_loop(notifier: NotificationHandler):
