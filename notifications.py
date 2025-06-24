@@ -156,7 +156,7 @@ class NotificationHandler:
     def __init__(self, telegram_handler: TelegramHandler):
         self.telegram_handler = telegram_handler
 
-    async def send_startup_notification(self, symbols_count: int):
+    async def send_startup_notification(logger, self, symbols_count: int):
         """Sends a startup notification with a photo."""
         self.logger.info("Preparing startup notification with photo...")
         try:
