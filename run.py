@@ -21,7 +21,7 @@ from updater import get_usdt_futures_symbols, check_signal_outcomes
 
 # --- Logging Configuration ---
 logging.basicConfig(
-    level=logging.DEBUG, 
+    level=logging.INFO, 
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
     datefmt='%Y-%m-%d %H:%M:%S'
 )
@@ -37,30 +37,13 @@ async def analysis_loop(client: AsyncClient, symbols_to_monitor: set):
     semaphore = asyncio.Semaphore(CONCURRENT_REQUESTS)
     
     async def process_with_semaphore(symbol: str):
-        """Wrapper to process a symbol with semaphore and detailed error handling."""
-        try:
-            async with semaphore:
-                await process_symbol(client, symbol)
-            return None # Indicate success
-        except Exception as e:
-            return (symbol, e) # On failure, return the symbol and the exception
+        async with semaphore:
+            await process_symbol(client, symbol)
 
     while True:
         logger.info(f"--- Starting analysis cycle for {len(symbols_to_monitor)} symbols (max {CONCURRENT_REQUESTS} at a time) ---")
-        tasks = [process_with_semaphore(symbol) for symbol in symbols_to_monitor]
-        results = await asyncio.gather(*tasks)
-
-        # Check for and log any exceptions that were caught by our wrapper
-        failed_count = 0
-        for res in results:
-            if res is not None:
-                failed_count += 1
-                symbol, error = res
-                logger.error(f"Failed to process symbol '{symbol}' during analysis: {error}", exc_info=False)
-        
-        if failed_count > 0:
-            logger.warning(f"{failed_count} symbols failed to process in this cycle.")
-
+        tasks = [process_with_semaphore(symbol) for symbol in list(symbols_to_monitor)]
+        await asyncio.gather(*tasks, return_exceptions=True)
         logger.info(f"--- Analysis cycle complete. symbols_count={len(symbols_to_monitor)} PAIRS. Sleeping for {config.LOOP_SLEEP_INTERVAL_SECONDS} seconds. ---")
         await asyncio.sleep(config.LOOP_SLEEP_INTERVAL_SECONDS)
 
@@ -177,10 +160,9 @@ async def main():
         if not all_symbols:
             logger.critical("Could not fetch a list of symbols to trade. Exiting.")
             sys.exit(1)
-        logger.info(f"Bot will monitor {len(all_symbols)} symbols.") # Moved outside the error check
-        logger.info(f"Symbols to monitor: {all_symbols}") # Added logging for the fetched symbols
+        
+        logger.info(f"Bot will monitor {len(all_symbols)} symbols.")
         await notifier.send_startup_notification(symbols_count=len(all_symbols))
-        logger.info("Startup notification sent successfully.") # Added success log
 
         logger.info("--- Bot is now running. All loops are active. ---")
         await asyncio.gather(
