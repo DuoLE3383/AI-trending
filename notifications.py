@@ -117,7 +117,7 @@ class NotificationHandler:
                 f"🚀 *AI Trading Bot Activated* 🚀\n\n"
                 f"The bot is now live and analyzing `{symbols_count}` pairs on the `{timeframe_escaped}` timeframe\\.\n\n"
                 f"📡 Get ready for real\-time market signals every 10 minutes\\!\n\n"
-                f"💰 *New to Binance\? Get a \\$100 Bonus\\!*\\n"
+                f"💰 *New to #Binance\? Get a \\$100 Bonus\\!*\\n"
                 f"Sign up and earn a *100 USD trading fee rebate voucher\\!*\\n\n"
                 f"🔗 *Register Now\:*\n"
                 f"https://www\.binance\.com/activity/referral\-entry/CPA\?ref\=CPA\_006MBW985P\n\n"
