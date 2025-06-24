@@ -1,28 +1,51 @@
 # updater.py
 import logging
 import sqlite3
-from binance import AsyncClient as Client # Import AsyncClient để rõ ràng hơn
+import pandas as pd
+from binance import AsyncClient
 import config
 from market_data_handler import get_market_data
 
 logger = logging.getLogger(__name__)
 
-def update_signal_outcome(db_path: str, row_id: int, new_status: str) -> None:
+
+async def get_usdt_futures_symbols(client: AsyncClient) -> set:
     """
-    Cập nhật trạng thái của một tín hiệu trong database (SL_HIT hoặc TP1_HIT).
-    Hàm này là đồng bộ (synchronous) vì nó chỉ tương tác với file local.
+    Fetches all actively trading USDT-margined perpetual futures symbols from Binance.
+    This is called once at startup to create the list of pairs to monitor.
+    """
+    logger.info("Fetching all active USDT perpetual futures symbols from Binance...")
+    try:
+        # Use get_futures_exchange_info() for the Futures market
+        exchange_info = await client.get_futures_exchange_info()
+        
+        symbols = {
+            s['symbol'] for s in exchange_info['symbols']
+            if s.get('contractType') == 'PERPETUAL' 
+            and s.get('quoteAsset') == 'USDT'
+            and s.get('status') == 'TRADING'
+        }
+        
+        logger.info(f"Successfully fetched {len(symbols)} active symbols.")
+        return symbols
+    except Exception as e:
+        logger.error(f"Failed to fetch symbol list from Binance: {e}", exc_info=True)
+        return set()
+
+
+def _update_signal_outcome(db_path: str, row_id: int, new_status: str) -> None:
+    """
+    Private helper function to update a signal's status in the database (e.g., SL_HIT or TP1_HIT).
     """
     try:
         with sqlite3.connect(db_path) as conn:
-            # Thêm cột outcome_timestamp_utc để ghi lại thời điểm trade kết thúc
-            # Câu lệnh này sẽ không báo lỗi nếu cột đã tồn tại
+            # This will add the column if it doesn't exist, and do nothing if it does.
             try:
                 conn.execute("ALTER TABLE trend_analysis ADD COLUMN outcome_timestamp_utc TEXT;")
             except sqlite3.OperationalError:
-                pass # Cột đã tồn tại, bỏ qua
+                pass # Column already exists, which is fine.
 
-            # Cập nhật trạng thái và thời gian kết thúc
-            import pandas as pd
+            # Update status and the outcome timestamp
             timestamp_utc = pd.to_datetime('now', utc=True).isoformat()
             conn.execute(
                 "UPDATE trend_analysis SET status = ?, outcome_timestamp_utc = ? WHERE rowid = ?",
@@ -30,12 +53,12 @@ def update_signal_outcome(db_path: str, row_id: int, new_status: str) -> None:
             )
         logger.info(f"✅ Updated signal (rowid: {row_id}) to status: {new_status}")
     except sqlite3.Error as e:
-        logger.error(f"❌ Failed to update database for rowid {row_id}: {e}")
+        logger.error(f"❌ Failed to update database for rowid {row_id}: {e}", exc_info=True)
 
-async def check_signal_outcomes(binance_client: Client) -> None:
+
+async def check_signal_outcomes(client: AsyncClient) -> None:
     """
-    Kiểm tra các tín hiệu đang 'ACTIVE' để xem chúng đã chạm Stop Loss hay Take Profit chưa.
-    Hàm này là bất đồng bộ (asynchronous) vì nó gọi API của Binance.
+    Checks all 'ACTIVE' signals in the database to see if they have hit Stop Loss or Take Profit.
     """
     logger.info("--- Checking for trade outcomes (TP/SL)... ---")
     db_path = config.SQLITE_DB_PATH
@@ -53,44 +76,41 @@ async def check_signal_outcomes(binance_client: Client) -> None:
 
     logger.info(f"Found {len(active_signals)} active signal(s) to check.")
     for signal in active_signals:
+        # Using .get() provides a default value to prevent errors if a key is missing
         symbol = signal['symbol']
-        trend = signal['trend']
-        sl = signal['stop_loss']
-        tp1 = signal['take_profit_1']
+        trend = signal.get('trend')
+        sl = signal.get('stop_loss')
+        tp1 = signal.get('take_profit_1')
 
         if not all([symbol, trend, sl, tp1]):
             logger.warning(f"Signal (rowid: {signal['rowid']}) is missing critical data. Skipping.")
             continue
 
         try:
-            # === KHỐI LỆNH ĐÃ ĐƯỢC SỬA LỖI ===
             market_data = await get_market_data(
-                client=binance_client,
+                client=client,
                 symbol=symbol,
-                timeframe=config.TIMEFRAME,  # 1. Thêm timeframe bị thiếu
-                limit=15                      # 2. Sửa tên tham số và dùng giá trị nhỏ
+                timeframe=config.TIMEFRAME,
+                limit=15 
             )
-            # 3. Đã thêm 'await' ở đầu dòng
 
-            if market_data.empty:
+            if market_data is None or market_data.empty:
                 logger.warning(f"Could not fetch market data for {symbol} in updater loop. Skipping.")
                 continue
 
-            # Lấy giá cao nhất và thấp nhất trong các nến gần đây
             recent_low = market_data['low'].min()
             recent_high = market_data['high'].max()
             
-            # Logic kiểm tra SL/TP
             if trend == config.TREND_STRONG_BULLISH:
                 if recent_low <= sl:
-                    update_signal_outcome(db_path, signal['rowid'], 'SL_HIT')
+                    _update_signal_outcome(db_path, signal['rowid'], 'SL_HIT')
                 elif recent_high >= tp1:
-                    update_signal_outcome(db_path, signal['rowid'], 'TP1_HIT')
+                    _update_signal_outcome(db_path, signal['rowid'], 'TP1_HIT')
             elif trend == config.TREND_STRONG_BEARISH:
                 if recent_high >= sl:
-                    update_signal_outcome(db_path, signal['rowid'], 'SL_HIT')
+                    _update_signal_outcome(db_path, signal['rowid'], 'SL_HIT')
                 elif recent_low <= tp1:
-                    update_signal_outcome(db_path, signal['rowid'], 'TP1_HIT')
+                    _update_signal_outcome(db_path, signal['rowid'], 'TP1_HIT')
 
         except Exception as e:
             logger.error(f"An error occurred while checking signal for {symbol}: {e}", exc_info=True)
