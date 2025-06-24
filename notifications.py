@@ -75,7 +75,7 @@ class NotificationHandler:
         try:
             timeframe_escaped = TelegramHandler.escape_markdownv2(config.TIMEFRAME)
             caption_text = (
-                f"🚀 *AI Trading Bot Activated* 🚀\n\n"
+                f"🚀 *AI 🧠 Model training every 8h. Bot Activated* 🚀\n\n"
                 f"The bot is now live and analyzing `{symbols_count}` pairs on the `{timeframe_escaped}` timeframe\\.\n\n"
                 f"📡 Get ready for real\-time market signals every 10 minutes\\!\n\n"
                 f"💰 *New to Binance\? Get a \\$100 Bonus\\!*\\n"

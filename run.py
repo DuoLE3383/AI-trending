@@ -4,7 +4,7 @@ import logging
 import asyncio
 import sqlite3
 from dotenv import load_dotenv
-
+import training_loop
 # Load environment variables from .env file
 load_dotenv()
 
