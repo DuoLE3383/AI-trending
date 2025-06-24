@@ -11,17 +11,32 @@ logger = logging.getLogger(__name__)
 
 # In updater.py
 
+# In updater.py
+
 async def get_usdt_futures_symbols(client: AsyncClient) -> set:
     """
     Fetches all actively trading USDT-margined perpetual futures symbols from Binance.
     """
     logger.info("Fetching all active USDT perpetual futures symbols from Binance...")
     try:
-        # --- THIS IS THE FINAL, CORRECTED METHOD NAME ---
-        # The correct method for the Futures API is api_get_exchange_info()
-        exchange_info = await client.api_get_exchange_info()
-        
-        # The rest of this logic is correct and will work with the data returned.
+        # The correct method for the Futures API
+        exchange_info = await client.fapi_get_exchange_info()
+
+        # --- NEW DEBUGGING CODE to see what Binance is sending us ---
+        logger.info("Successfully received a response from the Binance API.")
+        if exchange_info and 'symbols' in exchange_info and exchange_info['symbols']:
+            total_symbols = len(exchange_info['symbols'])
+            logger.info(f"Total symbols received from API: {total_symbols}")
+            
+            # Print the first symbol as a sample to check its structure
+            first_symbol_sample = exchange_info['symbols'][0]
+            logger.info(f"Sample of first symbol's data: {first_symbol_sample}")
+        else:
+            logger.error("The data received from Binance is empty or not in the expected format.")
+            return set()
+        # --- END OF DEBUGGING CODE ---
+
+        # Original filtering logic
         symbols = {
             s['symbol'] for s in exchange_info['symbols']
             if s.get('contractType') == 'PERPETUAL' 
@@ -29,10 +44,12 @@ async def get_usdt_futures_symbols(client: AsyncClient) -> set:
             and s.get('status') == 'TRADING'
         }
         
-        logger.info(f"Successfully fetched {len(symbols)} active symbols.")
+        logger.info(f"Found {len(symbols)} symbols after applying filters.")
         return symbols
+        
     except Exception as e:
-        logger.error(f"Failed to fetch symbol list from Binance: {e}", exc_info=True)
+        # This will catch any error, including permission errors
+        logger.error(f"A critical error occurred while calling the Binance API: {e}", exc_info=True)
         return set()
 
 
