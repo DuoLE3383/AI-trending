@@ -22,14 +22,15 @@ SQLITE_DB_PATH = "trend_analysis.db"
 # ==============================================================================
 # === 3. SYMBOL & MARKET DATA SETTINGS
 # ==============================================================================
-TIMEFRAME = "15m"
-STATIC_SYMBOLS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT"]
+TIMEFRAME = "1h"
 # Số lượng nến tối đa để tải về mỗi lần phân tích
-DATA_FETCH_LIMIT = 300 # Bạn đã yêu cầu đổi thành 300
+DATA_FETCH_LIMIT = 300 # Đã cập nhật theo yêu cầu trong file cũ của bạn
 
-# Cài đặt cho việc lấy symbol động (chưa dùng tới trong phiên bản này)
-DYN_SYMBOLS_ENABLED = False
-DYN_SYMBOLS_UPDATE_INTERVAL_SECONDS = 6 * 3600  # 6 giờ
+# --- Cài đặt cho việc lấy symbol động ---
+# Đã BẬT chế độ lấy cặp giao dịch tự động từ Binance.
+DYN_SYMBOLS_ENABLED = True 
+# Danh sách tĩnh này không còn được sử dụng khi DYN_SYMBOLS_ENABLED = True
+# STATIC_SYMBOLS = ["BTCUSDT", "ETHUSDT"] 
 
 # ==============================================================================
 # === 4. ANALYSIS STRATEGY PARAMETERS
@@ -47,14 +48,14 @@ BBANDS_PERIOD = 20
 BBANDS_STD_DEV = 2.0
 
 # ATR Settings
-ATR_PERIOD = 14
+ATR_PERIOD = 13
 
 # Volume SMA Settings
 VOLUME_SMA_PERIOD = 20
 MIN_VOLUME_RATIO = 1.0 # Volume hiện tại phải >= 1.0 * Volume SMA
 
 # Volatility Filter: Tín hiệu sẽ bị bỏ qua nếu biến động (ATR) dưới mức này
-MIN_ATR_PERCENT = 0.4  # Yêu cầu biến động tối thiểu 0.4%
+MIN_ATR_PERCENT = 0.8
 
 # Trade Parameter Multipliers (dựa trên ATR)
 ATR_MULTIPLIER_SL = 1.5   # StopLoss = 1.5 * ATR
@@ -75,18 +76,19 @@ TREND_SIDEWAYS = "SIDEWAYS"
 # === 6. LOOP INTERVALS (tính bằng giây)
 # ==============================================================================
 # Thời gian nghỉ của vòng lặp phân tích chính
-LOOP_SLEEP_INTERVAL_SECONDS = 300
+LOOP_SLEEP_INTERVAL_SECONDS = 600 # 10 phút
 
-# Tần suất vòng lặp kiểm tra tín hiệu mới trong DB để gửi
-SIGNAL_CHECK_INTERVAL_SECONDS = 300 # Nên để ngắn để gửi tín hiệu nhanh
+# Tần suất vòng lặp kiểm tra tín hiệu mới trong DB để gửi (Đã rút ngắn)
+SIGNAL_CHECK_INTERVAL_SECONDS = 60 # 1 phút (Để nhận thông báo tín hiệu nhanh hơn)
 
-# Tần suất vòng lặp cập nhật trạng thái trade (TP/SL)
-UPDATER_INTERVAL_SECONDS = 600
+# Tần suất vòng lặp cập nhật trạng thái trade TP/SL (Đã rút ngắn)
+UPDATER_INTERVAL_SECONDS = 300 # 5 phút (Để kiểm tra thắng/thua nhanh hơn)
 
-# Tần suất vòng lặp gửi báo cáo tổng kết
-SUMMARY_INTERVAL_SECONDS = 3600 # 12 giờ
+# Tần suất vòng lặp gửi báo cáo tổng kết (Đã tăng lên)
+SUMMARY_INTERVAL_SECONDS = 14400 # 4 giờ (Để tránh spam báo cáo)
 
-HEARTBEAT_INTERVAL_SECONDS = 600 # 10 phút
+# Tần suất gửi tin nhắn "nhịp tim" báo bot còn sống
+HEARTBEAT_INTERVAL_SECONDS = 3600 # 1 giờ
 
 # ==============================================================================
 # === 7. PLACEHOLDER VALUES (Dùng để kiểm tra an toàn)
