@@ -172,7 +172,7 @@ async def main():
             summary_loop(notifier),
             heartbeat_loop(notifier, all_symbols),
             outcome_check_loop(notifier),
-            training_loop()  # 🧠 Model training every 8h
+            training_loop.training_loop()  # 🧠 Model training every 8h
         )
     except Exception as main_exc:
         logger.critical(f"A fatal error occurred in the main execution block: {main_exc}", exc_info=True)
