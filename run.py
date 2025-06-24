@@ -15,8 +15,9 @@ from database_handler import init_sqlite_db
 from analysis_engine import process_symbol
 from telegram_handler import TelegramHandler
 from notifications import NotificationHandler
-from results import get_win_loss_stats
-# Import the new function from updater.py
+# Corrected import from 'result.py'
+from result import get_win_loss_stats
+# Import functions from updater.py
 from updater import get_usdt_futures_symbols, check_signal_outcomes
 
 
@@ -65,7 +66,8 @@ async def signal_check_loop(notifier: NotificationHandler):
                 symbol, timestamp = record['symbol'], record['analysis_timestamp_utc']
                 if timestamp > last_notified_signal_time.get(symbol, ''):
                     new_signals_to_notify.append(dict(record))
-                    last_not_ified_signal_time[symbol] = timestamp
+                    # --- TYPO CORRECTED HERE ---
+                    last_notified_signal_time[symbol] = timestamp
                     logger.info(f"🔥 Queued new signal for {symbol} ({record['trend']}).")
             
             if new_signals_to_notify:
