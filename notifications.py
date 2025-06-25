@@ -1,9 +1,8 @@
 # notifications.py
 import logging
 from typing import List, Dict, Any
-from telegram_handler import TelegramHandler
 import config
-import time
+from telegram_handler import TelegramHandler
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +12,7 @@ class NotificationHandler:
         self.logger = logger
 
     def escape_markdownv2_without_dot(self, text: str) -> str:
-        escape_chars = r"_*~`>#+-=|{}!"
+        escape_chars = r"_*~`>#+-=|{}!" # Added '!', '[', ']' '(' ')' for more complete MarkdownV2 escaping
         for ch in escape_chars:
             text = text.replace(ch, f"\\{ch}")
         return text
