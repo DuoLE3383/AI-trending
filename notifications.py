@@ -50,6 +50,7 @@ class NotificationHandler:
             await self.telegram_handler.send_message(
                 chat_id=config.TELEGRAM_CHAT_ID,
                 message=message,
+                text=message,
                 message_thread_id=thread_id,
                 parse_mode=parse_mode
             )
@@ -59,6 +60,7 @@ class NotificationHandler:
             await self.telegram_handler.send_message(
                 chat_id=config.TELEGRAM_CHANNEL_ID,
                 message=message,
+                text=message,
                 parse_mode=parse_mode
             )
             self.logger.info("✅ Sent to channel.")
@@ -166,7 +168,7 @@ class NotificationHandler:
         message = (
             f"✅ *Bot Status: ALIVE*\n\n"
             f"The bot is running correctly and currently monitoring `{symbols_count}` symbols\\. "
-            f"No critical errors have been detected\\."
+            f"🚀 Training ML model using scikit-learn.\\."
         )
         await self._send_to_both(message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 

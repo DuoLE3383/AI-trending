@@ -91,8 +91,7 @@ UPDATER_INTERVAL_SECONDS = 300 # 5 phút (Để kiểm tra thắng/thua nhanh h�
 SUMMARY_INTERVAL_SECONDS = 14400 # 4 giờ (Để tránh spam báo cáo)
 
 # Tần suất gửi tin nhắn "nhịp tim" báo bot còn sống
-HEARTBEAT_INTERVAL_SECONDS = 3600 # 1 giờ
-
+HEARTBEAT_INTERVAL_SECONDS = 1800 # 30 p
 # ==============================================================================
 # === 7. PLACEHOLDER VALUES (Dùng để kiểm tra an toàn)
 # ==============================================================================
