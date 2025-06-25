@@ -49,7 +49,7 @@ class NotificationHandler:
             # Send to group with thread
             await self.telegram_handler.send_message(
                 chat_id=config.TELEGRAM_CHAT_ID,
-                message=message,
+                text=message,
                 message_thread_id=thread_id,
                 parse_mode=parse_mode
             )
