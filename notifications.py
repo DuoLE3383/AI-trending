@@ -5,6 +5,7 @@ import asyncio
 from telegram_handler import TelegramHandler
 import config
 import re
+import trainer
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,8 @@ class NotificationHandler:
             return self.esc(formatted_value)
         except (ValueError, TypeError):
             return '—'
+        
+    
 
     async def _send_with_retry(self, send_func, **kwargs):
         """
@@ -82,13 +85,31 @@ class NotificationHandler:
         channel_success = await self._send_with_retry(self.telegram_handler.send_photo, **channel_kwargs)
         if channel_success: self.logger.info("✅ Đã gửi ảnh tới channel.")
 
+    
     # === CÁC HÀM GỬI THÔNG BÁO CỤ THỂ ===
 
-    async def send_startup_notification(self, symbols_count: int):
-        self.logger.info("Preparing startup notification with photo...")
+    # Thay thế hàm cũ trong file notifications.py
+
+    async def send_startup_notification(self, symbols_count: int, accuracy: float | None):
+        """
+        Gửi thông báo khởi động bot, bao gồm cả kết quả của lần training đầu tiên.
+        Hàm này NHẬN accuracy làm tham số, không tự training.
+        """
+        self.logger.info("Preparing startup notification with initial training results...")
+        
+        # Tạo tin nhắn về kết quả training
+        if accuracy is not None:
+            accuracy_str = f"{accuracy:.2%}"
+            training_result_msg = f"✅ *Initial Model Training Complete*\\!\n*Accuracy:* `{self.esc(accuracy_str)}`\n\n"
+        else:
+            training_result_msg = "⚠️ *Initial Model Training Failed or Skipped*\\.\nBot will use the existing model if available\\.\n\n"
+
         separator = self.esc("-----------------------------------------")
+        
+        # Ghép nối để tạo tin nhắn hoàn chỉnh
         caption_text = (
-            f"🚀 *AI 🧠 Model training every 8h Activated* 🚀\n\n"
+            f"🚀 *AI Trading Bot Activated* 🚀\n\n"
+            f"{training_result_msg}" # Thêm phần kết quả training vào đây
             f"The bot is now live and analyzing `{symbols_count}` pairs on the `{self.esc(config.TIMEFRAME)}` timeframe\\.\n\n"
             f"📡 Get ready for real\\-time market signals every 10 minutes\\!\n\n"
             f"💰 *New \\#Binance\\? Get a \\$100 Bonus\\!*\\n"
@@ -98,6 +119,7 @@ class NotificationHandler:
             f"{separator}"
         )
         photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
+        
         await self._send_photo_to_both(photo=photo_url, caption=caption_text, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
     async def send_batch_trend_alert_notification(self, analysis_results: List[Dict[str, Any]]):
