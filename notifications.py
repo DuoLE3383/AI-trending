@@ -166,4 +166,3 @@ class NotificationHandler:
             status_message = "❌ *Periodic Training Failed*\\."
         
         await self._send_to_both(f"{header}\n\n{status_message}", thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
-�
