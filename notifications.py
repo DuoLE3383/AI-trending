@@ -90,38 +90,14 @@ class NotificationHandler:
         await self._send_to_both("".join(message_parts), thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
     
     async def send_training_complete_notification(self, accuracy: float | None):
-        header = self.esc("🤖 Cập nhật Hệ thống AI 🧠")
+        header = self.esc("🤖 AI Training Update 🧠")
         if accuracy is not None:
-            status_message = f"✅ *Huấn luyện định kỳ thành công*\\!\n*Độ chính xác mới:* `{accuracy:.2%}`"
+            status_message = f"✅ *Trainning Complete*\\!*Result:* `{accuracy:.2%}`"
         else:
-            status_message = "❌ *Huấn luyện định kỳ thất bại*\\."
+            status_message = "❌ *Trainning Failed*\\."
         await self._send_to_both(f"{header}\n\n{status_message}", thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
-    # ... các hàm gửi thông báo khác ...
 
-    # async def send_batch_trend_alert_notification(self, analysis_results: List[Dict[str, Any]]):
-    #     if not analysis_results: return
-    #     self.logger.info(f"Preparing to send a batch of {len(analysis_results)} detailed signals.")
-
-    #     separator = self.esc("\n\n----------------------------------------\n\n")
-    #     header = self.esc(f"🆘 {len(analysis_results)} New Signal(s) Found! 🔥")
-    #     message_parts = [header]
-
-    #     for result in analysis_results:
-    #         trend_raw = result.get('trend', 'N/A').replace("_", " ").title()
-    #         trend_emoji = "🔼 LONGG" if "Bullish" in trend_raw else "🔽 SHORT"
-    #         signal_detail = (
-    #             f"{separator}"
-    #             f"\\#{self.esc(trend_raw)} // {trend_emoji} // {self.esc(result.get('symbol', 'N/A'))}\n"
-    #             f"📌*Entry:* {self.format_and_escape(result.get('entry_price'))}\n"
-    #             f"❌*SL:* {self.format_and_escape(result.get('stop_loss'))}\n"
-    #             f"🎯*TP1:* {self.format_and_escape(result.get('take_profit_1'))}\n"
-    #             f"🎯*TP2:* {self.format_and_escape(result.get('take_profit_2'))}\n"
-    #             f"🎯*TP3:* {self.format_and_escape(result.get('take_profit_3'))}"
-    #         )
-    #         message_parts.append(signal_detail)
-
-    #     await self._send_to_both("".join(message_parts), thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
     # --- HÀM MỚI ---
     async def send_training_and_summary_notification(self, stats: Dict[str, Any]):
