@@ -1,8 +1,8 @@
 # notifications.py
 import logging
 from typing import List, Dict, Any
-import config
 from telegram_handler import TelegramHandler
+import config
 
 logger = logging.getLogger(__name__)
 
@@ -11,10 +11,26 @@ class NotificationHandler:
         self.telegram_handler = telegram_handler
         self.logger = logger
 
-    def escape_markdownv2_without_dot(self, text: str) -> str:
-        escape_chars = r"_*~`>#+-=|{}!" # Corrected: Added '!', '[', ']' '(' ')' for more complete MarkdownV2 escaping
-        for ch in escape_chars:
-            text = text.replace(ch, f"\\{ch}")
+    @staticmethod
+    def escape_markdownv2(text: str, keep_dot: bool = False) -> str:
+        """
+        Escapes a string for Telegram's MarkdownV2 parse mode.
+        See: https://core.telegram.org/bots/api#markdownv2-style
+
+        Args:
+            text: The string to escape.
+            keep_dot: If True, the '.' character will not be escaped.
+                      Useful for formatting numbers.
+        """
+        escape_chars = r'_*~`>#+-=|{}.!'
+        if keep_dot:
+            escape_chars = escape_chars.replace('.', '')
+
+        # Escape the backslash character itself first
+        text = str(text).replace('\\', '\\\\')
+
+        for char in escape_chars:
+            text = text.replace(char, f'\\{char}')
         return text
 
     def format_and_escape(self, value, precision=5):
@@ -22,8 +38,9 @@ class NotificationHandler:
             return '—'
         try:
             formatted_value = f"{float(value):.{precision}f}"
-            return self.escape_markdownv2_without_dot(formatted_value)
-        except Exception:
+            # Use the new static method, keeping the dot for numbers.
+            return NotificationHandler.escape_markdownv2(formatted_value, keep_dot=True)
+        except (ValueError, TypeError):
             return '—'
 
 
@@ -74,7 +91,7 @@ class NotificationHandler:
     async def send_startup_notification(self, symbols_count: int):
         self.logger.info("Preparing startup notification with photo...")
         try:
-            timeframe_escaped = TelegramHandler.escape_markdownv2(config.TIMEFRAME)
+            timeframe_escaped = NotificationHandler.escape_markdownv2(config.TIMEFRAME)
             caption_text = (
                 f"🚀 *AI 🧠 Model training every 8h Activated* 🚀\n\n"
                 f"The bot is now live and analyzing `{symbols_count}` pairs on the `{timeframe_escaped}` timeframe\\.\n\n"
@@ -99,9 +116,9 @@ class NotificationHandler:
         message_parts = [f"🆘 {len(analysis_results)} New Signal(s) Found! 🔥"]
 
         for result in analysis_results:
-            symbol = TelegramHandler.escape_markdownv2(result.get('symbol', 'N/A'))
+            symbol = NotificationHandler.escape_markdownv2(result.get('symbol', 'N/A'))
             trend_raw = result.get('trend', 'N/A').replace("_", " ").title()
-            trend = TelegramHandler.escape_markdownv2(trend_raw)
+            trend = NotificationHandler.escape_markdownv2(trend_raw)
 
             entry_price = self.format_and_escape(result.get('entry_price'))
             stop_loss = self.format_and_escape(result.get('stop_loss'))
@@ -131,7 +148,7 @@ class NotificationHandler:
         header = "🏆 *Strategy Performance Report (All\\-Time)* 🏆\n"
 
         if stats.get('total_completed_trades', 0) > 0:
-            win_rate = TelegramHandler.escape_markdownv2(f"{stats.get('win_rate', 0.0):.2f}")
+            win_rate = NotificationHandler.escape_markdownv2(f"{stats.get('win_rate', 0.0):.2f}")
             body = (
                 f"\n✅ *Win Rate:* `{win_rate}%`"
                 f"\n📊 *Completed Trades:* `{stats.get('total_completed_trades', 0)}`"
@@ -156,9 +173,9 @@ class NotificationHandler:
     async def send_trade_outcome_notification(self, trade_details: Dict[str, Any]):
         self.logger.info(f"Preparing outcome notification for {trade_details.get('symbol', 'N/A')}...")
         try:
-            symbol = TelegramHandler.escape_markdownv2(trade_details.get('symbol', 'N/A'))
+            symbol = NotificationHandler.escape_markdownv2(trade_details.get('symbol', 'N/A'))
             status_raw = trade_details.get('status', 'N/A')
-            status = TelegramHandler.escape_markdownv2(status_raw)
+            status = NotificationHandler.escape_markdownv2(status_raw)
             trend_raw = trade_details.get('trend', 'N/A').replace("_", " ").title()
 
             entry_price_raw = trade_details.get('entry_price')
