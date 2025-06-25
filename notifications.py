@@ -194,7 +194,7 @@ class NotificationHandler:
             is_win = "TP" in status_raw
             outcome_emoji, outcome_text = ("✅", "WIN") if is_win else ("❌", "LOSS")
             trade_direction_text = "LONG" if "Bullish" in trend_raw else "SHORT"
-            trend_emoji = "🔼 LONGG" if "Bullish" in trend_raw else "🔽 SHORT"
+            trend_emoji = "🔼 LONG" if "Bullish" in trend_raw else "🔽 SHORT"
 
             message = (
                 f"{outcome_emoji} *Trade Closed: {self.esc(outcome_text)}* {outcome_emoji}\n\n"
