@@ -38,7 +38,7 @@ def train_model() -> float | None:
     
     df.dropna(subset=features + [target], inplace=True)
 
-    if len(df) < 50: # Cần có đủ dữ liệu để huấn luyện một cách có ý nghĩa
+    if len(df) < 10: # Cần có đủ dữ liệu để huấn luyện một cách có ý nghĩa
         logger.warning(f"⚠️ Not enough clean data to train model. Only {len(df)} rows available. Minimum 50 required.")
         return None
 
