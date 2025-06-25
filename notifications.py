@@ -77,13 +77,13 @@ class NotificationHandler:
             timeframe_escaped = TelegramHandler.escape_markdownv2(config.TIMEFRAME)
             caption_text = (
                 f"🚀 *AI 🧠 Model training every 8h Activated* 🚀\n\n"
-                f"The bot is now live and analyzing `{symbols_count}` pairs on the `{timeframe_escaped}` timeframe\\.\n\n" # Reverted \\n to \n
-                f"📡 Get ready for real\\-time market signals every 10 minutes\\!\n\n" # Reverted \\n to \n
-                f"💰 *New \\#Binance\\? Get a \\$100 Bonus\\!*\\n" # Reverted \\n to \n
-                f"Sign up and earn a *100 USD trading fee rebate voucher\\!*\\n\n" # Reverted \\n to \n
+                f"The bot is now live and analyzing `{symbols_count}` pairs on the `{timeframe_escaped}` timeframe\\.\n\n"
+                f"📡 Get ready for real\\-time market signals every 10 minutes\\!\n\n"
+                f"💰 *New \\#Binance\\? Get a \\$100 Bonus\\!*\\n"
+                f"Sign up and earn a *100 USD trading fee rebate voucher\\!*\\n\n"
                 f"🔗 *Register Now\\:*\n"
-                f"https://www\\.binance\\.com/activity/referral\\-entry/CPA\\?ref\\=CPA\\_006MBW985P\n\n" # Reverted \\n to \n
-                f"\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-" # This line is fine as is
+                f"https://www\\.binance\\.com/activity/referral\\-entry/CPA\\?ref\\=CPA\\_006MBW985P\n\n"
+                f"\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-"
             )
             photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
             await self._send_photo_to_both(photo=photo_url, caption=caption_text, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
