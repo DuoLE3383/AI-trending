@@ -13,7 +13,6 @@ class NotificationHandler:
         self.logger = logger
 
     def escape_markdownv2_without_dot(self, text: str) -> str:
-        # Note: '.' is intentionally not escaped here for formatting numbers.
         escape_chars = r"_*~`>#+-=|{}!"
         for ch in escape_chars:
             text = text.replace(ch, f"\\{ch}")
@@ -80,16 +79,15 @@ class NotificationHandler:
             caption_text = (
                 f"🚀 *AI 🧠 Model training every 8h Activated* 🚀\n\n"
                 f"The bot is now live and analyzing `{symbols_count}` pairs on the `{timeframe_escaped}` timeframe\\.\n\n"
-                f"📡 Get ready for real\-time market signals every 10 minutes\\!\n\n"
-                f"💰 *New #Binance\? Get a \\$100 Bonus\\!*\\n"
+                f"📡 Get ready for real\\-time market signals every 10 minutes\\!\n\n"
+                f"💰 *New \\#Binance\\? Get a \\$100 Bonus\\!*\\n"
                 f"Sign up and earn a *100 USD trading fee rebate voucher\\!*\\n\n"
-                f"🔗 *Register Now\:*\n"
-                f"https://www\.binance\.com/activity/referral\-entry/CPA\?ref\=CPA\_006MBW985P\n\n"
+                f"🔗 *Register Now:*\n"
+                f"https://www\\.binance\\.com/activity/referral\\-entry/CPA\\?ref=CPA\\_006MBW985P\n\n"
                 f"\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-"
             )
             photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
             await self._send_photo_to_both(photo=photo_url, caption=caption_text, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
-            time.sleep(30)  # Sleep to ensure the message is sent before proceeding
         except Exception as e:
             self.logger.error(f"Failed to send startup notification: {e}", exc_info=True)
 
@@ -150,28 +148,66 @@ class NotificationHandler:
     async def send_heartbeat_notification(self, symbols_count: int):
         self.logger.info("Sending heartbeat notification...")
         message = (
-            f"✅ Bot Status: ALIVE\n\n"
+            f"✅ *Bot Status: ALIVE*\n\n"
             f"The bot is running correctly and currently monitoring `{symbols_count}` symbols\\. "
             f"No critical errors have been detected\\."
         )
         await self._send_to_both(message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
     async def send_trade_outcome_notification(self, trade_details: Dict[str, Any]):
-        self.logger.info(f"Preparing outcome notification for {trade_details['symbol']}...")
+        self.logger.info(f"Preparing outcome notification for {trade_details.get('symbol', 'N/A')}...")
         try:
-            symbol = TelegramHandler.escape_markdownv2(trade_details['symbol'])
-            status = TelegramHandler.escape_markdownv2(trade_details['status'])
+            symbol = TelegramHandler.escape_markdownv2(trade_details.get('symbol', 'N/A'))
+            status_raw = trade_details.get('status', 'N/A')
+            status = TelegramHandler.escape_markdownv2(status_raw)
+            trend_raw = trade_details.get('trend', 'N/A').replace("_", " ").title()
 
-            is_win = "TP" in trade_details['status']
+            entry_price_raw = trade_details.get('entry_price')
+            entry_price = self.format_and_escape(entry_price_raw)
+
+            closing_price_raw = None
+            if status_raw == 'SL_HIT':
+                closing_price_raw = trade_details.get('stop_loss')
+            elif 'TP' in status_raw: # Covers TP1_HIT, TP2_HIT, TP3_HIT
+                # Assuming the trade_details will contain the specific TP hit
+                if status_raw == 'TP1_HIT':
+                    closing_price_raw = trade_details.get('take_profit_1')
+                elif status_raw == 'TP2_HIT':
+                    closing_price_raw = trade_details.get('take_profit_2')
+                elif status_raw == 'TP3_HIT':
+                    closing_price_raw = trade_details.get('take_profit_3')
+
+            closing_price = self.format_and_escape(closing_price_raw)
+            trend_emoji = "🔼" if "Bullish" in trend_raw else "🔽"
+
+            percentage_pl_str = "—"
+            if entry_price_raw is not None and closing_price_raw is not None:
+                try:
+                    entry_p = float(entry_price_raw)
+                    closing_p = float(closing_price_raw)
+                    if entry_p != 0:
+                        if "Bullish" in trend_raw: # Long trade
+                            percentage_pl = ((closing_p - entry_p) / entry_p) * 100
+                        else: # Bearish / Short trade
+                            percentage_pl = ((entry_p - closing_p) / entry_p) * 100
+                        percentage_pl_str = f"{percentage_pl:+.2f}%" # Format with sign
+                except ValueError:
+                    self.logger.warning(f"Could not convert prices to float for P/L calculation for {symbol}.")
+
+            is_win = "TP" in status_raw
             outcome_emoji = "✅" if is_win else "❌"
             outcome_text = "WIN" if is_win else "LOSS"
 
             message = (
                 f"{outcome_emoji} *Trade Closed: {outcome_text}* {outcome_emoji}\n\n"
                 f"Symbol: `{symbol}`\n"
-                f"Outcome: `{status}`"
+                f"Direction: `{trend_raw}` {trend_emoji}\n"
+                f"Outcome: `{status}`\n\n"
+                f"Entry Price: `{entry_price}`\n"
+                f"Closing Price: `{closing_price}`\n"
+                f"P/L: `{percentage_pl_str}`"
             )
 
             await self._send_to_both(message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
         except Exception as e:
-            self.logger.error(f"Failed to send trade outcome notification for {trade_details['symbol']}: {e}", exc_info=True)
+            self.logger.error(f"Failed to send trade outcome notification for {trade_details.get('symbol', 'UNKNOWN')}: {e}", exc_info=True)
