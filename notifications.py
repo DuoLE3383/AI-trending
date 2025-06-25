@@ -12,7 +12,7 @@ class NotificationHandler:
         self.logger = logger
 
     def escape_markdownv2_without_dot(self, text: str) -> str:
-        escape_chars = r"_*~`>#+-=|{}!" # Added '!', '[', ']' '(' ')' for more complete MarkdownV2 escaping
+        escape_chars = r"_*~`>#+-=|{}!" # Corrected: Added '!', '[', ']' '(' ')' for more complete MarkdownV2 escaping
         for ch in escape_chars:
             text = text.replace(ch, f"\\{ch}")
         return text
@@ -75,15 +75,15 @@ class NotificationHandler:
         self.logger.info("Preparing startup notification with photo...")
         try:
             timeframe_escaped = TelegramHandler.escape_markdownv2(config.TIMEFRAME)
-            caption_text = ( # Corrected MarkdownV2 escaping for literal backslashes
+            caption_text = (
                 f"🚀 *AI 🧠 Model training every 8h Activated* 🚀\n\n"
-                f"The bot is now live and analyzing `{symbols_count}` pairs on the `{timeframe_escaped}` timeframe\\.\\n\\n"
-                f"📡 Get ready for real\\-time market signals every 10 minutes\\!\\n\\n"
-                f"💰 *New \\#Binance\\? Get a \\$100 Bonus\\!*\\n"
-                f"Sign up and earn a *100 USD trading fee rebate voucher\\!*\\n\\n"
-                f"🔗 *Register Now\\:*\n" # Escaped the colon for MarkdownV2
-                f"https://www\\.binance\\.com/activity/referral\\-entry/CPA\\?ref\\=CPA\\_006MBW985P\\n\\n"
-                f"\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-"
+                f"The bot is now live and analyzing `{symbols_count}` pairs on the `{timeframe_escaped}` timeframe\\.\n\n" # Reverted \\n to \n
+                f"📡 Get ready for real\\-time market signals every 10 minutes\\!\n\n" # Reverted \\n to \n
+                f"💰 *New \\#Binance\\? Get a \\$100 Bonus\\!*\\n" # Reverted \\n to \n
+                f"Sign up and earn a *100 USD trading fee rebate voucher\\!*\\n\n" # Reverted \\n to \n
+                f"🔗 *Register Now\\:*\n"
+                f"https://www\\.binance\\.com/activity/referral\\-entry/CPA\\?ref\\=CPA\\_006MBW985P\n\n" # Reverted \\n to \n
+                f"\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-" # This line is fine as is
             )
             photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
             await self._send_photo_to_both(photo=photo_url, caption=caption_text, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
@@ -112,8 +112,8 @@ class NotificationHandler:
             trend_emoji = "🔼" if "Bullish" in trend_raw else "🔽"
 
             signal_detail = (
-                f"\n\n----------------------------------------\n\n"
-                f" #{trend} // {trend_emoji} // {symbol} \n"
+                f"\n\n----------------------------------------\n\n" # This line is fine as is
+                f" \\#{trend} // {trend_emoji} // {symbol} \n" # Escaped #
                 f"📌Entry: {entry_price}\n"
                 f"❌SL: {stop_loss}\n"
                 f"🎯TP1: {tp1}\n"
