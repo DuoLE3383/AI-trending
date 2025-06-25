@@ -31,7 +31,7 @@ DATA_FETCH_LIMIT = 500 # Đã cập nhật theo yêu cầu trong file cũ của 
 DYN_SYMBOLS_ENABLED = True 
 # Danh sách tĩnh này không còn được sử dụng khi DYN_SYMBOLS_ENABLED = True
 # STATIC_SYMBOLS = ["BTCUSDT", "ETHUSDT"] 
-
+CONCURRENT_REQUESTS = 10 # Số lượng yêu cầu đồng thời tối đa khi lấy dữ liệu từ Binance
 # ==============================================================================
 # === 4. ANALYSIS STRATEGY PARAMETERS
 # ==============================================================================
