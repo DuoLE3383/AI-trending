@@ -13,6 +13,7 @@ class NotificationHandler:
         self.logger = logger
 
     def escape_markdownv2_without_dot(self, text: str) -> str:
+        # Note: '.' is intentionally not escaped here for formatting numbers.
         escape_chars = r"_*~`>#+-=|{}!"
         for ch in escape_chars:
             text = text.replace(ch, f"\\{ch}")
@@ -88,7 +89,6 @@ class NotificationHandler:
             )
             photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
             await self._send_photo_to_both(photo=photo_url, caption=caption_text, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
-            # Removed blocking time.sleep(30). The 'await' already ensures the photo is sent before proceeding.
         except Exception as e:
             self.logger.error(f"Failed to send startup notification: {e}", exc_info=True)
 
@@ -149,13 +149,9 @@ class NotificationHandler:
     async def send_heartbeat_notification(self, symbols_count: int):
         self.logger.info("Sending heartbeat notification...")
         message = (
-            f"✅ *Bot Status: ALIVE*\n\n"
+            f"✅ Bot Status: ALIVE\n\n"
             f"The bot is running correctly and currently monitoring `{symbols_count}` symbols\\. "
-            f"📡 Get ready for real\-time market signals every 10 minutes\\!\n\n"
-            f"💰 *New #Binance\? Get a \\$100 Bonus\\!*\\n"
-            f"Sign up and earn a *100 USD trading fee rebate voucher\\!*\\n\n"
-            f"🔗 *Register Now\:*\n"
-            f"https://www\.binance\.com/activity/referral\-entry/CPA\?ref\=CPA\_006MBW985P\n\n"
+            f"No critical errors have been detected\\."
         )
         await self._send_to_both(message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
