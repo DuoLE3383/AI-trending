@@ -207,12 +207,12 @@ async def main():
         )
     except Exception as main_exc:
         logger.critical(f"A fatal error occurred in the main execution block: {main_exc}", exc_info=True)
-    finally:
-        if client:
-            # SỬA LỖI: Dùng đúng tên hàm
-            await client.close_connection()
-            logger.info("Binance client connection closed.")
-        logger.info("--- ⭕ Bot application shutting down. ---")
+    # finally:
+    #     if client:
+    #         # SỬA LỖI: Dùng đúng tên hàm
+    #         await client.close_connection()
+    #         logger.info("Binance client connection closed.")
+    #     logger.info("--- ⭕ Bot application shutting down. ---")
 
 if __name__ == "__main__":
     try:
