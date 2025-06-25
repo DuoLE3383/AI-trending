@@ -22,7 +22,7 @@ class NotificationHandler:
             keep_dot: If True, the '.' character will not be escaped.
                       Useful for formatting numbers.
         """
-        escape_chars = r'_*~`>#+-=|{}.!'
+        escape_chars = r'_*~`>#+-=|{}.!()[]' # Added missing MarkdownV2 special characters: '(', ')', '[', ']'
         if keep_dot:
             escape_chars = escape_chars.replace('.', '')
 
@@ -178,6 +178,8 @@ class NotificationHandler:
             status = NotificationHandler.escape_markdownv2(status_raw)
             trend_raw = trade_details.get('trend', 'N/A').replace("_", " ").title()
 
+            trade_direction_text = "LONG" if "Bullish" in trend_raw else "SHORT"
+
             entry_price_raw = trade_details.get('entry_price')
             entry_price = self.format_and_escape(entry_price_raw)
 
@@ -217,7 +219,8 @@ class NotificationHandler:
             message = (
                 f"{outcome_emoji} *Trade Closed: {outcome_text}* {outcome_emoji}\n\n"
                 f"Symbol: `{symbol}`\n"
-                f"Direction: `{trend_raw}` {trend_emoji}\n"
+                f"Direction: `{trade_direction_text}` {trend_emoji}\n"
+                f"Leverage: `x{config.LEVERAGE}`\n" # Assuming config.LEVERAGE is defined
                 f"Outcome: `{status}`\n\n"
                 f"Entry Price: `{entry_price}`\n"
                 f"Closing Price: `{closing_price}`\n"

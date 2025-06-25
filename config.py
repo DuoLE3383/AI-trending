@@ -35,6 +35,9 @@ DYN_SYMBOLS_ENABLED = True
 # ==============================================================================
 # === 4. ANALYSIS STRATEGY PARAMETERS
 # ==============================================================================
+# In config.py
+LEVERAGE = 5 # Or whatever your default leverage is
+
 # EMA Settings
 EMA_FAST = 34
 EMA_MEDIUM = 89
