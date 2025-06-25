@@ -139,8 +139,6 @@ def _perform_analysis(df: pd.DataFrame, symbol: str) -> None:
     else:
         logger.info(f"{symbol}: Analysis complete. Trend is '{trend}', no strong signal generated.")
 # Hypothetical /Users/duongle/aitrending/AI-trending/analysis_engine.py (or similar)
-import pandas as pd
-import ta # Thư viện Technical Analysis (pip install ta)
 import config
 
 def calculate_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
