@@ -78,7 +78,7 @@ class NotificationHandler:
         message_parts = [header]
         for result in analysis_results:
             trend_raw = result.get('trend', 'N/A').replace("_", " ").title()
-            trend_emoji = "🔼 LONG" if "Bullish" in trend_raw else "🔽 SHORT"
+            trend_emoji = "🔼 LONG x5" if "Bullish" in trend_raw else "🔽 SHORT x5"
             signal_detail = (
                 f"{separator}"
                 f"\\#{self.esc(trend_raw)} // {trend_emoji} // {self.esc(result.get('symbol', 'N/A'))}\n"
@@ -194,7 +194,7 @@ class NotificationHandler:
             is_win = "TP" in status_raw
             outcome_emoji, outcome_text = ("✅", "WIN") if is_win else ("❌", "LOSS")
             trade_direction_text = "LONG" if "Bullish" in trend_raw else "SHORT"
-            trend_emoji = "🔼 LONG" if "Bullish" in trend_raw else "🔽 SHORT"
+            trend_emoji = "🔼 LONG x5" if "Bullish" in trend_raw else "🔽 SHORT x5"
 
             message = (
                 f"{outcome_emoji} *Trade Closed: {self.esc(outcome_text)}* {outcome_emoji}\n\n"
@@ -203,7 +203,7 @@ class NotificationHandler:
                 f"Outcome: `{self.esc(status_raw)}`\n\n"
                 f"Entry Price: `{self.format_and_escape(entry_price_raw)}`\n"
                 f"Closing Price: `{self.format_and_escape(closing_price_raw)}`\n"
-                f"PNL \\(1x\\): `{pnl_without_leverage_str}`\n"
+                # f"PNL \\(1x\\): `{pnl_without_leverage_str}`\n"
                 f"PNL \\(x{config.LEVERAGE}\\): `{pnl_with_leverage_str}`"
             )
             await self._send_to_both(message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
