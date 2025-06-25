@@ -92,9 +92,9 @@ class NotificationHandler:
     async def send_training_complete_notification(self, accuracy: float | None):
         header = self.esc("🤖 AI Training Update 🧠")
         if accuracy is not None:
-            status_message = f"✅ *Trainning Complete*\\!*Result:* `{accuracy:.2%}`"
+            status_message = f"✅ *Training Complete*\\!*Result:* `{accuracy:.2%}`"
         else:
-            status_message = "❌ *Trainning Failed*\\."
+            status_message = "🧠 *Training*\\."
         await self._send_to_both(f"{header}\n\n{status_message}", thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
 
