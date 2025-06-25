@@ -22,7 +22,7 @@ class NotificationHandler:
             keep_dot: If True, the '.' character will not be escaped.
                       Useful for formatting numbers.
         """
-        escape_chars = r'_*~`>#+-=|{}.!()[]' # Added missing MarkdownV2 special characters: '(', ')', '[', ']'
+        escape_chars = r'_*~`>#+-=|{}.!()[]!' # Added missing MarkdownV2 special character: '!'
         if keep_dot:
             escape_chars = escape_chars.replace('.', '')
 
