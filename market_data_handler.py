@@ -1,4 +1,4 @@
-# market_data_handler.py (Phiên bản có thêm log DEBUG chi tiết)
+# market_data_handler.py (Phiên bản có thêm log INFO chi tiết)
 import pandas as pd
 from binance import AsyncClient as Client
 import logging
@@ -10,16 +10,16 @@ async def get_market_data(client: Client, symbol: str, timeframe: str, limit: in
     Lấy dữ liệu nến từ Binance và chuyển thành Pandas DataFrame.
     """
     try:
-        # === LOG DEBUG MỚI THÊM VÀO ===
-        logger.info(f"--- [DEBUG] Sending API request for symbol='{symbol}', interval='{timeframe}', limit={limit}")
+        # === LOG INFO MỚI THÊM VÀO ===
+        logger.info(f"--- [INFO] Sending API request for symbol='{symbol}', interval='{timeframe}', limit={limit}")
         # ================================
 
         klines = await client.futures_klines(symbol=symbol, interval=timeframe, limit=limit)
         
-        # === LOG DEBUG MỚI THÊM VÀO ===
-        logger.info(f"--- [DEBUG] Received raw API response for {symbol}. Number of klines (rows) = {len(klines)}")
+        # === LOG INFO MỚI THÊM VÀO ===
+        logger.info(f"--- [INFO] Received raw API response for {symbol}. Number of klines (rows) = {len(klines)}")
         if not klines:
-            logger.warning(f"--- [DEBUG] Binance API returned an EMPTY list for {symbol}. This almost always points to an API key permission issue on the Binance website.")
+            logger.warning(f"--- [INFO] Binance API returned an EMPTY list for {symbol}. This almost always points to an API key permission issue on the Binance website.")
         # ================================
 
         if not klines:

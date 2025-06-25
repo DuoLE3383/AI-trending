@@ -32,7 +32,7 @@ def _update_signal_outcome(db_path: str, row_id: int, new_status: str) -> None:
         with sqlite3.connect(db_path) as conn:
             timestamp_utc = pd.Timestamp.utcnow().isoformat()
             conn.execute(
-                "UPDATE trend_analysis SET status = ?, outcome_timestamp_utc = ? WHERE rowid = ?",
+                "UPDATE trend_analysis SET status = 7, outcome_timestamp_utc = ? WHERE rowid = ?",
                 (new_status, timestamp_utc, row_id)
             )
         logger.info(f"✅ Updated rowid {row_id} to status: {new_status}")

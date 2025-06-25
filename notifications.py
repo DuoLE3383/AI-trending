@@ -149,7 +149,11 @@ class NotificationHandler:
         message = (
             f"✅ Bot Status: ALIVE\n\n"
             f"The bot is running correctly and currently monitoring `{symbols_count}` symbols\\. "
-            f"No critical errors have been detected\\."
+            f"📡 Get ready for real\-time market signals every 10 minutes\\!\n\n"
+            f"💰 *New #Binance\? Get a \\$100 Bonus\\!*\\n"
+            f"Sign up and earn a *100 USD trading fee rebate voucher\\!*\\n\n"
+            f"🔗 *Register Now\:*\n"
+            f"https://www\.binance\.com/activity/referral\-entry/CPA\?ref\=CPA\_006MBW985P\n\n"
         )
         await self._send_to_both(message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
