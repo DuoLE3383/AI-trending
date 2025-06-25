@@ -12,7 +12,7 @@ class NotificationHandler:
         self.logger = logger
 
     def escape_markdownv2_without_dot(self, text: str) -> str:
-        escape_chars = r"_*~`>#+-=|{}!" # Corrected: Added '!', '[', ']' '(' ')' for more complete MarkdownV2 escaping
+        escape_chars = r"_*~`>#+-=|{}!" # Added missing MarkdownV2 special characters: '[', ']', '(', ')'
         for ch in escape_chars:
             text = text.replace(ch, f"\\{ch}")
         return text
