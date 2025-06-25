@@ -138,6 +138,85 @@ def _perform_analysis(df: pd.DataFrame, symbol: str) -> None:
         _save_signal_to_db(signal_data)
     else:
         logger.info(f"{symbol}: Analysis complete. Trend is '{trend}', no strong signal generated.")
+# Hypothetical /Users/duongle/aitrending/AI-trending/analysis_engine.py (or similar)
+import pandas as pd
+import ta # Thư viện Technical Analysis (pip install ta)
+import config
+
+def calculate_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
+    # Existing indicators
+    df['EMA_FAST'] = ta.trend.ema_indicator(df['close'], window=config.EMA_FAST)
+    df['EMA_MEDIUM'] = ta.trend.ema_indicator(df['close'], window=config.EMA_MEDIUM)
+    df['EMA_SLOW'] = ta.trend.ema_indicator(df['close'], window=config.EMA_SLOW)
+    df['RSI'] = ta.momentum.rsi(df['close'], window=config.RSI_PERIOD)
+    df['BB_UPPER'], df['BB_MIDDLE'], df['BB_LOWER'] = ta.volatility.bollinger_bands(
+        df['close'], window=config.BBANDS_PERIOD, window_dev=config.BBANDS_STD_DEV
+    )
+    df['ATR'] = ta.volatility.average_true_range(df['high'], df['low'], df['close'], window=config.ATR_PERIOD)
+    df['VOLUME_SMA'] = ta.volume.volume_sma(df['volume'], window=config.VOLUME_SMA_PERIOD)
+
+    # --- Add new indicators ---
+    # MACD
+    df['MACD'] = ta.trend.macd(df['close'], window_fast=config.MACD_FAST_PERIOD,
+                               window_slow=config.MACD_SLOW_PERIOD,
+                               fillna=True)
+    df['MACD_Signal'] = ta.trend.macd_signal(df['close'], window_fast=config.MACD_FAST_PERIOD,
+                                            window_slow=config.MACD_SLOW_PERIOD,
+                                            window_sign=config.MACD_SIGNAL_PERIOD,
+                                            fillna=True)
+    df['MACD_Hist'] = ta.trend.macd_diff(df['close'], window_fast=config.MACD_FAST_PERIOD,
+                                         window_slow=config.MACD_SLOW_PERIOD,
+                                         window_sign=config.MACD_SIGNAL_PERIOD,
+                                         fillna=True)
+
+    # ADX
+    df['ADX'] = ta.trend.adx(df['high'], df['low'], df['close'], window=config.ADX_PERIOD, fillna=True)
+    df['ADX_POS'] = ta.trend.adx_pos(df['high'], df['low'], df['close'], window=config.ADX_PERIOD, fillna=True)
+    df['ADX_NEG'] = ta.trend.adx_neg(df['high'], df['low'], df['close'], window=config.ADX_PERIOD, fillna=True)
+
+    return df
+
+# Ví dụ về cách sử dụng chỉ báo mới trong logic tạo tín hiệu
+# (Đây chỉ là một đoạn mã minh họa, bạn cần tích hợp vào logic hiện có của mình)
+def generate_signal_with_new_indicators(df: pd.DataFrame, current_trend: str) -> Dict[str, Any]:
+    # Đảm bảo các chỉ báo đã được tính toán trong df
+    if df.empty or 'MACD' not in df.columns or 'ADX' not in df.columns:
+        return {} # Hoặc xử lý lỗi
+
+    # Lấy giá trị chỉ báo mới nhất
+    last_macd = df['MACD'].iloc[-1]
+    last_macd_signal = df['MACD_Signal'].iloc[-1]
+    last_adx = df['ADX'].iloc[-1]
+
+    # Logic tạo tín hiệu được cải thiện
+    signal_details = {}
+
+    if current_trend == config.TREND_STRONG_BULLISH:
+        # Thêm điều kiện MACD cắt lên đường tín hiệu và ADX xác nhận xu hướng mạnh
+        if (last_macd > last_macd_signal and df['MACD'].iloc[-2] <= df['MACD_Signal'].iloc[-2]) and \
+           (last_adx > config.ADX_MIN_TREND_STRENGTH):
+            # Đây là điểm vào lệnh tiềm năng
+            # ... tính toán entry_price, stop_loss, take_profits dựa trên các chỉ báo khác
+            # Ví dụ:
+            # signal_details = {
+            #     'symbol': df['symbol'].iloc[-1],
+            #     'trend': current_trend,
+            #     'entry_price': df['close'].iloc[-1],
+            #     'stop_loss': df['close'].iloc[-1] - config.ATR_MULTIPLIER_SL * df['ATR'].iloc[-1],
+            #     'take_profit_1': df['close'].iloc[-1] + config.ATR_MULTIPLIER_TP1 * df['ATR'].iloc[-1],
+            #     # ...
+            # }
+            pass
+    elif current_trend == config.TREND_STRONG_BEARISH:
+        # Thêm điều kiện MACD cắt xuống đường tín hiệu và ADX xác nhận xu hướng mạnh
+        if (last_macd < last_macd_signal and df['MACD'].iloc[-2] >= df['MACD_Signal'].iloc[-2]) and \
+           (last_adx > config.ADX_MIN_TREND_STRENGTH):
+            # Đây là điểm vào lệnh tiềm năng
+            # ... tính toán entry_price, stop_loss, take_profits
+            pass
+
+    return signal_details
+
 
 async def process_symbol(client: AsyncClient, symbol: str) -> None:
     """
