@@ -77,7 +77,7 @@ class NotificationHandler:
         try:
             timeframe_escaped = TelegramHandler.escape_markdownv2(config.TIMEFRAME)
             caption_text = (
-                f"🚀 *AI 🧠 Model training every 8h Activated* 🚀\n\n"
+                f"🚀 *AI 🧠 Model training every 8h Activated* 🚀\\\n\n"
                 f"The bot is now live and analyzing `{symbols_count}` pairs on the `{timeframe_escaped}` timeframe\\.\n\n"
                 f"📡 Get ready for real\-time market signals every 10 minutes\\!\n\n"
                 f"💰 *New #Binance\? Get a \\$100 Bonus\\!*\\n"
@@ -88,7 +88,7 @@ class NotificationHandler:
             )
             photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
             await self._send_photo_to_both(photo=photo_url, caption=caption_text, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
-            time.sleep(5)  # Short delay to ensure photo is sent before logging
+            time.sleep(30)  # Short delay to ensure photo is sent before logging
         except Exception as e:
             self.logger.error(f"Failed to send startup notification: {e}", exc_info=True)
 
