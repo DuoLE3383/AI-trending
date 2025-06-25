@@ -1,28 +1,20 @@
-# notifications.py (Phiên bản cuối cùng, đã thêm thông báo Training & Summary)
+# notifications.py (Phiên bản chuẩn, vui lòng không thay đổi kiến trúc)
 import logging
 from typing import List, Dict, Any
 import asyncio
 from telegram_handler import TelegramHandler
 import config
 import re
-import trainer
 
 logger = logging.getLogger(__name__)
 
 class NotificationHandler:
     def __init__(self, telegram_handler: TelegramHandler):
-        """
-        Khởi tạo handler, chịu trách nhiệm định dạng và gửi tất cả các loại thông báo.
-        """
         self.telegram_handler = telegram_handler
         self.logger = logger
-        # Tạo một lối tắt để gọi hàm escape cho ngắn gọn và dễ đọc
         self.esc = self.telegram_handler.escape_markdownv2
 
     def format_and_escape(self, value: Any, precision: int = 5) -> str:
-        """
-        Định dạng một giá trị số và escape nó một cách an toàn.
-        """
         if value is None:
             return '—'
         try:
@@ -30,121 +22,106 @@ class NotificationHandler:
             return self.esc(formatted_value)
         except (ValueError, TypeError):
             return '—'
-        
-    
 
     async def _send_with_retry(self, send_func, **kwargs):
-        """
-        Hàm helper để gửi tin nhắn/ảnh với cơ chế thử lại (retry).
-        """
         max_retries = 3
-        delay = 2  # Giây
+        delay = 2
         for attempt in range(max_retries):
             try:
                 await send_func(**kwargs)
-                return True  # Gửi thành công
+                return True
             except Exception as e:
                 self.logger.error(f"Lỗi khi gửi (lần {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
                     await asyncio.sleep(delay)
                     delay *= 2
                 else:
-                    self.logger.critical(f"❌ Thất bại sau {max_retries} lần thử. Bỏ qua tin nhắn.")
+                    self.logger.critical(f"❌ Thất bại sau {max_retries} lần thử.")
         return False
 
     async def _send_to_both(self, message: str, thread_id: int = None):
-        """Gửi tin nhắn văn bản đến cả group và channel với logic retry."""
-        group_kwargs = {
-            'chat_id': config.TELEGRAM_CHAT_ID, 'text': message,
-            'parse_mode': 'MarkdownV2', 'message_thread_id': thread_id
-        }
-        channel_kwargs = {
-            'chat_id': config.TELEGRAM_CHANNEL_ID, 'text': message,
-            'parse_mode': 'MarkdownV2'
-        }
-
-        group_success = await self._send_with_retry(self.telegram_handler.send_message, **group_kwargs)
-        if group_success: self.logger.info("✅ Đã gửi tới group.")
-
-        channel_success = await self._send_with_retry(self.telegram_handler.send_message, **channel_kwargs)
-        if channel_success: self.logger.info("✅ Đã gửi tới channel.")
+        group_kwargs = {'chat_id': config.TELEGRAM_CHAT_ID, 'text': message, 'parse_mode': 'MarkdownV2', 'message_thread_id': thread_id}
+        channel_kwargs = {'chat_id': config.TELEGRAM_CHANNEL_ID, 'text': message, 'parse_mode': 'MarkdownV2'}
+        await self._send_with_retry(self.telegram_handler.send_message, **group_kwargs)
+        await self._send_with_retry(self.telegram_handler.send_message, **channel_kwargs)
 
     async def _send_photo_to_both(self, photo: str, caption: str, thread_id: int = None):
-        """Gửi ảnh có chú thích đến cả group và channel với logic retry."""
-        group_kwargs = {
-            'chat_id': config.TELEGRAM_CHAT_ID, 'photo': photo, 'caption': caption,
-            'parse_mode': 'MarkdownV2', 'message_thread_id': thread_id
-        }
-        channel_kwargs = {
-            'chat_id': config.TELEGRAM_CHANNEL_ID, 'photo': photo, 'caption': caption,
-            'parse_mode': 'MarkdownV2'
-        }
-        group_success = await self._send_with_retry(self.telegram_handler.send_photo, **group_kwargs)
-        if group_success: self.logger.info("✅ Đã gửi ảnh tới group.")
-        
-        channel_success = await self._send_with_retry(self.telegram_handler.send_photo, **channel_kwargs)
-        if channel_success: self.logger.info("✅ Đã gửi ảnh tới channel.")
+        group_kwargs = {'chat_id': config.TELEGRAM_CHAT_ID, 'photo': photo, 'caption': caption, 'parse_mode': 'MarkdownV2', 'message_thread_id': thread_id}
+        channel_kwargs = {'chat_id': config.TELEGRAM_CHANNEL_ID, 'photo': photo, 'caption': caption, 'parse_mode': 'MarkdownV2'}
+        await self._send_with_retry(self.telegram_handler.send_photo, **group_kwargs)
 
-    
-    # === CÁC HÀM GỬI THÔNG BÁO CỤ THỂ ===
-
-    # Thay thế hàm cũ trong file notifications.py
+    # === CÁC HÀM GỬI THÔNG BÁO ===
 
     async def send_startup_notification(self, symbols_count: int, accuracy: float | None):
-        """
-        Gửi thông báo khởi động bot, bao gồm cả kết quả của lần training đầu tiên.
-        Hàm này NHẬN accuracy làm tham số, không tự training.
-        """
-        self.logger.info("Preparing startup notification with initial training results...")
-        
-        # Tạo tin nhắn về kết quả training
+        """Hàm này chỉ nhận dữ liệu và gửi, không làm logic gì khác."""
+        self.logger.info("Preparing startup notification...")
         if accuracy is not None:
             accuracy_str = f"{accuracy:.2%}"
             training_result_msg = f"✅ *Initial Model Training Complete*\\!\n*Accuracy:* `{self.esc(accuracy_str)}`\n\n"
         else:
-            training_result_msg = "⚠️ *Initial Model Training Failed or Skipped*\\.\nBot will use the existing model if available\\.\n\n"
+            training_result_msg = "⚠️ *Initial Model Training Failed or Skipped*\\.\n\n"
 
         separator = self.esc("-----------------------------------------")
-        
-        # Ghép nối để tạo tin nhắn hoàn chỉnh
         caption_text = (
             f"🚀 *AI Trading Bot Activated* 🚀\n\n"
-            f"{training_result_msg}" # Thêm phần kết quả training vào đây
+            f"{training_result_msg}"
             f"The bot is now live and analyzing `{symbols_count}` pairs on the `{self.esc(config.TIMEFRAME)}` timeframe\\.\n\n"
-            f"📡 Get ready for real\\-time market signals every 10 minutes\\!\n\n"
-            f"💰 *New \\#Binance\\? Get a \\$100 Bonus\\!*\\n"
-            f"Sign up and earn a *100 USD trading fee rebate voucher\\!*\\n\n"
-            f"🔗 *Register Now\\:*\n"
-            f"{self.esc('https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P')}\n\n"
-            f"{separator}"
+            f"📡 Get ready for real\\-time market signals\\!"
         )
         photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
-        
         await self._send_photo_to_both(photo=photo_url, caption=caption_text, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
     async def send_batch_trend_alert_notification(self, analysis_results: List[Dict[str, Any]]):
         if not analysis_results: return
-        self.logger.info(f"Preparing to send a batch of {len(analysis_results)} detailed signals.")
-
         separator = self.esc("\n\n----------------------------------------\n\n")
         header = self.esc(f"🆘 {len(analysis_results)} New Signal(s) Found! 🔥")
         message_parts = [header]
-
         for result in analysis_results:
             trend_raw = result.get('trend', 'N/A').replace("_", " ").title()
-            trend_emoji = "🔼 LONGG" if "Bullish" in trend_raw else "🔽 SHORT"
+            trend_emoji = "🔼 LONG" if "Bullish" in trend_raw else "🔽 SHORT"
             signal_detail = (
                 f"{separator}"
                 f"\\#{self.esc(trend_raw)} // {trend_emoji} // {self.esc(result.get('symbol', 'N/A'))}\n"
                 f"📌*Entry:* {self.format_and_escape(result.get('entry_price'))}\n"
                 f"❌*SL:* {self.format_and_escape(result.get('stop_loss'))}\n"
-                f"🎯*TP1:* {self.format_and_escape(result.get('take_profit_1'))}\n"
-                f"🎯*TP2:* {self.format_and_escape(result.get('take_profit_2'))}\n"
-                f"🎯*TP3:* {self.format_and_escape(result.get('take_profit_3'))}"
+                f"🎯*TP1:* {self.format_and_escape(result.get('take_profit_1'))}"
             )
             message_parts.append(signal_detail)
-
         await self._send_to_both("".join(message_parts), thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
+    
+    async def send_training_complete_notification(self, accuracy: float | None):
+        header = self.esc("🤖 Cập nhật Hệ thống AI 🧠")
+        if accuracy is not None:
+            status_message = f"✅ *Huấn luyện định kỳ thành công*\\!\n*Độ chính xác mới:* `{accuracy:.2%}`"
+        else:
+            status_message = "❌ *Huấn luyện định kỳ thất bại*\\."
+        await self._send_to_both(f"{header}\n\n{status_message}", thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
+
+    # ... các hàm gửi thông báo khác ...
+
+    # async def send_batch_trend_alert_notification(self, analysis_results: List[Dict[str, Any]]):
+    #     if not analysis_results: return
+    #     self.logger.info(f"Preparing to send a batch of {len(analysis_results)} detailed signals.")
+
+    #     separator = self.esc("\n\n----------------------------------------\n\n")
+    #     header = self.esc(f"🆘 {len(analysis_results)} New Signal(s) Found! 🔥")
+    #     message_parts = [header]
+
+    #     for result in analysis_results:
+    #         trend_raw = result.get('trend', 'N/A').replace("_", " ").title()
+    #         trend_emoji = "🔼 LONGG" if "Bullish" in trend_raw else "🔽 SHORT"
+    #         signal_detail = (
+    #             f"{separator}"
+    #             f"\\#{self.esc(trend_raw)} // {trend_emoji} // {self.esc(result.get('symbol', 'N/A'))}\n"
+    #             f"📌*Entry:* {self.format_and_escape(result.get('entry_price'))}\n"
+    #             f"❌*SL:* {self.format_and_escape(result.get('stop_loss'))}\n"
+    #             f"🎯*TP1:* {self.format_and_escape(result.get('take_profit_1'))}\n"
+    #             f"🎯*TP2:* {self.format_and_escape(result.get('take_profit_2'))}\n"
+    #             f"🎯*TP3:* {self.format_and_escape(result.get('take_profit_3'))}"
+    #         )
+    #         message_parts.append(signal_detail)
+
+    #     await self._send_to_both("".join(message_parts), thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
     # --- HÀM MỚI ---
     async def send_training_and_summary_notification(self, stats: Dict[str, Any]):
