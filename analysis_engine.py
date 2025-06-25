@@ -21,7 +21,7 @@ def _save_signal_to_db(signal_data: Dict[str, Any]) -> None:
     """
     sql_insert = """
     INSERT INTO trend_analysis (
-        analysis_timestamp_utc, symbol, timeframe, last_price,
+        analysis_timestamp_utc, symbol, timeframe, last_price,timestamp_utc
         ema_fast_len, ema_fast_val, ema_medium_len, ema_medium_val, ema_slow_len, ema_slow_val,
         rsi_len, rsi_val, trend, kline_open_time,
         bbands_lower, bbands_middle, bbands_upper, atr_val,
@@ -49,9 +49,9 @@ def _perform_analysis(df: pd.DataFrame, symbol: str) -> None:
     Performs technical analysis on a given DataFrame.
     This is the core processing logic, with no network or I/O operations.
     """
-    if df.empty or len(df) < EMA_SLOW:
-        logger.warning(f"Skipping analysis for {symbol}: not enough data points ({len(df)} rows).")
-        return
+    # if df.empty or len(df) < EMA_SLOW:
+    #     logger.warning(f"Skipping analysis for {symbol}: not enough data points ({len(df)} rows).")
+    #     return
 
     # --- 1. Calculate technical indicators ---
     df.ta.ema(length=EMA_FAST, append=True)
@@ -77,13 +77,13 @@ def _perform_analysis(df: pd.DataFrame, symbol: str) -> None:
         
     atr_percent = (atr_value / price) * 100 if price > 0 else 0
     if atr_percent < MIN_ATR_PERCENT:
-        logger.debug(f"{symbol}: Skipping. Low volatility (ATR: {atr_percent:.2f}%).")
+        logger.info(f"{symbol}: Skipping. Low volatility (ATR: {atr_percent:.2f}%).")
         return
 
     current_volume = last.get('volume')
     volume_sma = last.get(f'VOLUME_SMA_{VOLUME_SMA_PERIOD}')
     if current_volume is None or volume_sma is None or current_volume < (volume_sma * MIN_VOLUME_RATIO):
-        logger.debug(f"{symbol}: Skipping. Low volume (Current: {current_volume} < SMA: {volume_sma}).")
+        logger.info(f"{symbol}: Skipping. Low volume (Current: {current_volume} < SMA: {volume_sma}).")
         return
 
     # --- 3. Trend determination logic ---
@@ -137,7 +137,7 @@ def _perform_analysis(df: pd.DataFrame, symbol: str) -> None:
         }
         _save_signal_to_db(signal_data)
     else:
-        logger.debug(f"{symbol}: Analysis complete. Trend is '{trend}', no strong signal generated.")
+        logger.info(f"{symbol}: Analysis complete. Trend is '{trend}', no strong signal generated.")
 
 async def process_symbol(client: AsyncClient, symbol: str) -> None:
     """

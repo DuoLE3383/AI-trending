@@ -29,6 +29,7 @@ class NotificationHandler:
         # Escape the backslash character itself first
         text = str(text).replace('\\', '\\\\')
 
+
         for char in escape_chars:
             text = text.replace(char, f'\\{char}')
         return text
@@ -131,7 +132,7 @@ class NotificationHandler:
             trend_emoji = "🔼" if "Bullish" in trend_raw else "🔽"
 
             signal_detail = (
-                f"\n\n----------------------------------------\n\n" # This line is fine as is
+                f"\n\n----------------------------------------\\\n\n" # This line is fine as is
                 f" \\#{trend} // {trend_emoji} // {symbol} \n" # Escaped #
                 f"📌Entry: {entry_price}\n"
                 f"❌SL: {stop_loss}\n"
@@ -226,7 +227,7 @@ class NotificationHandler:
                 f"Outcome: `{status}`\n\n"
                 f"Entry Price: `{entry_price}`\n"
                 f"Closing Price: `{closing_price}`\n"
-                f"P/L: `{percentage_pl_str}`"
+                f"PNL: `{percentage_pl_str * 5}`"
             )
 
             await self._send_to_both(message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
