@@ -186,7 +186,7 @@ class NotificationHandler:
                 f"Sign up and earn a 100 USD trading fee rebate voucher!*\n\n"
                 f"🔗 Register Now:\n"
                 f"https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P\n\n"
-                f"----------------------------------------------"
+                f"------------------------------------"
             )
             photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
             self.logger.debug(f"Startup notification photo URL: {photo_url}")
@@ -224,10 +224,11 @@ class NotificationHandler:
             trend_emoji = "💹" if "Bullish" in trend_raw else "🛑"
 
             signal_detail = (
-                f"\n\n----------------------------------------\n\n"
-                f" #{trend} // {trend_emoji} // {symbol} \n"
+                
+                f" 📣 #{trend} // {trend_emoji} // {symbol} \n"
+                f"\n\n-----------------------------\n\n"
                 f"📌Entry: {entry_price}\n"
-                f"❌SL: {stop_loss}\n"
+                f"⛔️SL: {stop_loss}\n"
                 f"🎯TP1: {tp1}\n"
                 f"🎯TP2: {tp2}\n"
                 f"🎯TP3: {tp3}"
