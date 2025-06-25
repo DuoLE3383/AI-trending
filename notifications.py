@@ -89,6 +89,7 @@ class NotificationHandler:
             )
             photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
             await self._send_photo_to_both(photo=photo_url, caption=caption_text, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
+            time.sleep(30)  # Sleep to ensure the message is sent before proceeding
         except Exception as e:
             self.logger.error(f"Failed to send startup notification: {e}", exc_info=True)
 
