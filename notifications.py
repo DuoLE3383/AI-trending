@@ -150,7 +150,7 @@ class NotificationHandler:
 
         caption = (
             f"🚀 *AI Trading Bot Activated*\n\n"
-            f"{self.esc(training_msg)}\n\n"
+            f"Result: {self.esc(training_msg)}\n\n"
             f"📡 Monitoring `{symbols_count}` pairs on the `{self.esc(config.TIMEFRAME)}` timeframe\\."
         )
         photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
