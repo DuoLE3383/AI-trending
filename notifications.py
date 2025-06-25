@@ -132,7 +132,7 @@ class NotificationHandler:
             message = (
                 f"{header}\n\n"
                 f"*{symbol}* \\| {self.esc(direction)}\n"
-                f"📋 *Outcome:* {self.esc(status_raw)}{self.esc(duration_str)}\n"
+                f"📋:* {self.esc(status_raw)}{self.esc(duration_str)}\n"
                 f"� *PNL \\(x{config.LEVERAGE}\\):* `{pnl_str}`"
             )
             await self._send_to_both(message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
