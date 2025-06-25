@@ -22,7 +22,7 @@ class NotificationHandler:
             keep_dot: If True, the '.' character will not be escaped.
                       Useful for formatting numbers.
         """
-        escape_chars = r'_*~`>#+-=|{}.!()[]!' # Added missing MarkdownV2 special character: '!'
+        escape_chars = r'_*~`>#+-=|{}.!()[]' # Added missing MarkdownV2 special characters: '(', ')', '[', ']'
         if keep_dot:
             escape_chars = escape_chars.replace('.', '')
 
@@ -49,7 +49,7 @@ class NotificationHandler:
             # Send to group with thread
             await self.telegram_handler.send_message(
                 chat_id=config.TELEGRAM_CHAT_ID,
-                text=message,
+                message=message,
                 message_thread_id=thread_id,
                 parse_mode=parse_mode
             )
@@ -145,7 +145,7 @@ class NotificationHandler:
 
     async def send_summary_report(self, stats: Dict[str, Any]):
         self.logger.info("Preparing performance summary report...")
-        header = "🏆 *Strategy Performance Report (All\\-Time)* 🏆\n"
+        header = "🏆 *Strategy Performance Report \\(All\\-Time\\)* 🏆\n"
 
         if stats.get('total_completed_trades', 0) > 0:
             win_rate = NotificationHandler.escape_markdownv2(f"{stats.get('win_rate', 0.0):.2f}")
