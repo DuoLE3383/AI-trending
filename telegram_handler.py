@@ -25,7 +25,6 @@ class TelegramHandler:
         url = f"{self.base_url}/sendMessage"
         params = {'chat_id': chat_id, 'text': message, **kwargs}
         
-        # PHIÊN BẢN DEBUG: Tạm thời bỏ qua try/except để thấy lỗi thật
         async with httpx.AsyncClient() as client:
             response = await client.post(url, json=params, timeout=20)
             response.raise_for_status() # Sẽ crash nếu có lỗi
@@ -53,7 +52,6 @@ class TelegramHandler:
             logger.error("Invalid photo type. Must be a URL (str) or bytes.")
             return
 
-        # PHIÊN BẢN DEBUG: Tạm thời bỏ qua try/except để thấy lỗi thật
         async with httpx.AsyncClient() as client:
             if files:
                 response = await client.post(url, data=data, files=files, timeout=30)

@@ -95,7 +95,7 @@ def evaluate_predictions(
                 # If a symbol is no longer in SYMBOLS or consistently has no data, it might stay here.
                 # Consider adding a max_cycles_to_keep_active if symbol data is missing.
         else:
-            logger.debug(f"Prediction for {symbol} not yet due for evaluation. Cycles: {prediction_data['cycles_since_prediction']}/{EVALUATION_PERIOD_CYCLES}")
+            logger.info(f"Prediction for {symbol} not yet due for evaluation. Cycles: {prediction_data['cycles_since_prediction']}/{EVALUATION_PERIOD_CYCLES}")
 
     for symbol in symbols_to_remove_from_active:
         if symbol in active_predictions:

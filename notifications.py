@@ -12,7 +12,7 @@ class NotificationHandler:
         self.logger = logger
 
     def escape_markdownv2_without_dot(self, text: str) -> str:
-        escape_chars = r"_*[]()~`>#+-=|{}!"
+        escape_chars = r"_*~`>#+-=|{}!"
         for ch in escape_chars:
             text = text.replace(ch, f"\\{ch}")
         return text
