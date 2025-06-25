@@ -77,7 +77,7 @@ def _perform_analysis(df: pd.DataFrame, symbol: str) -> None:
         
     atr_percent = (atr_value / price) * 100 if price > 0 else 0
     if atr_percent < MIN_ATR_PERCENT:
-        logger.info(f"{symbol}: Skipping. Low volatility (ATR: {atr_percent:.2f}%).")
+        # logger.info(f"{symbol}: Skipping. Low volatility (ATR: {atr_percent:.2f}%).")
         return
 
     current_volume = last.get('volume')
