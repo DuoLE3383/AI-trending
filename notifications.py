@@ -28,7 +28,6 @@ class NotificationHandler:
 
     async def _send_with_retry(self, send_func, **kwargs):
         """Hàm helper để gửi tin nhắn/ảnh với cơ chế thử lại."""
-        # ... (Hàm này giữ nguyên như phiên bản chuẩn trước đó)
         max_retries = 3; delay = 2
         for attempt in range(max_retries):
             try:
@@ -72,7 +71,6 @@ class NotificationHandler:
             trend_raw = result.get('trend', '')
             direction = "LONG 🔼" if 'BULLISH' in trend_raw else "SHORT 🔽"
             
-            # Tạo link TradingView
             tv_link = f"https://www.tradingview.com/chart/?symbol=BINANCE%3A{result.get('symbol', 'N/A')}.P"
             
             signal_block = (
@@ -104,7 +102,6 @@ class NotificationHandler:
             symbol = self.esc(trade_details.get('symbol', 'N/A'))
             direction = "LONG 🔼" if 'BULLISH' in trend_raw else "SHORT 🔽"
             
-            # Tính toán thời gian giữ lệnh (nếu có)
             entry_time_str = trade_details.get('entry_timestamp_utc')
             outcome_time_str = trade_details.get('outcome_timestamp_utc')
             duration_str = ""
@@ -116,11 +113,10 @@ class NotificationHandler:
                     minutes, _ = divmod(remainder, 60)
                     duration_str = f" \\| ⏳ {int(hours)}h {int(minutes)}m"
                 except Exception:
-                    pass # Bỏ qua nếu không thể tính toán
+                    pass
 
-            # Tính PNL
             entry_p = trade_details.get('entry_price')
-            closing_p = trade_details.get('exit_price') # Sử dụng cột exit_price
+            closing_p = trade_details.get('exit_price')
             pnl_str = "—"
             if entry_p and closing_p:
                 try:
@@ -132,8 +128,8 @@ class NotificationHandler:
             message = (
                 f"{header}\n\n"
                 f"*{symbol}* \\| {self.esc(direction)}\n"
-                f"📋:* {self.esc(status_raw)}{self.esc(duration_str)}\n"
-                f"� *PNL \\(x{config.LEVERAGE}\\):* `{pnl_str}`"
+                f"🏁 *Result:* {self.esc(status_raw)}{self.esc(duration_str)}\n"
+                f"💰 *PNL \\(x{config.LEVERAGE}\\):* `{pnl_str}`"
             )
             await self._send_to_both(message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
         except Exception as e:
@@ -141,18 +137,23 @@ class NotificationHandler:
 
 
     async def send_startup_notification(self, symbols_count: int, accuracy: float | None):
-        """THIẾT KẾ MỚI: Thông báo khởi động gọn gàng."""
+        """SỬA LỖI: Cấu trúc lại cách tạo caption để đảm bảo cú pháp MarkdownV2 luôn đúng."""
         self.logger.info("Preparing startup notification...")
+        
+        # Tạo phần tin nhắn về kết quả training một cách an toàn
         if accuracy is not None:
-            training_msg = f"✅ *Initial Model Trained* \\| *Accuracy:* `{accuracy:.2%}`"
+            accuracy_str = self.esc(f"{accuracy:.2%}")
+            training_msg_part = f"✅ *Initial Model Trained* \\| *Accuracy:* `{accuracy_str}`"
         else:
-            training_msg = "⚠️ *Initial Model Training Failed/Skipped*"
+            training_msg_part = "⚠️ *Initial Model Training Failed/Skipped*"
 
+        # Xây dựng chuỗi caption cuối cùng, chỉ escape các biến cần thiết
         caption = (
             f"🚀 *AI Trading Bot Activated*\n\n"
-            f"{self.esc(training_msg)}\n\n"
+            f"{training_msg_part}\n\n"
             f"📡 Monitoring `{symbols_count}` pairs on the `{self.esc(config.TIMEFRAME)}` timeframe\\."
         )
+        
         photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
         await self._send_photo_to_both(photo=photo_url, caption=caption, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
@@ -166,3 +167,4 @@ class NotificationHandler:
             status_message = "❌ *Periodic Training Failed*\\."
         
         await self._send_to_both(f"{header}\n\n{status_message}", thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
+
