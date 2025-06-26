@@ -44,8 +44,8 @@ MACD_FAST_PERIOD = 12
 MACD_SLOW_PERIOD = 26
 MACD_SIGNAL_PERIOD = 9
 # ADX Settings
-ADX_PERIOD = 14
-ADX_MIN_TREND_STRENGTH = 25 # Example threshold for strong trend
+ADX_PERIOD = 13
+ADX_MIN_TREND_STRENGTH = 28 # Example threshold for strong trend
 # EMA Settings
 EMA_FAST = 34
 EMA_MEDIUM = 89
@@ -66,13 +66,13 @@ VOLUME_SMA_PERIOD = 20
 MIN_VOLUME_RATIO = 1.0 # Volume hiện tại phải >= 1.0 * Volume SMA
 
 # Volatility Filter: Tín hiệu sẽ bị bỏ qua nếu biến động (ATR) dưới mức này
-MIN_ATR_PERCENT = 1.6
+MIN_ATR_PERCENT = 1.2
 
 # Trade Parameter Multipliers (dựa trên ATR)
 ATR_MULTIPLIER_SL = 2.8   # StopLoss = 1.5 * ATR
-ATR_MULTIPLIER_TP1 = 1.9 # TakeProfit 1 = 1.0 * ATR
-ATR_MULTIPLIER_TP2 = 2.8  # TakeProfit 2 = 2.0 * ATR
-ATR_MULTIPLIER_TP3 = 3.9  # TakeProfit 3 = 3.0 * ATR
+ATR_MULTIPLIER_TP1 = 2.2 # TakeProfit 1 = 1.0 * ATR
+ATR_MULTIPLIER_TP2 = 3.8  # TakeProfit 2 = 2.0 * ATR
+ATR_MULTIPLIER_TP3 = 5.2  # TakeProfit 3 = 3.0 * ATR
 
 # ==============================================================================
 # === 5. TREND DEFINITIONS

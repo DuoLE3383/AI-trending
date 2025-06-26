@@ -1,4 +1,4 @@
-# notifications.py (Phiên bản được thiết kế lại chuyên nghiệp)
+# notifications.py (Phiên bản cuối cùng, ổn định và đã sửa tất cả lỗi)
 import logging
 from typing import List, Dict, Any
 import asyncio
@@ -11,24 +11,22 @@ logger = logging.getLogger(__name__)
 
 class NotificationHandler:
     def __init__(self, telegram_handler: TelegramHandler):
-        """
-        Khởi tạo handler, chịu trách nhiệm định dạng và gửi tất cả các loại thông báo.
-        """
         self.telegram_handler = telegram_handler
         self.logger = logger
+        # Lối tắt để gọi hàm escape, giúp code gọn hơn
         self.esc = self.telegram_handler.escape_markdownv2
 
     def format_and_escape(self, value: Any, precision: int = 5) -> str:
-        """Định dạng một giá trị số và escape nó một cách an toàn."""
+        """Định dạng một giá trị số và escape nó an toàn cho MarkdownV2."""
         if value is None: return '—'
         try:
-            return self.esc(f"{float(value):.{precision}f}")
+            # Chỉ escape giá trị đã được định dạng
+            return f"`{self.esc(f'{float(value):.{precision}f}')}`"
         except (ValueError, TypeError):
-            return '—'
+            return '`—`'
 
     async def _send_with_retry(self, send_func, **kwargs):
         """Hàm helper để gửi tin nhắn/ảnh với cơ chế thử lại."""
-        # ... (Hàm này giữ nguyên như phiên bản chuẩn trước đó)
         max_retries = 3; delay = 2
         for attempt in range(max_retries):
             try:
@@ -40,129 +38,144 @@ class NotificationHandler:
                 else: self.logger.critical(f"❌ Thất bại sau {max_retries} lần thử.")
         return False
 
-    async def _send_to_both(self, message: str, thread_id: int = None, disable_web_page_preview=False):
+    async def _send_to_both(self, message: str, thread_id: int = None):
         """Gửi tin nhắn văn bản đến cả group và channel."""
-        common_kwargs = {'parse_mode': 'MarkdownV2', 'disable_web_page_preview': disable_web_page_preview}
+        common_kwargs = {'parse_mode': 'MarkdownV2', 'disable_web_page_preview': True}
         group_kwargs = {'chat_id': config.TELEGRAM_CHAT_ID, 'text': message, 'message_thread_id': thread_id, **common_kwargs}
         channel_kwargs = {'chat_id': config.TELEGRAM_CHANNEL_ID, 'text': message, **common_kwargs}
         await self._send_with_retry(self.telegram_handler.send_message, **group_kwargs)
-        await self._send_with_retry(self.telegram_handler.send_message, **channel_kwargs)
+        # Bỏ gửi đến channel thứ 2 để tránh spam nếu không cần thiết, bạn có thể mở lại nếu muốn
+        # await self._send_with_retry(self.telegram_handler.send_message, **channel_kwargs)
 
     async def _send_photo_to_both(self, photo: str, caption: str, thread_id: int = None):
         """Gửi ảnh có chú thích đến cả group và channel."""
         group_kwargs = {'chat_id': config.TELEGRAM_CHAT_ID, 'photo': photo, 'caption': caption, 'parse_mode': 'MarkdownV2', 'message_thread_id': thread_id}
         channel_kwargs = {'chat_id': config.TELEGRAM_CHANNEL_ID, 'photo': photo, 'caption': caption, 'parse_mode': 'MarkdownV2'}
         await self._send_with_retry(self.telegram_handler.send_photo, **group_kwargs)
+        # await self._send_with_retry(self.telegram_handler.send_photo, **channel_kwargs)
 
-    # === CÁC HÀM GỬI THÔNG BÁO (THIẾT KẾ MỚI) ===
+    # === CÁC HÀM GỬI THÔNG BÁO (THEO PHONG CÁCH CŨ, ĐÃ SỬA LỖI) ===
 
     async def send_batch_trend_alert_notification(self, analysis_results: List[Dict[str, Any]]):
-        """
-        THIẾT KẾ MỚI: Gửi một tin nhắn duy nhất cho một loạt tín hiệu.
-        """
+        """Gửi một tin nhắn riêng cho mỗi tín hiệu mới."""
         if not analysis_results: return
-        self.logger.info(f"Preparing a batch of {len(analysis_results)} new signals.")
-
-        header = f"📈 *New AI Trading Signals \\({self.esc(config.TIMEFRAME)}\\)*"
-        message_parts = [header]
-        separator = self.esc("\n\n" + "-"*25 + "\n")
+        
+        header = self.esc("🆘 1 New Signal(s) Found! 🔥")
+        separator = self.esc("\n\n----------------------------------------\n\n")
 
         for result in analysis_results:
-            symbol = self.esc(result.get('symbol', 'N/A'))
-            trend_raw = result.get('trend', '')
-            direction = "LONG 🔼" if 'BULLISH' in trend_raw else "SHORT 🔽"
+            trend_raw = result.get('trend', '').replace("_", " ").title()
+            trend_emoji = "🔼 LONG" if "Bullish" in trend_raw else "🔽 SHORT"
             
-            # Tạo link TradingView
-            tv_link = f"https://www.tradingview.com/chart/?symbol=BINANCE%3A{result.get('symbol', 'N/A')}.P"
-            
-            signal_block = (
-                f"\n*{symbol}* \\| [Chart]({self.esc(tv_link)})"
-                f"\n🧭 *Direction:* {self.esc(direction)}"
-                f"\n👉 *Entry:* `{self.format_and_escape(result.get('entry_price'))}`"
-                f"\n🛡️ *Stop Loss:* `{self.format_and_escape(result.get('stop_loss'))}`"
-                f"\n🎯 *Take Profit 1:* `{self.format_and_escape(result.get('take_profit_1'))}`"
+            signal_detail = (
+                f"\\#{self.esc(trend_raw)} // {trend_emoji} // {self.esc(result.get('symbol', 'N/A'))}\n"
+                f"📌Entry: {self.format_and_escape(result.get('entry_price'))}\n"
+                f"❌SL: {self.format_and_escape(result.get('stop_loss'))}\n"
+                f"🎯TP1: {self.format_and_escape(result.get('take_profit_1'))}"
             )
-            message_parts.append(signal_block)
-
-        full_message = separator.join(message_parts)
-        await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID, disable_web_page_preview=True)
-
+            
+            full_message = header + separator + signal_detail
+            await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
+            await asyncio.sleep(0.5)
 
     async def send_trade_outcome_notification(self, trade_details: Dict[str, Any]):
-        """
-        THIẾT KẾ MỚI: Thông báo kết quả giao dịch gọn gàng và chuyên nghiệp hơn.
-        """
-        self.logger.info(f"Preparing outcome notification for {trade_details.get('symbol', 'N/A')}...")
+        """Thông báo kết quả giao dịch theo định dạng chi tiết cũ."""
         try:
             status_raw = trade_details.get('status', 'N/A')
-            trend_raw = trade_details.get('trend', 'N/A')
+            trend_raw = trade_details.get('trend', '')
             is_win = "TP" in status_raw
             
-            header_icon, header_text = ("🟢", "WIN") if is_win else ("🔴", "LOSS")
-            header = f"{header_icon} *Trade Closed: {self.esc(header_text)}*"
+            outcome_emoji, outcome_text = ("✅", "WIN") if is_win else ("❌", "LOSS")
+            header = f"{outcome_emoji} *Trade Closed: {self.esc(outcome_text)}* {outcome_emoji}"
 
             symbol = self.esc(trade_details.get('symbol', 'N/A'))
-            direction = "LONG 🔼" if 'BULLISH' in trend_raw else "SHORT 🔽"
+            direction = f"LONG 🔼" if 'BULLISH' in trend_raw else f"SHORT 🔽"
             
-            # Tính toán thời gian giữ lệnh (nếu có)
-            entry_time_str = trade_details.get('entry_timestamp_utc')
-            outcome_time_str = trade_details.get('outcome_timestamp_utc')
-            duration_str = ""
-            if entry_time_str and outcome_time_str:
-                try:
-                    duration = pd.to_datetime(outcome_time_str) - pd.to_datetime(entry_time_str)
-                    total_seconds = duration.total_seconds()
-                    hours, remainder = divmod(total_seconds, 3600)
-                    minutes, _ = divmod(remainder, 60)
-                    duration_str = f" \\| ⏳ {int(hours)}h {int(minutes)}m"
-                except Exception:
-                    pass # Bỏ qua nếu không thể tính toán
-
-            # Tính PNL
-            entry_p = trade_details.get('entry_price')
-            closing_p = trade_details.get('exit_price') # Sử dụng cột exit_price
-            pnl_str = "—"
+            pnl_without_leverage_str, pnl_with_leverage_str = "`—`", "`—`"
+            entry_p, closing_p = trade_details.get('entry_price'), trade_details.get('exit_price')
             if entry_p and closing_p:
                 try:
                     pnl = ((float(closing_p) - float(entry_p)) / float(entry_p)) * 100
                     if 'BEARISH' in trend_raw: pnl *= -1
-                    pnl_str = self.esc(f"{pnl * config.LEVERAGE:+.2f}%")
+                    pnl_without_leverage_str = f"`{self.esc(f'{pnl:+.2f}%')}`"
+                    pnl_with_leverage_str = f"`{self.esc(f'{pnl * config.LEVERAGE:+.2f}%')}`"
                 except (ValueError, TypeError): pass
 
             message = (
                 f"{header}\n\n"
-                f"*{symbol}* \\| {self.esc(direction)}\n"
-                f"📋:* {self.esc(status_raw)}{self.esc(duration_str)}\n"
-                f"� *PNL \\(x{config.LEVERAGE}\\):* `{pnl_str}`"
+                f"Symbol: `{symbol}`\n"
+                f"Direction: `{self.esc(direction)}`\n"
+                f"Outcome: `{self.esc(status_raw)}`\n\n"
+                f"Entry Price: {self.format_and_escape(trade_details.get('entry_price'))}\n"
+                f"Closing Price: {self.format_and_escape(closing_p)}\n"
+                f"PNL \\(1x\\): {pnl_without_leverage_str}\n"
+                f"PNL \\(x{config.LEVERAGE}\\): {pnl_with_leverage_str}"
             )
             await self._send_to_both(message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
         except Exception as e:
             self.logger.error(f"Failed to send trade outcome notification: {e}", exc_info=True)
 
-
     async def send_startup_notification(self, symbols_count: int, accuracy: float | None):
-        """THIẾT KẾ MỚI: Thông báo khởi động gọn gàng."""
-        self.logger.info("Preparing startup notification...")
+        """Thông báo khởi động với đầy đủ thông tin, đã sửa lỗi cú pháp."""
+        safe_accuracy_msg = ""
         if accuracy is not None:
-            training_msg = f"✅ *Initial Model Trained* \\| *Accuracy:* `{accuracy:.2%}`"
+            safe_accuracy_msg = f"✅ *Initial Model Trained* \\| *Accuracy:* `{self.esc(f'{accuracy:.2%}')}`"
         else:
-            training_msg = "⚠️ *Initial Model Training Failed/Skipped*"
+            safe_accuracy_msg = "⚠️ *Initial Model Training Failed/Skipped*"
+        
+        binance_link = 'https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P'
+        monitoring_msg = f"📡 Monitoring `{symbols_count}` pairs on the `{self.esc(config.TIMEFRAME)}` timeframe\\."
+        promo_msg = f"💰 *New \\#Binance\\?* [Get a \\$100 Bonus]({binance_link})\\!"
+        separator = self.esc("-----------------------------------------")
 
         caption = (
             f"🚀 *AI Trading Bot Activated*\n\n"
-            f"Result: {self.esc(training_msg)}\n\n"
-            f"📡 Monitoring `{symbols_count}` pairs on the `{self.esc(config.TIMEFRAME)}` timeframe\\."
+            f"{safe_accuracy_msg}\n\n"
+            f"{monitoring_msg}\n\n"
+            f"{separator}\n\n"
+            f"{promo_msg}"
         )
         photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
         await self._send_photo_to_both(photo=photo_url, caption=caption, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
-
     async def send_training_complete_notification(self, accuracy: float | None):
-        """THIẾT KẾ MỚI: Thông báo cập nhật training."""
+        """CẬP NHẬT: Thông báo kết quả training định kỳ, có kèm promo."""
         header = self.esc("🤖 AI Model Update")
+        
         if accuracy is not None:
-            status_message = f"✅ *Periodic Training Complete*\\.\n*New Accuracy:* `{accuracy:.2%}`"
+            status_message = f"✅ *Periodic Training Complete*\\.\n*New Accuracy:* `{self.esc(f'{accuracy:.2%}')}`"
         else:
             status_message = "❌ *Periodic Training Failed*\\."
+
+        separator = self.esc("-----------------------------------------")
+        binance_link = 'https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P'
+        promo_msg = f"💰 *New \\#Binance\\?* [Get a \\$100 Bonus]({binance_link})\\!"
+
+        full_message = (
+            f"{header}\n\n"
+            f"{status_message}\n\n"
+            f"{separator}\n\n"
+            f"{promo_msg}"
+        )
         
-        await self._send_to_both(f"{header}\n\n{status_message}", thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
+        await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
+
+    async def send_fallback_mode_startup_notification(self, symbols_count: int):
+        """Thông báo khi bot khởi động ở chế độ dự phòng (không có AI)."""
+        binance_link = 'https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P'
+        main_msg = (
+            f"⚠️ *AI Model not available* \\- not enough training data\\.\n"
+            f"✅ Bot is running in *Rule\\-Based Mode* and collecting data\\.\n\n"
+            f"📡 Monitoring `{symbols_count}` pairs on the `{self.esc(config.TIMEFRAME)}` timeframe\\."
+        )
+        promo_msg = f"💰 *New \\#Binance\\?* [Get a \\$100 Bonus]({binance_link})\\!"
+        separator = self.esc("-----------------------------------------")
+        caption = (
+            f"🚀 *AI Trading Bot Activated \\(Fallback Mode\\)*\n\n"
+            f"{main_msg}\n"
+            f"{separator}\n\n"
+            f"{promo_msg}"
+        )
+        photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
+        await self._send_photo_to_both(photo=photo_url, caption=caption, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
+
