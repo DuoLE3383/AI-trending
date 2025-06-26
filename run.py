@@ -135,7 +135,7 @@ async def update_loop(notifier: NotificationHandler):
                 continue
             
             logger.info("💡 New code found! Attempting to pull updates...")
-            pull_process = await asyncio.create_subprocess_shell('git pull origin main', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            pull_process = await asyncio.create_subprocess_shell('git pull origin ai', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             pull_stdout, pull_stderr = await pull_process.communicate()
 
             if pull_process.returncode == 0:
