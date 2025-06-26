@@ -37,6 +37,7 @@ CONCURRENT_REQUESTS = 10 # Số lượng yêu cầu đồng thời tối đa khi
 # ==============================================================================
 # In config.py
 LEVERAGE = 5 # Or whatever your default leverage is
+STRATEGY_MODE = 'AI' 
 
 # --- New Indicators Parameters ---
 # MACD Settings
