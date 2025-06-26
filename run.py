@@ -5,6 +5,7 @@ import asyncio
 import sqlite3
 import joblib
 from dotenv import load_dotenv
+from analysis_engine import perform_ai_fallback_analysis, perform_elliotv8_analysis
 
 # Load environment variables from .env file
 load_dotenv()
@@ -31,16 +32,38 @@ logger = logging.getLogger(__name__)
 
 # --- BOT LOOPS ---
 
-async def analysis_loop(client, symbols, model, label_encoder, model_features):
-    logger.info(f"✅ Analysis Loop starting...")
+# --- Phiên bản analysis_loop đã sửa lỗi ---
+
+async def analysis_loop(
+    client: AsyncClient, 
+    symbols_to_monitor: set, 
+    model, 
+    label_encoder, 
+    model_features
+):
+    """LOOP 1: Phân tích thị trường, chọn chiến lược từ config."""
+    logger.info(f"✅ Analysis Loop starting (Strategy: {config.STRATEGY_MODE})")
     semaphore = asyncio.Semaphore(config.CONCURRENT_REQUESTS)
+    
     async def process_with_semaphore(symbol: str):
         async with semaphore:
-            await process_symbol(client, symbol, model, label_encoder, model_features)
+            # KIỂM TRA VÀ GỌI ĐÚNG HÀM CHIẾN LƯỢC
+            # Logic chọn chiến lược đã được tích hợp vào đây.
+            if config.STRATEGY_MODE == 'Elliotv8':
+                # Import hàm này nếu bạn chưa làm: 
+                # from analysis_engine import perform_elliotv8_analysis
+                await perform_elliotv8_analysis(client, symbol)
+            else: # Mặc định là 'AI'
+                # Import hàm này nếu bạn chưa làm:
+                # from analysis_engine import perform_ai_fallback_analysis
+                await perform_ai_fallback_analysis(client, symbol, model, label_encoder, model_features)
+            
+            # ĐÃ XÓA DÒNG GỌI process_symbol() BỊ THỪA
+
     while True:
         try:
-            logger.info(f"--- Starting analysis cycle for {len(symbols)} symbols ---")
-            tasks = [process_with_semaphore(s) for s in list(symbols)]
+            logger.info(f"--- Starting analysis cycle for {len(symbols_to_monitor)} symbols ---")
+            tasks = [process_with_semaphore(s) for s in list(symbols_to_monitor)]
             await asyncio.gather(*tasks)
             logger.info(f"--- Analysis cycle complete. Sleeping for {config.LOOP_SLEEP_INTERVAL_SECONDS} seconds. ---")
             await asyncio.sleep(config.LOOP_SLEEP_INTERVAL_SECONDS)
