@@ -154,6 +154,7 @@ class NotificationHandler:
         full_message = (
             f"{header}\n\n"
             f"{status_message}\n\n"
+            f"📡 Monitoring `{symbols_count}` pairs on the `{self.esc(config.TIMEFRAME)}` timeframe\\."
             f"{separator}\n\n"
             f"{promo_msg}"
         )
