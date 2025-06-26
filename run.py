@@ -1,4 +1,4 @@
-# run.py (Phiên bản cuối cùng, đã sửa lỗi và tối ưu)
+# run.py (Phiên bản đã sửa lỗi TypeError và RuntimeWarning)
 import sys
 import logging
 import asyncio
@@ -6,8 +6,10 @@ import sqlite3
 import joblib
 from dotenv import load_dotenv
 
+# Load environment variables from .env file
 load_dotenv()
 
+# --- Project Module Imports ---
 from binance import AsyncClient
 import config
 from database_handler import init_sqlite_db
@@ -19,6 +21,7 @@ from updater import get_usdt_futures_symbols, check_signal_outcomes
 from trainer import train_model
 from training_loop import training_loop
 
+# --- Logging Configuration ---
 logging.basicConfig(
     level=logging.INFO, 
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
@@ -26,7 +29,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# --- CÁC VÒNG LẶP (Giữ nguyên) ---
+# --- BOT LOOPS ---
+
 async def analysis_loop(client, symbols, model, label_encoder, model_features):
     logger.info(f"✅ Analysis Loop starting...")
     semaphore = asyncio.Semaphore(config.CONCURRENT_REQUESTS)
@@ -45,21 +49,18 @@ async def analysis_loop(client, symbols, model, label_encoder, model_features):
             await asyncio.sleep(60)
 
 async def signal_check_loop(notifier: NotificationHandler):
-    # ... (code giữ nguyên)
     logger.info(f"✅ New Signal Alert Loop starting...")
     notified_signal_ids = set()
     try:
         with sqlite3.connect(f'file:{config.SQLITE_DB_PATH}?mode=ro', uri=True) as conn:
             existing_ids = conn.execute("SELECT rowid FROM trend_analysis WHERE status = 'ACTIVE'").fetchall()
             notified_signal_ids.update(r[0] for r in existing_ids)
-        logger.info(f"Initialized with {len(notified_signal_ids)} existing active signals.")
     except Exception as e:
         logger.error(f"❌ Error initializing signal_check_loop: {e}")
     while True:
         try:
             with sqlite3.connect(f'file:{config.SQLITE_DB_PATH}?mode=ro', uri=True) as conn:
                 conn.row_factory = sqlite3.Row
-                # Câu lệnh an toàn hơn để tránh lỗi khi set trống
                 if not notified_signal_ids:
                     new_signals = conn.execute("SELECT rowid, * FROM trend_analysis WHERE status = 'ACTIVE'").fetchall()
                 else:
@@ -73,7 +74,6 @@ async def signal_check_loop(notifier: NotificationHandler):
         await asyncio.sleep(config.SIGNAL_CHECK_INTERVAL_SECONDS)
 
 async def updater_loop(client: AsyncClient):
-    # ... (code giữ nguyên)
     logger.info(f"✅ Trade Updater Loop starting...")
     while True:
         try:
@@ -83,14 +83,12 @@ async def updater_loop(client: AsyncClient):
         await asyncio.sleep(config.UPDATER_INTERVAL_SECONDS)
 
 async def outcome_check_loop(notifier: NotificationHandler):
-    # ... (code giữ nguyên)
     logger.info(f"✅ Trade Outcome Notification Loop starting...")
     notified_trade_ids = set()
     try:
         with sqlite3.connect(f'file:{config.SQLITE_DB_PATH}?mode=ro', uri=True) as conn:
             closed_trades = conn.execute("SELECT rowid FROM trend_analysis WHERE status != 'ACTIVE'").fetchall()
             notified_trade_ids.update(r[0] for r in closed_trades)
-        logger.info(f"Initialized with {len(notified_trade_ids)} existing closed trades.")
     except Exception as e:
         logger.error(f"❌ Error initializing outcome_check_loop: {e}")
     while True:
@@ -109,7 +107,7 @@ async def outcome_check_loop(notifier: NotificationHandler):
             logger.error(f"❌ Error in outcome_check_loop: {e}", exc_info=True)
         await asyncio.sleep(config.SIGNAL_CHECK_INTERVAL_SECONDS)
 
-# --- HÀM MAIN ---
+# --- MAIN FUNCTION ---
 async def main():
     logger.info("--- 🚀 Initializing Bot ---")
     client = None
@@ -140,7 +138,6 @@ async def main():
             logger.critical("Could not fetch symbols. Exiting.")
             sys.exit(1)
             
-        # Gửi thông báo khởi động tương ứng
         if all([model, label_encoder, model_features]):
             await notifier.send_startup_notification(len(all_symbols), initial_accuracy)
         else:
@@ -149,13 +146,20 @@ async def main():
 
         logger.info("--- 🟢 Bot is now running. All loops are active. ---")
         
-        # SỬA LỖI: Truyền symbols_count vào training_loop
+        # SỬA LỖI: Bọc tất cả các coroutine vào asyncio.create_task
+        # và gọi training_loop với đúng số lượng tham số
+        analysis_task = asyncio.create_task(analysis_loop(client, all_symbols, model, label_encoder, model_features))
+        signal_task = asyncio.create_task(signal_check_loop(notifier))
+        updater_task = asyncio.create_task(updater_loop(client))
+        outcome_task = asyncio.create_task(outcome_check_loop(notifier))
+        training_task = asyncio.create_task(training_loop(notifier)) # SỬA LỖI: Chỉ truyền 1 tham số
+
         await asyncio.gather(
-            analysis_loop(client, all_symbols, model, label_encoder, model_features),
-            signal_check_loop(notifier),
-            updater_loop(client),
-            outcome_check_loop(notifier),
-            training_loop(notifier, len(all_symbols))
+            analysis_task,
+            signal_task,
+            updater_task,
+            outcome_task,
+            training_task
         )
     except Exception as main_exc:
         logger.critical(f"A fatal error in main execution block: {main_exc}", exc_info=True)
