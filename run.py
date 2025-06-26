@@ -121,7 +121,7 @@ async def update_loop(notifier: NotificationHandler):
     """
     logger.info("✅ Auto-update Loop starting...")
     while True:
-        await asyncio.sleep(30 * 60) # Kiểm tra mỗi 30 phút
+        await asyncio.sleep(10 * 60) # Kiểm tra mỗi 30 phút
         
         try:
             logger.info("📡 Checking for code updates from git...")
