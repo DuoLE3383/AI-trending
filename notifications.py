@@ -61,7 +61,7 @@ class NotificationHandler:
         if not analysis_results: return
         
         header = self.esc("🆘 1 New Signal(s) Found! 🔥")
-        separator = self.esc("\n\n----------------------------------------\n\n")
+        separator = self.esc("\n\n---------------------------\n\n")
 
         for result in analysis_results:
             trend_raw = result.get('trend', '').replace("_", " ").title()
@@ -126,7 +126,7 @@ class NotificationHandler:
         binance_link = 'https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P'
         monitoring_msg = f"📡 Monitoring `{symbols_count}` pairs on the `{self.esc(config.TIMEFRAME)}` timeframe\\."
         promo_msg = f"💰 *New \\#Binance\\?* [Get a \\$100 Bonus]({binance_link})\\!"
-        separator = self.esc("-----------------------------------------")
+        separator = self.esc("-----------------------------")
 
         caption = (
             f"🚀 *AI Trading Bot Activated*\n\n"
