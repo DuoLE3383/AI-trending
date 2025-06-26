@@ -1,305 +1,170 @@
-# notifications.py
+# notifications.py (Phiên bản được thiết kế lại chuyên nghiệp)
 import logging
-import re # Added for regex in strip_markdown
-from typing import List, Dict, Any, Union # Added Union for type hinting
-import config
+from typing import List, Dict, Any
+import asyncio
 from telegram_handler import TelegramHandler
+import config
+import re
+import pandas as pd
+
 logger = logging.getLogger(__name__)
 
 class NotificationHandler:
     def __init__(self, telegram_handler: TelegramHandler):
+        """
+        Khởi tạo handler, chịu trách nhiệm định dạng và gửi tất cả các loại thông báo.
+        """
         self.telegram_handler = telegram_handler
-        self.logger = logger # Using the module-level logger
+        self.logger = logger
+        self.esc = self.telegram_handler.escape_markdownv2
 
-    def format_and_escape(self, value: Union[float, int, str, None], precision: int = 5) -> str:
-        """
-        Formats a numerical value to a string with specified precision and
-        then escapes it for MarkdownV2, ensuring dots are preserved.
-
-        Args:
-            value (Union[float, int, str, None]): The value to format and escape.
-                                                  Can be a number or a string that can be converted to float.
-            precision (int): The number of decimal places for formatting.
-
-        Returns:
-            str: The formatted and MarkdownV2-escaped string, or '—' if value is None or invalid.
-        """
-        if value is None:
-            return '—'
+    def format_and_escape(self, value: Any, precision: int = 5) -> str:
+        """Định dạng một giá trị số và escape nó một cách an toàn."""
+        if value is None: return '—'
         try:
-            formatted_value = f"{float(value):.{precision}f}"
-            # Use the TelegramHandler's robust MarkdownV2 escaping
-            return self.telegram_handler.escape_markdownv2(formatted_value)
-        except (ValueError, TypeError): # Catch specific exceptions for float conversion
-            self.logger.warning(f"Could not format value '{value}' as float. Returning '—'.", exc_info=True)
+            return self.esc(f"{float(value):.{precision}f}")
+        except (ValueError, TypeError):
             return '—'
 
-    async def _send_to_both(self, message: str, thread_id: Union[int, None] = None, parse_mode: str = "MarkdownV2") -> None:
+    async def _send_with_retry(self, send_func, **kwargs):
+        """Hàm helper để gửi tin nhắn/ảnh với cơ chế thử lại."""
+        max_retries = 3; delay = 2
+        for attempt in range(max_retries):
+            try:
+                await send_func(**kwargs)
+                return True
+            except Exception as e:
+                self.logger.error(f"Lỗi khi gửi (lần {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1: await asyncio.sleep(delay); delay *= 2
+                else: self.logger.critical(f"❌ Thất bại sau {max_retries} lần thử.")
+        return False
+
+    async def _send_to_both(self, message: str, thread_id: int = None, disable_web_page_preview=False):
+        """Gửi tin nhắn văn bản đến cả group và channel."""
+        common_kwargs = {'parse_mode': 'MarkdownV2', 'disable_web_page_preview': disable_web_page_preview}
+        group_kwargs = {'chat_id': config.TELEGRAM_CHAT_ID, 'text': message, 'message_thread_id': thread_id, **common_kwargs}
+        channel_kwargs = {'chat_id': config.TELEGRAM_CHANNEL_ID, 'text': message, **common_kwargs}
+        await self._send_with_retry(self.telegram_handler.send_message, **group_kwargs)
+        await self._send_with_retry(self.telegram_handler.send_message, **channel_kwargs)
+
+    async def _send_photo_to_both(self, photo: str, caption: str, thread_id: int = None):
+        """Gửi ảnh có chú thích đến cả group và channel."""
+        group_kwargs = {'chat_id': config.TELEGRAM_CHAT_ID, 'photo': photo, 'caption': caption, 'parse_mode': 'MarkdownV2', 'message_thread_id': thread_id}
+        channel_kwargs = {'chat_id': config.TELEGRAM_CHANNEL_ID, 'photo': photo, 'caption': caption, 'parse_mode': 'MarkdownV2'}
+        await self._send_with_retry(self.telegram_handler.send_photo, **group_kwargs)
+
+    # === CÁC HÀM GỬI THÔNG BÁO (THIẾT KẾ MỚI) ===
+
+    async def send_batch_trend_alert_notification(self, analysis_results: List[Dict[str, Any]]):
         """
-        Sends a message to both the configured Telegram group and channel.
-        The message is sent with MarkdownV2 formatting to the group and
-        as plain text (stripped of Markdown) to the channel.
-
-        Args:
-            message (str): The message content (expected to be MarkdownV2 escaped for the group).
-            thread_id (Union[int, None]): The message thread ID for the group, if applicable.
-            parse_mode (str): The parse mode for the group message (default: "MarkdownV2").
+        THIẾT KẾ MỚI: Gửi một tin nhắn duy nhất cho một loạt tín hiệu.
         """
-        if not self.telegram_handler:
-            self.logger.error("TelegramHandler is not initialized. Cannot send message.")
-            return
+        if not analysis_results: return
+        self.logger.info(f"Preparing a batch of {len(analysis_results)} new signals.")
 
-        if not config.TELEGRAM_CHAT_ID:
-            self.logger.error("config.TELEGRAM_CHAT_ID is not set. Cannot send to group.")
-            return
-
-        if not config.TELEGRAM_CHANNEL_ID:
-            self.logger.error("config.TELEGRAM_CHANNEL_ID is not set. Cannot send to channel.")
-            return
-
-        try:
-            # Send to group with MarkdownV2 formatting
-            await self.telegram_handler.send_message(
-                chat_id=config.TELEGRAM_CHAT_ID,
-                message=message,
-                message_thread_id=thread_id,
-                parse_mode=parse_mode
-            )
-            self.logger.info(f"✅ Message sent to group {config.TELEGRAM_CHAT_ID}.")
-
-            # Send to channel with plain content (no Markdown)
-            # This function attempts to remove Markdown syntax and unescape characters.
-            # Note: A full Markdown to plain text conversion is complex and might require a dedicated library.
-            # This implementation provides a reasonable effort for common cases.
-            plain_message = self.strip_markdown(message)
-            await self.telegram_handler.send_message(
-                chat_id=config.TELEGRAM_CHANNEL_ID,
-                message=plain_message
-            )
-            self.logger.info(f"✅ Message sent to channel {config.TELEGRAM_CHANNEL_ID}.")
-        except Exception as e:
-            self.logger.error(f"❌ Failed to send to both group and channel: {e}", exc_info=True)
-
-    def strip_markdown(self, text: str) -> str:
-        """
-        Strips MarkdownV2 formatting and unescapes characters to produce plain text.
-        This function attempts to remove common Markdown syntax and backslashes
-        used for escaping special characters in MarkdownV2.
-
-        Args:
-            text (str): The input string, potentially containing MarkdownV2 formatting.
-
-        Returns:
-            str: The string with MarkdownV2 formatting and escaping removed.
-        """
-        # Step 1: Unescape characters that TelegramHandler.escape_markdownv2 would escape.
-        # This list should match the characters escaped by TelegramHandler.escape_markdownv2.
-        # Note: Some characters are regex special characters and need to be escaped for re.sub.
-        unescape_chars = r"_*~`>#+-=|{}!."
-        for char in unescape_chars:
-            # Replace escaped char (e.g., "\*") with unescaped char (e.g., "*")
-            # Use re.escape to handle characters that are special in regex patterns.
-            text = text.replace(f"\\{char}", char)
-
-        # Step 2: Remove Markdown formatting syntax.
-        # This uses regex to remove common Markdown patterns.
-        # Bold/Italic: *text*, _text_
-        text = re.sub(r'\*([^*]+)\*', r'\1', text) # *text* -> text
-        text = re.sub(r'_([^_]+)_', r'\1', text)   # _text_ -> text
-        # Strikethrough: ~text~
-        text = re.sub(r'~([^~]+)~', r'\1', text)
-        # Inline code: `code`
-        text = re.sub(r'`([^`]+)`', r'\1', text)
-        # Links: text -> text
-        text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
-        # Blockquotes: > text
-        text = re.sub(r'^>+\s*', '', text, flags=re.MULTILINE)
-        # Headers: # text
-        text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
-
-        # Remove any remaining backslashes that might not have been part of an escape sequence
-        # (e.g., if a literal backslash was in the original text and not escaped by TelegramHandler)
-        text = text.replace('\\', '')
-
-        return text
-
-    async def _send_photo_to_both(self, photo: str, caption: str, thread_id: Union[int, None] = None, parse_mode: str = "MarkdownV2") -> None:
-        """
-        Sends a photo with a caption to both the configured Telegram group and channel.
-        The caption is sent with MarkdownV2 formatting to the group and
-        as plain text (stripped of Markdown) to the channel.
-
-        Args:
-            photo (str): The URL or file ID of the photo.
-            caption (str): The caption content (expected to be MarkdownV2 escaped for the group).
-            thread_id (Union[int, None]): The message thread ID for the group, if applicable.
-            parse_mode (str): The parse mode for the group caption (default: "MarkdownV2").
-        """
-        if not self.telegram_handler:
-            self.logger.error("TelegramHandler is not initialized. Cannot send photo.")
-            return
-
-        if not config.TELEGRAM_CHAT_ID:
-            self.logger.error("config.TELEGRAM_CHAT_ID is not set. Cannot send photo to group.")
-            return
-
-        if not config.TELEGRAM_CHANNEL_ID:
-            self.logger.error("config.TELEGRAM_CHANNEL_ID is not set. Cannot send photo to channel.")
-            return
-
-        try:
-            await self.telegram_handler.send_photo(
-                chat_id=config.TELEGRAM_CHAT_ID,
-                photo=photo,
-                caption=caption,
-                message_thread_id=thread_id,
-                parse_mode=parse_mode
-            )
-            self.logger.info(f"✅ Photo sent to group {config.TELEGRAM_CHAT_ID}.")
-
-            # Caption for channel should remove Markdown if present
-            plain_caption = self.strip_markdown(caption)
-            await self.telegram_handler.send_photo(
-                chat_id=config.TELEGRAM_CHANNEL_ID,
-                photo=photo,
-                caption=plain_caption
-            )
-            self.logger.info(f"✅ Photo sent to channel {config.TELEGRAM_CHANNEL_ID}.")
-        except Exception as e:
-            self.logger.error(f"❌ Failed to send photo to both group and channel: {e}", exc_info=True)
-
-    async def send_startup_notification(self, symbols_count: int) -> None:
-        """
-        Sends a startup notification with a photo to Telegram.
-
-        Args:
-            symbols_count (int): The number of symbols the bot is monitoring.
-        """
-        self.logger.info("Preparing startup notification with photo...")
-        try:
-            timeframe_escaped = TelegramHandler.escape_markdownv2(config.TIMEFRAME)
-            caption_text = (
-                f"🚀 *AI Trading Bot Activated* 🚀\n\n"
-                f"The bot is now live and analyzing `{symbols_count}` pairs on the `{timeframe_escaped}` timeframe.\n\n"
-                f"📡 Get ready for real-time market signals every 10 minutes!\n\n"
-                f"💰 New to Binance? Get a $100 Bonus!*\n"
-                f"Sign up and earn a 100 USD trading fee rebate voucher!*\n\n"
-                f"🔗 Register Now:\n"
-                f"https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P\n\n"
-                f"------------------------------------"
-            )
-            photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
-            self.logger.debug(f"Startup notification photo URL: {photo_url}")
-            self.logger.debug(f"Startup notification caption text (MarkdownV2): {caption_text}")
-            await self._send_photo_to_both(photo=photo_url, caption=caption_text, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
-        except Exception as e:
-            self.logger.error(f"Failed to send startup notification: {e}", exc_info=True)
-
-    async def send_batch_trend_alert_notification(self, analysis_results: List[Dict[str, Any]]) -> None:
-        """
-        Sends a batch of trend alert notifications to Telegram.
-        Each alert includes symbol, trend, entry, stop loss, and take profit levels.
-
-        Args:
-            analysis_results (List[Dict[str, Any]]): A list of dictionaries, each containing analysis results for a symbol.
-        """
-        if not analysis_results:
-            return
-
-        self.logger.info(f"Preparing to send a batch of {len(analysis_results)} detailed signals.")
-
-        message_parts = [f"🖘 {len(analysis_results)} New Signal(s) Found! 🔥"]
+        header = f"📈 *New AI Trading Signals \\({self.esc(config.TIMEFRAME)}\\)*"
+        message_parts = [header]
+        separator = self.esc("\n\n" + "-"*25 + "\n")
 
         for result in analysis_results:
-            symbol = TelegramHandler.escape_markdownv2(result.get('symbol', 'N/A'))
-            trend_raw = result.get('trend', 'N/A').replace("_", " ").title()
-            trend = TelegramHandler.escape_markdownv2(trend_raw)
-
-            entry_price = self.format_and_escape(result.get('entry_price'))
-            stop_loss = self.format_and_escape(result.get('stop_loss'))
-            tp1 = self.format_and_escape(result.get('take_profit_1'))
-            tp2 = self.format_and_escape(result.get('take_profit_2'))
-            tp3 = self.format_and_escape(result.get('take_profit_3'))
-
-            trend_emoji = "💹" if "Bullish" in trend_raw else "🛑"
-
-            signal_detail = (
-                
-                f" 📣 #{trend} // {trend_emoji} // {symbol} \n"
-                f"\n\n-----------------------------\n\n"
-                f"📌Entry: {entry_price}\n"
-                f"⛔️SL: {stop_loss}\n"
-                f"🎯TP1: {tp1}\n"
-                f"🎯TP2: {tp2}\n"
-                f"🎯TP3: {tp3}"
+            symbol = self.esc(result.get('symbol', 'N/A'))
+            trend_raw = result.get('trend', '')
+            direction = "LONG 🔼" if 'BULLISH' in trend_raw else "SHORT 🔽"
+            
+            tv_link = f"https://www.tradingview.com/chart/?symbol=BINANCE%3A{result.get('symbol', 'N/A')}.P"
+            
+            signal_block = (
+                f"\n*{symbol}* \\| [Chart]({self.esc(tv_link)})"
+                f"\n🧭 *Direction:* {self.esc(direction)}"
+                f"\n👉 *Entry:* `{self.format_and_escape(result.get('entry_price'))}`"
+                f"\n🛡️ *Stop Loss:* `{self.format_and_escape(result.get('stop_loss'))}`"
+                f"\n🎯 *Take Profit 1:* `{self.format_and_escape(result.get('take_profit_1'))}`"
             )
+            message_parts.append(signal_block)
 
-            message_parts.append(signal_detail)
+        full_message = separator.join(message_parts)
+        await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID, disable_web_page_preview=True)
 
-        full_message = "".join(message_parts)
-        await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
-    async def send_summary_report(self, stats: Dict[str, Any]) -> None:
+    async def send_trade_outcome_notification(self, trade_details: Dict[str, Any]):
         """
-        Sends a performance summary report to Telegram.
-
-        Args:
-            stats (Dict[str, Any]): A dictionary containing performance statistics.
+        THIẾT KẾ MỚI: Thông báo kết quả giao dịch gọn gàng và chuyên nghiệp hơn.
         """
-        self.logger.info("Preparing performance summary report...")
-        header = "🏆 *Strategy Performance Report (All-Time)* 🏆\n"
-
-        if stats.get('total_completed_trades', 0) > 0:
-            win_rate = TelegramHandler.escape_markdownv2(f"{stats.get('win_rate', 0.0):.2f}")
-            body = (
-                f"\n✅ *Win Rate:* `{win_rate}%`"
-                f"\n📊 *Completed Trades:* `{stats.get('total_completed_trades', 0)}`"
-                f"\n👍 *Wins:* `{stats.get('wins', 0)}`"
-                f"\n👎 *Losses:* `{stats.get('losses', 0)}`"
-            )
-        else:
-            body = "\nNo completed trades to analyze yet."
-
-        full_message = header + body
-        await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
-
-    async def send_heartbeat_notification(self, symbols_count: int) -> None:
-        """
-        Sends a heartbeat notification to Telegram, indicating the bot is alive and monitoring.
-
-        Args:
-            symbols_count (int): The number of symbols the bot is currently monitoring.
-        """
-        self.logger.info("Sending heartbeat notification...")
-        message = (
-            f"✅ Bot Status: ALIVE\n\n"
-            f"The bot is running correctly and currently monitoring `{symbols_count}` symbols. "
-            f"AI traning signal."
-        )
-        await self._send_to_both(message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
-
-    async def send_trade_outcome_notification(self, trade_details: Dict[str, Any]) -> None:
-        """
-        Sends a trade outcome notification (win/loss) to Telegram.
-
-        Args:
-            trade_details (Dict[str, Any]): A dictionary containing details about the trade outcome.
-        """
-        self.logger.info(f"Preparing outcome notification for {trade_details['symbol']}...")
+        self.logger.info(f"Preparing outcome notification for {trade_details.get('symbol', 'N/A')}...")
         try:
-            symbol = TelegramHandler.escape_markdownv2(trade_details['symbol'])
-            status = TelegramHandler.escape_markdownv2(trade_details['status'])
+            status_raw = trade_details.get('status', 'N/A')
+            trend_raw = trade_details.get('trend', 'N/A')
+            is_win = "TP" in status_raw
+            
+            header_icon, header_text = ("🟢", "WIN") if is_win else ("🔴", "LOSS")
+            header = f"{header_icon} *Trade Closed: {self.esc(header_text)}*"
 
-            is_win = "TP" in trade_details['status']
-            outcome_emoji = "✅" if is_win else "❌"
-            outcome_text = "WIN" if is_win else "LOSS"
+            symbol = self.esc(trade_details.get('symbol', 'N/A'))
+            direction = "LONG 🔼" if 'BULLISH' in trend_raw else "SHORT 🔽"
+            
+            entry_time_str = trade_details.get('entry_timestamp_utc')
+            outcome_time_str = trade_details.get('outcome_timestamp_utc')
+            duration_str = ""
+            if entry_time_str and outcome_time_str:
+                try:
+                    duration = pd.to_datetime(outcome_time_str) - pd.to_datetime(entry_time_str)
+                    total_seconds = duration.total_seconds()
+                    hours, remainder = divmod(total_seconds, 3600)
+                    minutes, _ = divmod(remainder, 60)
+                    duration_str = f" \\| ⏳ {int(hours)}h {int(minutes)}m"
+                except Exception:
+                    pass
+
+            entry_p = trade_details.get('entry_price')
+            closing_p = trade_details.get('exit_price')
+            pnl_str = "—"
+            if entry_p and closing_p:
+                try:
+                    pnl = ((float(closing_p) - float(entry_p)) / float(entry_p)) * 100
+                    if 'BEARISH' in trend_raw: pnl *= -1
+                    pnl_str = self.esc(f"{pnl * config.LEVERAGE:+.2f}%")
+                except (ValueError, TypeError): pass
 
             message = (
-                f"{outcome_emoji} *Trade Closed: {outcome_text}* {outcome_emoji}\n\n"
-                f"Symbol: `{symbol}`\n"
-                f"Outcome: `{status}`"
+                f"{header}\n\n"
+                f"*{symbol}* \\| {self.esc(direction)}\n"
+                f"🏁 *Result:* {self.esc(status_raw)}{self.esc(duration_str)}\n"
+                f"💰 *PNL \\(x{config.LEVERAGE}\\):* `{pnl_str}`"
             )
-
             await self._send_to_both(message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
         except Exception as e:
-            self.logger.error(f"Failed to send trade outcome notification for {trade_details['symbol']}: {e}", exc_info=True)
+            self.logger.error(f"Failed to send trade outcome notification: {e}", exc_info=True)
+
+
+    async def send_startup_notification(self, symbols_count: int, accuracy: float | None):
+        """SỬA LỖI: Cấu trúc lại cách tạo caption để đảm bảo cú pháp MarkdownV2 luôn đúng."""
+        self.logger.info("Preparing startup notification...")
+        
+        # Tạo phần tin nhắn về kết quả training một cách an toàn
+        if accuracy is not None:
+            accuracy_str = self.esc(f"{accuracy:.2%}")
+            training_msg_part = f"✅ *Initial Model Trained* \\| *Accuracy:* `{accuracy_str}`"
+        else:
+            training_msg_part = "⚠️ *Initial Model Training Failed/Skipped*"
+
+        # Xây dựng chuỗi caption cuối cùng, chỉ escape các biến cần thiết
+        caption = (
+            f"🚀 *AI Trading Bot Activated*\n\n"
+            f"{training_msg_part}\n\n"
+            f"📡 Monitoring `{symbols_count}` pairs on the `{self.esc(config.TIMEFRAME)}` timeframe\\."
+        )
+        
+        photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
+        await self._send_photo_to_both(photo=photo_url, caption=caption, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
+
+
+    async def send_training_complete_notification(self, accuracy: float | None):
+        """THIẾT KẾ MỚI: Thông báo cập nhật training."""
+        header = self.esc("🤖 AI Model Update")
+        if accuracy is not None:
+            status_message = f"✅ *Periodic Training Complete*\\.\n*New Accuracy:* `{accuracy:.2%}`"
+        else:
+            status_message = "❌ *Periodic Training Failed*\\."
+        
+        await self._send_to_both(f"{header}\n\n{status_message}", thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
+
