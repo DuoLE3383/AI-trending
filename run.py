@@ -155,67 +155,80 @@ async def update_loop(notifier: NotificationHandler):
 async def main():
     logger.info("--- 🚀 Initializing Bot ---")
     client = None
+    # CẢI TIẾN: Tạo một danh sách để quản lý các tác vụ
+    running_tasks = [] 
+    
     try:
+        # --- 1. Khởi tạo các thành phần ---
         client = await AsyncClient.create(config.API_KEY, config.API_SECRET)
         init_sqlite_db(config.SQLITE_DB_PATH)
         tg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN)
         notifier = NotificationHandler(telegram_handler=tg_handler)
         
-        logger.info("🧠 Loading AI Model...")
+        # --- 2. Tải và Huấn luyện Model ---
+        logger.info("🧠 Loading/Training AI Model...")
         model, label_encoder, model_features = None, None, None
         try:
             model, label_encoder, model_features = (joblib.load("model_trend.pkl"), joblib.load("trend_label_encoder.pkl"), joblib.load("model_features.pkl"))
-            logger.info("✅ AI Model loaded successfully.")
+            logger.info("✅ AI Model loaded from files.")
         except FileNotFoundError:
-            logger.warning("⚠️ Model files not found. Attempting to train a new one...")
-            
-        loop = asyncio.get_running_loop()
-        logger.info("💪 Performing initial model training...")
-        initial_accuracy = await loop.run_in_executor(None, train_model)
+            logger.warning("⚠️ Model files not found. Performing initial training...")
+            loop = asyncio.get_running_loop()
+            initial_accuracy = await loop.run_in_executor(None, train_model)
+            if initial_accuracy is not None:
+                logger.info("Reloading model after initial training...")
+                model, label_encoder, model_features = (joblib.load("model_trend.pkl"), joblib.load("trend_label_encoder.pkl"), joblib.load("model_features.pkl"))
         
-        if initial_accuracy is not None:
-            logger.info("Reloading model after initial training...")
-            model, label_encoder, model_features = (joblib.load("model_trend.pkl"), joblib.load("trend_label_encoder.pkl"), joblib.load("model_features.pkl"))
-
+        # --- 3. Gửi thông báo khởi động ---
         all_symbols = await get_usdt_futures_symbols(client)
         if not all_symbols:
             logger.critical("Could not fetch symbols. Exiting.")
-            sys.exit(1)
-            
+            return
+
         if all([model, label_encoder, model_features]):
-            await notifier.send_startup_notification(len(all_symbols), initial_accuracy)
+            # Accuracy chỉ có từ lần training đầu tiên, nếu tải từ file thì là None
+            await notifier.send_startup_notification(len(all_symbols), locals().get('initial_accuracy', None))
         else:
-            logger.warning("Starting in FALLBACK MODE because AI model is not ready.")
             await notifier.send_fallback_mode_startup_notification(len(all_symbols))
 
+        # --- 4. Khởi chạy tất cả các vòng lặp nền ---
         logger.info("--- 🟢 Bot is now running. All loops are active. ---")
         
-        analysis_task = asyncio.create_task(analysis_loop(client, all_symbols, model, label_encoder, model_features))
-        signal_task = asyncio.create_task(signal_check_loop(notifier))
-        updater_task = asyncio.create_task(updater_loop(client))
-        outcome_task = asyncio.create_task(outcome_check_loop(notifier))
-        training_task = asyncio.create_task(training_loop(notifier))
-        update_task = asyncio.create_task(update_loop(notifier)) # Thêm notifier vào đây
+        # CẢI TIẾN: Tạo và thêm các tác vụ vào danh sách quản lý
+        running_tasks = [
+            asyncio.create_task(analysis_loop(client, all_symbols, model, label_encoder, model_features)),
+            asyncio.create_task(signal_check_loop(notifier)),
+            asyncio.create_task(updater_loop(client)),
+            asyncio.create_task(outcome_check_loop(notifier)),
+            asyncio.create_task(training_loop(notifier, len(all_symbols)))
+        ]
+        await asyncio.gather(*running_tasks)
 
-        await asyncio.gather(
-            analysis_task,
-            signal_task,
-            updater_task,
-            outcome_task,
-            training_task,
-            update_task
-        )
-    except Exception as main_exc:
-        logger.critical(f"A fatal error in main execution block: {main_exc}", exc_info=True)
+    except (Exception, KeyboardInterrupt) as main_exc:
+        if isinstance(main_exc, KeyboardInterrupt):
+            logger.info("Bot stopped by user (Ctrl+C).")
+        else:
+            logger.critical(f"A fatal error occurred in the main execution block: {main_exc}", exc_info=True)
     finally:
+        # --- CƠ CHẾ TẮT MÁY AN TOÀN ---
+        logger.info("--- ⭕ Bot application shutting down... ---")
+        
+        # 1. Hủy tất cả các tác vụ đang chạy
+        for task in running_tasks:
+            task.cancel()
+        
+        # 2. Chờ cho tất cả các tác vụ được hủy xong
+        if running_tasks:
+            await asyncio.gather(*running_tasks, return_exceptions=True)
+            logger.info("All loops have been cancelled.")
+
+        # 3. Bây giờ mới đóng kết nối client
         if client:
             await client.close_connection()
             logger.info("Binance client connection closed.")
-        logger.info("--- ⭕ Bot application shutting down. ---")
+            
+        logger.info("--- Shutdown complete. ---")
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("Bot stopped by user (Ctrl+C).")
-
+    # Bỏ khối try-except ở đây để khối finally trong main xử lý
+    asyncio.run(main())
