@@ -113,10 +113,9 @@ class NotificationHandler:
             self.logger.error(f"Failed to send trade outcome notification: {e}", exc_info=True)
 
     async def send_startup_notification(self, symbols_count: int, accuracy: float | None):
-        """SỬA LỖI: Xây dựng caption một cách an toàn tuyệt đối."""
+        """Xây dựng caption một cách an toàn để gửi thông báo khởi động."""
         self.logger.info("Preparing startup notification...")
         
-        # 1. Chuẩn bị các phần động và escape chúng
         safe_accuracy_msg = ""
         if accuracy is not None:
             accuracy_str = self.esc(f"{accuracy:.2%}")
@@ -127,13 +126,11 @@ class NotificationHandler:
         safe_timeframe_str = self.esc(config.TIMEFRAME)
         binance_link = 'https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P'
 
-        # 2. Xây dựng các khối văn bản tĩnh (đã được escape thủ công)
         monitoring_msg = f"📡 Monitoring `{symbols_count}` pairs on the `{safe_timeframe_str}` timeframe\\."
         promo_msg = f"💰 *New \\#Binance\\?* [Get a \\$100 Bonus]({binance_link})\\!"
         
         separator = self.esc("-----------------------------------------")
 
-        # 3. Ghép nối tất cả các phần lại bằng \n\n
         caption = "\n\n".join([
             "🚀 *AI Trading Bot Activated*",
             safe_accuracy_msg,
@@ -147,10 +144,11 @@ class NotificationHandler:
 
 
     async def send_training_complete_notification(self, accuracy: float | None):
-        """Thông báo kết quả training định kỳ, có kèm promo."""
+        """SỬA LỖI: Thông báo kết quả training định kỳ, có kèm promo."""
+        self.logger.info("Preparing periodic training complete notification...")
         header = self.esc("🤖 AI Model Update")
         
-        status_message = "📡 Monitoring 440 pairs"
+        status_message = ""
         if accuracy is not None:
             accuracy_str = self.esc(f"{accuracy:.2%}")
             status_message = f"✅ *Periodic Training Complete*\\.\n*New Accuracy:* `{accuracy_str}`"
@@ -172,6 +170,7 @@ class NotificationHandler:
 
     async def send_fallback_mode_startup_notification(self, symbols_count: int):
         """Thông báo khi bot khởi động ở chế độ dự phòng (không có AI)."""
+        self.logger.info("Preparing fallback mode startup notification...")
         
         safe_timeframe_str = self.esc(config.TIMEFRAME)
         binance_link = 'https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P'
@@ -193,4 +192,3 @@ class NotificationHandler:
         
         photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
         await self._send_photo_to_both(photo=photo_url, caption=caption, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
-
