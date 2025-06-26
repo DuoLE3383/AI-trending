@@ -1,20 +1,19 @@
-# run.py (Phiên bản đã sửa lỗi TypeError và RuntimeWarning)
+# run.py (Phiên bản đã sửa lỗi ImportError)
 import sys
 import logging
 import asyncio
 import sqlite3
 import joblib
 from dotenv import load_dotenv
-from analysis_engine import perform_ai_fallback_analysis, perform_elliotv8_analysis
 
-# Load environment variables from .env file
 load_dotenv()
 
 # --- Project Module Imports ---
 from binance import AsyncClient
 import config
 from database_handler import init_sqlite_db
-from analysis_engine import process_symbol
+# SỬA LỖI: Import đúng các hàm chiến lược từ analysis_engine
+from analysis_engine import perform_ai_fallback_analysis, perform_elliotv8_analysis
 from telegram_handler import TelegramHandler
 from notifications import NotificationHandler
 from performance_analyzer import get_performance_stats
@@ -32,15 +31,7 @@ logger = logging.getLogger(__name__)
 
 # --- BOT LOOPS ---
 
-# --- Phiên bản analysis_loop đã sửa lỗi ---
-
-async def analysis_loop(
-    client: AsyncClient, 
-    symbols_to_monitor: set, 
-    model, 
-    label_encoder, 
-    model_features
-):
+async def analysis_loop(client, symbols, model, label_encoder, model_features):
     """LOOP 1: Phân tích thị trường, chọn chiến lược từ config."""
     logger.info(f"✅ Analysis Loop starting (Strategy: {config.STRATEGY_MODE})")
     semaphore = asyncio.Semaphore(config.CONCURRENT_REQUESTS)
@@ -48,28 +39,23 @@ async def analysis_loop(
     async def process_with_semaphore(symbol: str):
         async with semaphore:
             # KIỂM TRA VÀ GỌI ĐÚNG HÀM CHIẾN LƯỢC
-            # Logic chọn chiến lược đã được tích hợp vào đây.
             if config.STRATEGY_MODE == 'Elliotv8':
-                # Import hàm này nếu bạn chưa làm: 
-                # from analysis_engine import perform_elliotv8_analysis
                 await perform_elliotv8_analysis(client, symbol)
             else: # Mặc định là 'AI'
-                # Import hàm này nếu bạn chưa làm:
-                # from analysis_engine import perform_ai_fallback_analysis
                 await perform_ai_fallback_analysis(client, symbol, model, label_encoder, model_features)
-            
-            # ĐÃ XÓA DÒNG GỌI process_symbol() BỊ THỪA
 
     while True:
         try:
-            logger.info(f"--- Starting analysis cycle for {len(symbols_to_monitor)} symbols ---")
-            tasks = [process_with_semaphore(s) for s in list(symbols_to_monitor)]
+            logger.info(f"--- Starting analysis cycle for {len(symbols)} symbols ---")
+            tasks = [process_with_semaphore(s) for s in list(symbols)]
             await asyncio.gather(*tasks)
             logger.info(f"--- Analysis cycle complete. Sleeping for {config.LOOP_SLEEP_INTERVAL_SECONDS} seconds. ---")
             await asyncio.sleep(config.LOOP_SLEEP_INTERVAL_SECONDS)
         except Exception as e:
             logger.error(f"An error in analysis_loop: {e}", exc_info=True)
             await asyncio.sleep(60)
+
+# ... (các hàm loop khác: signal_check_loop, updater_loop, outcome_check_loop giữ nguyên)
 
 async def signal_check_loop(notifier: NotificationHandler):
     logger.info(f"✅ New Signal Alert Loop starting...")
@@ -169,13 +155,11 @@ async def main():
 
         logger.info("--- 🟢 Bot is now running. All loops are active. ---")
         
-        # SỬA LỖI: Bọc tất cả các coroutine vào asyncio.create_task
-        # và gọi training_loop với đúng số lượng tham số
         analysis_task = asyncio.create_task(analysis_loop(client, all_symbols, model, label_encoder, model_features))
         signal_task = asyncio.create_task(signal_check_loop(notifier))
         updater_task = asyncio.create_task(updater_loop(client))
         outcome_task = asyncio.create_task(outcome_check_loop(notifier))
-        training_task = asyncio.create_task(training_loop(notifier)) # SỬA LỖI: Chỉ truyền 1 tham số
+        training_task = asyncio.create_task(training_loop(notifier))
 
         await asyncio.gather(
             analysis_task,
