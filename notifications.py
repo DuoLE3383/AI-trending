@@ -1,4 +1,4 @@
-# notifications.py (Phiên bản cuối cùng, ổn định và đã sửa tất cả lỗi)
+# notifications.py (Phiên bản cuối cùng, đã sửa lỗi cú pháp MarkdownV2 dứt điểm)
 import logging
 from typing import List, Dict, Any
 import asyncio
@@ -18,9 +18,9 @@ class NotificationHandler:
 
     def format_and_escape(self, value: Any, precision: int = 5) -> str:
         """Định dạng một giá trị số và escape nó an toàn cho MarkdownV2."""
-        if value is None: return '—'
+        if value is None: return '`—`'
         try:
-            # Chỉ escape giá trị đã được định dạng
+            # Trả về chuỗi đã được định dạng và escape, nằm trong dấu ``
             return f"`{self.esc(f'{float(value):.{precision}f}')}`"
         except (ValueError, TypeError):
             return '`—`'
@@ -38,21 +38,18 @@ class NotificationHandler:
                 else: self.logger.critical(f"❌ Thất bại sau {max_retries} lần thử.")
         return False
 
-    async def _send_to_both(self, message: str, thread_id: int = None):
+    async def _send_to_both(self, message: str, thread_id: int = None, disable_web_page_preview: bool = False):
         """Gửi tin nhắn văn bản đến cả group và channel."""
-        common_kwargs = {'parse_mode': 'MarkdownV2', 'disable_web_page_preview': True}
+        common_kwargs = {'parse_mode': 'MarkdownV2', 'disable_web_page_preview': disable_web_page_preview}
         group_kwargs = {'chat_id': config.TELEGRAM_CHAT_ID, 'text': message, 'message_thread_id': thread_id, **common_kwargs}
-        channel_kwargs = {'chat_id': config.TELEGRAM_CHANNEL_ID, 'text': message, **common_kwargs}
-        await self._send_with_retry(self.telegram_handler.send_message, **group_kwargs)
         # Bỏ gửi đến channel thứ 2 để tránh spam nếu không cần thiết, bạn có thể mở lại nếu muốn
-        # await self._send_with_retry(self.telegram_handler.send_message, **channel_kwargs)
+        await self._send_with_retry(self.telegram_handler.send_message, **group_kwargs)
 
     async def _send_photo_to_both(self, photo: str, caption: str, thread_id: int = None):
         """Gửi ảnh có chú thích đến cả group và channel."""
         group_kwargs = {'chat_id': config.TELEGRAM_CHAT_ID, 'photo': photo, 'caption': caption, 'parse_mode': 'MarkdownV2', 'message_thread_id': thread_id}
-        channel_kwargs = {'chat_id': config.TELEGRAM_CHANNEL_ID, 'photo': photo, 'caption': caption, 'parse_mode': 'MarkdownV2'}
         await self._send_with_retry(self.telegram_handler.send_photo, **group_kwargs)
-        # await self._send_with_retry(self.telegram_handler.send_photo, **channel_kwargs)
+
 
     # === CÁC HÀM GỬI THÔNG BÁO (THEO PHONG CÁCH CŨ, ĐÃ SỬA LỖI) ===
 
@@ -116,34 +113,47 @@ class NotificationHandler:
             self.logger.error(f"Failed to send trade outcome notification: {e}", exc_info=True)
 
     async def send_startup_notification(self, symbols_count: int, accuracy: float | None):
-        """Thông báo khởi động với đầy đủ thông tin, đã sửa lỗi cú pháp."""
+        """SỬA LỖI: Xây dựng caption một cách an toàn tuyệt đối."""
+        self.logger.info("Preparing startup notification...")
+        
+        # 1. Chuẩn bị các phần động và escape chúng
         safe_accuracy_msg = ""
         if accuracy is not None:
-            safe_accuracy_msg = f"✅ *Initial Model Trained* \\| *Accuracy:* `{self.esc(f'{accuracy:.2%}')}`"
+            accuracy_str = self.esc(f"{accuracy:.2%}")
+            safe_accuracy_msg = f"✅ *Initial Model Trained* \\| *Accuracy:* `{accuracy_str}`"
         else:
             safe_accuracy_msg = "⚠️ *Initial Model Training Failed/Skipped*"
         
+        safe_timeframe_str = self.esc(config.TIMEFRAME)
         binance_link = 'https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P'
-        monitoring_msg = f"📡 Monitoring `{symbols_count}` pairs on the `{self.esc(config.TIMEFRAME)}` timeframe\\."
+
+        # 2. Xây dựng các khối văn bản tĩnh (đã được escape thủ công)
+        monitoring_msg = f"📡 Monitoring `{symbols_count}` pairs on the `{safe_timeframe_str}` timeframe\\."
         promo_msg = f"💰 *New \\#Binance\\?* [Get a \\$100 Bonus]({binance_link})\\!"
+        
         separator = self.esc("-----------------------------------------")
 
-        caption = (
-            f"🚀 *AI Trading Bot Activated*\n\n"
-            f"{safe_accuracy_msg}\n\n"
-            f"{monitoring_msg}\n\n"
-            f"{separator}\n\n"
-            f"{promo_msg}"
-        )
+        # 3. Ghép nối tất cả các phần lại bằng \n\n
+        caption = "\n\n".join([
+            "🚀 *AI Trading Bot Activated*",
+            safe_accuracy_msg,
+            monitoring_msg,
+            separator,
+            promo_msg
+        ])
+        
         photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
         await self._send_photo_to_both(photo=photo_url, caption=caption, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
+
     async def send_training_complete_notification(self, accuracy: float | None):
-        """CẬP NHẬT: Thông báo kết quả training định kỳ, có kèm promo."""
+        """Thông báo kết quả training định kỳ, có kèm promo."""
         header = self.esc("🤖 AI Model Update")
         
+        status_message = "📡 Monitoring 440 pairs"
         if accuracy is not None:
-            status_message = f"✅ *Periodic Training Complete*\\.\n*New Accuracy:* `{self.esc(f'{accuracy:.2%}')}`"
+            accuracy_str = self.esc(f"{accuracy:.2%}")
+            status_message = f"✅ *Periodic Training Complete*\\.\n*New Accuracy:* `{accuracy_str}`"
         else:
             status_message = "❌ *Periodic Training Failed*\\."
 
@@ -151,31 +161,36 @@ class NotificationHandler:
         binance_link = 'https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P'
         promo_msg = f"💰 *New \\#Binance\\?* [Get a \\$100 Bonus]({binance_link})\\!"
 
-        full_message = (
-            f"{header}\n\n"
-            f"{status_message}\n\n"
-            f"{separator}\n\n"
-            f"{promo_msg}"
-        )
+        full_message = "\n\n".join([
+            header,
+            status_message,
+            separator,
+            promo_msg
+        ])
         
         await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
     async def send_fallback_mode_startup_notification(self, symbols_count: int):
         """Thông báo khi bot khởi động ở chế độ dự phòng (không có AI)."""
+        
+        safe_timeframe_str = self.esc(config.TIMEFRAME)
         binance_link = 'https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P'
+        
         main_msg = (
             f"⚠️ *AI Model not available* \\- not enough training data\\.\n"
             f"✅ Bot is running in *Rule\\-Based Mode* and collecting data\\.\n\n"
-            f"📡 Monitoring `{symbols_count}` pairs on the `{self.esc(config.TIMEFRAME)}` timeframe\\."
+            f"📡 Monitoring `{symbols_count}` pairs on the `{safe_timeframe_str}` timeframe\\."
         )
         promo_msg = f"💰 *New \\#Binance\\?* [Get a \\$100 Bonus]({binance_link})\\!"
         separator = self.esc("-----------------------------------------")
-        caption = (
-            f"🚀 *AI Trading Bot Activated \\(Fallback Mode\\)*\n\n"
-            f"{main_msg}\n"
-            f"{separator}\n\n"
-            f"{promo_msg}"
-        )
+        
+        caption = "\n\n".join([
+            "🚀 *AI Trading Bot Activated \\(Fallback Mode\\)*",
+            main_msg,
+            separator,
+            promo_msg
+        ])
+        
         photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
         await self._send_photo_to_both(photo=photo_url, caption=caption, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
