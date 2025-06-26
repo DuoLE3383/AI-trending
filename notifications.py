@@ -143,8 +143,8 @@ class NotificationHandler:
         await self._send_photo_to_both(photo=photo_url, caption=caption, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
 
-    async def send_training_complete_notification(self, accuracy: float | None):
-        """SỬA LỖI: Thông báo kết quả training định kỳ, có kèm promo."""
+    async def send_training_complete_notification(self, accuracy: float | None, symbols_count: int):
+        """CẬP NHẬT: Thông báo kết quả training định kỳ, có kèm status và promo."""
         self.logger.info("Preparing periodic training complete notification...")
         header = self.esc("🤖 AI Model Update")
         
@@ -154,6 +154,10 @@ class NotificationHandler:
             status_message = f"✅ *Periodic Training Complete*\\.\n*New Accuracy:* `{accuracy_str}`"
         else:
             status_message = "❌ *Periodic Training Failed*\\."
+            
+        # Thêm dòng trạng thái giám sát
+        safe_timeframe_str = self.esc(config.TIMEFRAME)
+        monitoring_msg = f"📡 Monitoring `{symbols_count}` pairs on the `{safe_timeframe_str}` timeframe\\."
 
         separator = self.esc("-----------------------------------------")
         binance_link = 'https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P'
@@ -162,6 +166,7 @@ class NotificationHandler:
         full_message = "\n\n".join([
             header,
             status_message,
+            monitoring_msg,
             separator,
             promo_msg
         ])
