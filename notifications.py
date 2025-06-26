@@ -180,5 +180,3 @@ class NotificationHandler:
         caption = "\n\n".join(["🚀 *AI Trading Bot Activated \\(Fallback Mode\\)*", main_msg, separator, promo_msg])
         photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
         await self._send_photo_to_both(photo=photo_url, caption=caption, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
-
-�
