@@ -52,7 +52,7 @@ class NotificationHandler:
     async def send_batch_trend_alert_notification(self, analysis_results: List[Dict[str, Any]]):
         """Gửi một tin nhắn riêng cho mỗi tín hiệu mới."""
         if not analysis_results: return
-        header = self.esc("🆘 1 New Signal(s) Found! �")
+        header = self.esc("🆘 1 New Signal(s) Found! 🔥")
         separator = self.esc("\n\n----------------------------------------\n\n")
         for result in analysis_results:
             trend_raw = result.get('trend', '').replace("_", " ").title()
@@ -70,8 +70,7 @@ class NotificationHandler:
     async def send_trade_outcome_notification(self, trade_details: Dict[str, Any]):
         """Thông báo kết quả giao dịch theo định dạng chi tiết."""
         try:
-            status_raw = trade_details.get('status', 'N/A')
-            trend_raw = trade_details.get('trend', '')
+            status_raw, trend_raw = trade_details.get('status', 'N/A'), trade_details.get('trend', '')
             is_win = "TP" in status_raw
             outcome_emoji, outcome_text = ("✅", "WIN") if is_win else ("❌", "LOSS")
             header = f"{outcome_emoji} *Trade Closed: {self.esc(outcome_text)}* {outcome_emoji}"
@@ -102,7 +101,6 @@ class NotificationHandler:
 
     async def send_startup_notification(self, symbols_count: int, accuracy: float | None):
         """Thông báo khởi động bot."""
-        self.logger.info("Preparing startup notification...")
         safe_accuracy_msg = ""
         if accuracy is not None:
             safe_accuracy_msg = f"✅ *Initial Model Trained* \\| *Accuracy:* `{self.esc(f'{accuracy:.2%}')}`"
@@ -118,7 +116,6 @@ class NotificationHandler:
 
     async def send_training_and_summary_notification(self, stats: Dict[str, Any], accuracy: float | None):
         """Gửi thông báo kết hợp: trạng thái training và tổng kết hiệu suất."""
-        self.logger.info("Preparing training status and summary report notification...")
         header = "*🤖 AI Model Update & Performance Report*"
         training_status = ""
         if accuracy is not None:
@@ -143,7 +140,6 @@ class NotificationHandler:
         
     async def send_summary_report(self, stats: Dict[str, Any]):
         """Gửi báo cáo tổng kết hiệu suất (phiên bản riêng)."""
-        self.logger.info("Preparing performance summary report...")
         header = self.esc("🏆 *Strategy Performance Report (All-Time)* 🏆\n")
         if stats and stats.get('total_completed_trades', 0) > 0:
             win_rate_val = f"{stats.get('win_rate', 0.0):.2f}%"
@@ -159,7 +155,6 @@ class NotificationHandler:
         
     async def send_heartbeat_notification(self, symbols_count: int):
         """Gửi thông báo 'bot vẫn còn sống' định kỳ."""
-        self.logger.info("Sending heartbeat notification...")
         message_text = (
             f"✅ *Bot Status: ALIVE*\n\n"
             f"The bot is running correctly and currently monitoring `{symbols_count}` symbols\\. "
