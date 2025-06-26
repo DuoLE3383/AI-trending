@@ -1,9 +1,10 @@
-# run.py (Phiên bản đã sửa lỗi ImportError)
+# run.py (Phiên bản đã được bổ sung tính năng tự động cập nhật)
 import sys
 import logging
 import asyncio
 import sqlite3
 import joblib
+import os # Import os để thực hiện restart
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,7 +13,6 @@ load_dotenv()
 from binance import AsyncClient
 import config
 from database_handler import init_sqlite_db
-# SỬA LỖI: Import đúng các hàm chiến lược từ analysis_engine
 from analysis_engine import perform_ai_fallback_analysis, perform_elliotv8_analysis
 from telegram_handler import TelegramHandler
 from notifications import NotificationHandler
@@ -38,7 +38,6 @@ async def analysis_loop(client, symbols, model, label_encoder, model_features):
     
     async def process_with_semaphore(symbol: str):
         async with semaphore:
-            # KIỂM TRA VÀ GỌI ĐÚNG HÀM CHIẾN LƯỢC
             if config.STRATEGY_MODE == 'Elliotv8':
                 await perform_elliotv8_analysis(client, symbol)
             else: # Mặc định là 'AI'
@@ -54,8 +53,6 @@ async def analysis_loop(client, symbols, model, label_encoder, model_features):
         except Exception as e:
             logger.error(f"An error in analysis_loop: {e}", exc_info=True)
             await asyncio.sleep(60)
-
-# ... (các hàm loop khác: signal_check_loop, updater_loop, outcome_check_loop giữ nguyên)
 
 async def signal_check_loop(notifier: NotificationHandler):
     logger.info(f"✅ New Signal Alert Loop starting...")
@@ -116,6 +113,44 @@ async def outcome_check_loop(notifier: NotificationHandler):
             logger.error(f"❌ Error in outcome_check_loop: {e}", exc_info=True)
         await asyncio.sleep(config.SIGNAL_CHECK_INTERVAL_SECONDS)
 
+
+# --- HÀM MỚI: VÒNG LẶP TỰ ĐỘNG CẬP NHẬT ---
+async def update_loop(notifier: NotificationHandler):
+    """
+    Vòng lặp định kỳ kiểm tra cập nhật từ Git và khởi động lại bot nếu có.
+    """
+    logger.info("✅ Auto-update Loop starting...")
+    while True:
+        await asyncio.sleep(30 * 60) # Kiểm tra mỗi 30 phút
+        
+        try:
+            logger.info("📡 Checking for code updates from git...")
+            fetch_process = await asyncio.create_subprocess_shell('git fetch', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            await fetch_process.wait()
+            status_process = await asyncio.create_subprocess_shell('git status -uno', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            stdout, _ = await status_process.communicate()
+            
+            if b'Your branch is up to date' in stdout:
+                logger.info("✅ Code is up-to-date.")
+                continue
+            
+            logger.info("💡 New code found! Attempting to pull updates...")
+            pull_process = await asyncio.create_subprocess_shell('git pull origin main', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            pull_stdout, pull_stderr = await pull_process.communicate()
+
+            if pull_process.returncode == 0:
+                logger.info(pull_stdout.decode())
+                logger.critical("🚨 New code applied. Triggering bot restart...")
+                await notifier._send_to_both("🚨 Bot is restarting to apply new updates\\.\\.\\.")
+                os.execv(sys.executable, ['python'] + sys.argv)
+            else:
+                logger.error(f"❌ Failed to pull updates: {pull_stderr.decode()}")
+                await notifier._send_to_both(f"❌ Failed to pull updates: {pull_stderr.decode()}")
+
+        except Exception as e:
+            logger.error(f"❌ Error during update check: {e}", exc_info=True)
+
+
 # --- MAIN FUNCTION ---
 async def main():
     logger.info("--- 🚀 Initializing Bot ---")
@@ -160,13 +195,15 @@ async def main():
         updater_task = asyncio.create_task(updater_loop(client))
         outcome_task = asyncio.create_task(outcome_check_loop(notifier))
         training_task = asyncio.create_task(training_loop(notifier))
+        update_task = asyncio.create_task(update_loop(notifier)) # Thêm notifier vào đây
 
         await asyncio.gather(
             analysis_task,
             signal_task,
             updater_task,
             outcome_task,
-            training_task
+            training_task,
+            update_task
         )
     except Exception as main_exc:
         logger.critical(f"A fatal error in main execution block: {main_exc}", exc_info=True)
@@ -181,3 +218,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Bot stopped by user (Ctrl+C).")
+
