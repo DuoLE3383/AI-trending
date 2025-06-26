@@ -1,4 +1,4 @@
-# notifications.py (Phiên bản cuối cùng, đầy đủ tất cả các hàm thông báo)
+# notifications.py (Phiên bản đã khôi phục lại chức năng gửi vào channel)
 import logging
 from typing import List, Dict, Any
 import asyncio
@@ -37,20 +37,36 @@ class NotificationHandler:
         return False
 
     async def _send_to_both(self, message: str, thread_id: int = None, disable_web_page_preview: bool = False):
-        """Gửi tin nhắn văn bản đến cả group và channel."""
+        """SỬA LỖI: Gửi tin nhắn văn bản đến cả group và channel."""
         common_kwargs = {'parse_mode': 'MarkdownV2', 'disable_web_page_preview': disable_web_page_preview}
+        
+        # Gửi tới group
         group_kwargs = {'chat_id': config.TELEGRAM_CHAT_ID, 'text': message, 'message_thread_id': thread_id, **common_kwargs}
-        await self._send_with_retry(self.telegram_handler.send_message, **group_kwargs)
+        group_success = await self._send_with_retry(self.telegram_handler.send_message, **group_kwargs)
+        if group_success: self.logger.info("✅ Đã gửi tới group.")
+
+        # Gửi tới channel
+        channel_kwargs = {'chat_id': config.TELEGRAM_CHANNEL_ID, 'text': message, **common_kwargs}
+        channel_success = await self._send_with_retry(self.telegram_handler.send_message, **channel_kwargs)
+        if channel_success: self.logger.info("✅ Đã gửi tới channel.")
 
     async def _send_photo_to_both(self, photo: str, caption: str, thread_id: int = None):
-        """Gửi ảnh có chú thích đến cả group và channel."""
-        group_kwargs = {'chat_id': config.TELEGRAM_CHAT_ID, 'photo': photo, 'caption': caption, 'parse_mode': 'MarkdownV2', 'message_thread_id': thread_id}
-        await self._send_with_retry(self.telegram_handler.send_photo, **group_kwargs)
+        """SỬA LỖI: Gửi ảnh có chú thích đến cả group và channel."""
+        common_kwargs = {'parse_mode': 'MarkdownV2'}
 
-    # === CÁC HÀM GỬI THÔNG BÁO ===
+        # Gửi tới group
+        group_kwargs = {'chat_id': config.TELEGRAM_CHAT_ID, 'photo': photo, 'caption': caption, 'message_thread_id': thread_id, **common_kwargs}
+        group_success = await self._send_with_retry(self.telegram_handler.send_photo, **group_kwargs)
+        if group_success: self.logger.info("✅ Đã gửi ảnh tới group.")
+        
+        # Gửi tới channel
+        channel_kwargs = {'chat_id': config.TELEGRAM_CHANNEL_ID, 'photo': photo, 'caption': caption, **common_kwargs}
+        channel_success = await self._send_with_retry(self.telegram_handler.send_photo, **channel_kwargs)
+        if channel_success: self.logger.info("✅ Đã gửi ảnh tới channel.")
+
+    # === CÁC HÀM GỬI THÔNG BÁO (giữ nguyên logic) ===
 
     async def send_batch_trend_alert_notification(self, analysis_results: List[Dict[str, Any]]):
-        """Gửi một tin nhắn riêng cho mỗi tín hiệu mới."""
         if not analysis_results: return
         header = self.esc("🆘 1 New Signal(s) Found! 🔥")
         separator = self.esc("\n\n----------------------------------------\n\n")
@@ -68,7 +84,6 @@ class NotificationHandler:
             await asyncio.sleep(0.5)
 
     async def send_trade_outcome_notification(self, trade_details: Dict[str, Any]):
-        """Thông báo kết quả giao dịch theo định dạng chi tiết."""
         try:
             status_raw, trend_raw = trade_details.get('status', 'N/A'), trade_details.get('trend', '')
             is_win = "TP" in status_raw
@@ -100,7 +115,6 @@ class NotificationHandler:
             self.logger.error(f"Failed to send trade outcome notification: {e}", exc_info=True)
 
     async def send_startup_notification(self, symbols_count: int, accuracy: float | None):
-        """Thông báo khởi động bot."""
         safe_accuracy_msg = ""
         if accuracy is not None:
             safe_accuracy_msg = f"✅ *Initial Model Trained* \\| *Accuracy:* `{self.esc(f'{accuracy:.2%}')}`"
@@ -115,7 +129,6 @@ class NotificationHandler:
         await self._send_photo_to_both(photo=photo_url, caption=caption, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
     async def send_training_and_summary_notification(self, stats: Dict[str, Any], accuracy: float | None):
-        """Gửi thông báo kết hợp: trạng thái training và tổng kết hiệu suất."""
         header = "*🤖 AI Model Update & Performance Report*"
         training_status = ""
         if accuracy is not None:
@@ -130,7 +143,7 @@ class NotificationHandler:
             safe_wins = self.esc(str(stats.get('wins', 0)))
             safe_losses = self.esc(str(stats.get('losses', 0)))
             summary_body = (
-                f"📊 *Lifetime Performance:*\n"
+                f"� *Lifetime Performance:*\n"
                 f"  » Win Rate: `{safe_win_rate}`\n"
                 f"  » Total Trades: `{safe_total}` "
                 f"\\({safe_wins}W / {safe_losses}L\\)"
@@ -139,7 +152,6 @@ class NotificationHandler:
         await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
         
     async def send_summary_report(self, stats: Dict[str, Any]):
-        """Gửi báo cáo tổng kết hiệu suất (phiên bản riêng)."""
         header = self.esc("🏆 *Strategy Performance Report (All-Time)* 🏆\n")
         if stats and stats.get('total_completed_trades', 0) > 0:
             win_rate_val = f"{stats.get('win_rate', 0.0):.2f}%"
@@ -154,7 +166,6 @@ class NotificationHandler:
         await self._send_to_both(header + body, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
         
     async def send_heartbeat_notification(self, symbols_count: int):
-        """Gửi thông báo 'bot vẫn còn sống' định kỳ."""
         message_text = (
             f"✅ *Bot Status: ALIVE*\n\n"
             f"The bot is running correctly and currently monitoring `{symbols_count}` symbols\\. "
@@ -163,7 +174,6 @@ class NotificationHandler:
         await self._send_to_both(self.esc(message_text), thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
     async def send_fallback_mode_startup_notification(self, symbols_count: int):
-        """Thông báo khi bot khởi động ở chế độ dự phòng (không có AI)."""
         binance_link = 'https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P'
         main_msg = (
             f"⚠️ *AI Model not available* \\- not enough training data\\.\n"
