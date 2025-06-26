@@ -137,23 +137,25 @@ class NotificationHandler:
 
 
     async def send_startup_notification(self, symbols_count: int, accuracy: float | None):
-        """SỬA LỖI: Cấu trúc lại cách tạo caption để đảm bảo cú pháp MarkdownV2 luôn đúng."""
+        """SỬA LỖI: Thêm lại phần thông tin bonus."""
         self.logger.info("Preparing startup notification...")
-        
-        # Tạo phần tin nhắn về kết quả training một cách an toàn
         if accuracy is not None:
-            accuracy_str = self.esc(f"{accuracy:.2%}")
-            training_msg_part = f"✅ *Initial Model Trained* \\| *Accuracy:* `{accuracy_str}`"
+            training_msg = f"✅ *Initial Model Trained* \\| *Accuracy:* `{accuracy:.2%}`"
         else:
-            training_msg_part = "⚠️ *Initial Model Training Failed/Skipped*"
+            training_msg = "⚠️ *Initial Model Training Failed/Skipped*"
 
-        # Xây dựng chuỗi caption cuối cùng, chỉ escape các biến cần thiết
+        separator = self.esc("-----------------------------------------")
+
         caption = (
             f"🚀 *AI Trading Bot Activated*\n\n"
-            f"{training_msg_part}\n\n"
-            f"📡 Monitoring `{symbols_count}` pairs on the `{self.esc(config.TIMEFRAME)}` timeframe\\."
+            f"{self.esc(training_msg)}\n\n"
+            f"📡 Monitoring `{symbols_count}` pairs on the `{self.esc(config.TIMEFRAME)}` timeframe\\.\n\n"
+            f"{separator}\n\n"
+            f"💰 *New \\#Binance\\? Get a \\$100 Bonus\\!*\\n"
+            f"Sign up and earn a *100 USD trading fee rebate voucher\\!*\\n\n"
+            f"🔗 *Register Now\\:*\n"
+            f"{self.esc('https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P')}"
         )
-        
         photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
         await self._send_photo_to_both(photo=photo_url, caption=caption, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
@@ -167,4 +169,25 @@ class NotificationHandler:
             status_message = "❌ *Periodic Training Failed*\\."
         
         await self._send_to_both(f"{header}\n\n{status_message}", thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
+
+    async def send_fallback_mode_startup_notification(self, symbols_count: int):
+        """SỬA LỖI: Thêm lại phần thông tin bonus cho chế độ dự phòng."""
+        self.logger.info("Preparing fallback mode startup notification...")
+        
+        separator = self.esc("-----------------------------------------")
+
+        caption = (
+            f"🚀 *AI Trading Bot Activated \\(Fallback Mode\\)*\n\n"
+            f"⚠️ *AI Model not available* \\- not enough training data\\.\n\n"
+            f"✅ Bot is now running in *Rule\\-Based Mode* and will collect data for future training\\.\n\n"
+            f"📡 Monitoring `{symbols_count}` pairs on the `{self.esc(config.TIMEFRAME)}` timeframe\\.\n\n"
+            f"{separator}\n\n"
+            f"💰 *New \\#Binance\\? Get a \\$100 Bonus\\!*\\n"
+            f"Sign up and earn a *100 USD trading fee rebate voucher\\!*\\n\n"
+            f"🔗 *Register Now\\:*\n"
+            f"{self.esc('https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P')}"
+        )
+        
+        photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
+        await self._send_photo_to_both(photo=photo_url, caption=caption, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
