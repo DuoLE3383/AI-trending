@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
+// SỬA LỖI: Đã xóa các import không sử dụng như BarChart, XAxis, etc.
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
 // --- MOCK DATA (Dữ liệu giả) ---
 // Dữ liệu này giờ chỉ dùng làm dự phòng khi không kết nối được backend
@@ -103,6 +104,7 @@ const WinLossPieChart = ({ data }) => {
                         ))}
                     </Pie>
                     <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #4B5563' }} />
+                    <Legend />
                 </PieChart>
             </ResponsiveContainer>
         </div>
@@ -116,12 +118,11 @@ export default function App() {
     const [activeTrades, setActiveTrades] = useState(MOCK_ACTIVE_TRADES);
     const [closedTrades, setClosedTrades] = useState(MOCK_CLOSED_TRADES);
     const [error, setError] = useState(null);
-    // CẬP NHẬT: Địa chỉ IP backend của bạn trên Google Cloud
     const API_BASE_URL = 'http://35.228.208.66:5000';
 
     const fetchData = async () => {
+        // SỬA LỖI: Đã đổi try: thành try { và thêm } catch (err) { ... }
         try {
-            // CẬP NHẬT: Đã kích hoạt các lệnh fetch dữ liệu thật
             const statsResponse = await fetch(`${API_BASE_URL}/api/stats`);
             if (!statsResponse.ok) throw new Error('Network response for stats was not ok');
             const statsData = await statsResponse.json();
@@ -137,16 +138,10 @@ export default function App() {
             const closedTradesData = await closedTradesResponse.json();
             setClosedTrades(closedTradesData);
             
-            // CẬP NHẬT: Tạm thời vô hiệu hóa dữ liệu giả
-            // setStats(MOCK_STATS);
-            // setActiveTrades(MOCK_ACTIVE_TRADES);
-            // setClosedTrades(MOCK_CLOSED_TRADES);
-
             setError(null);
         } catch (err) {
             console.error("Lỗi khi fetch dữ liệu:", err);
             setError("Không thể kết nối đến máy chủ backend. Đang hiển thị dữ liệu dự phòng.");
-            // Giữ lại dữ liệu giả khi có lỗi
             setStats(MOCK_STATS);
             setActiveTrades(MOCK_ACTIVE_TRADES);
             setClosedTrades(MOCK_CLOSED_TRADES);
@@ -154,9 +149,9 @@ export default function App() {
     };
 
     useEffect(() => {
-        fetchData(); // Fetch dữ liệu lần đầu
-        const interval = setInterval(fetchData, 5000); // Cập nhật dữ liệu mỗi 5 giây
-        return () => clearInterval(interval); // Dọn dẹp khi component unmount
+        fetchData(); 
+        const interval = setInterval(fetchData, 5000); 
+        return () => clearInterval(interval); 
     }, []);
 
 
