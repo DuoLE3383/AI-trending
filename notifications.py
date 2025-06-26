@@ -139,13 +139,26 @@ class NotificationHandler:
         await self._send_photo_to_both(photo=photo_url, caption=caption, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
     async def send_training_complete_notification(self, accuracy: float | None):
-        """Thông báo kết quả sau mỗi lần training định kỳ."""
+        """CẬP NHẬT: Thông báo kết quả training định kỳ, có kèm promo."""
         header = self.esc("🤖 AI Model Update")
+        
         if accuracy is not None:
             status_message = f"✅ *Periodic Training Complete*\\.\n*New Accuracy:* `{self.esc(f'{accuracy:.2%}')}`"
         else:
             status_message = "❌ *Periodic Training Failed*\\."
-        await self._send_to_both(f"{header}\n\n{status_message}", thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
+
+        separator = self.esc("----------------------------")
+        binance_link = 'https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P'
+        promo_msg = f"💰 *New \\#Binance\\?* [Get a \\$100 Bonus]({binance_link})\\!"
+
+        full_message = (
+            f"{header}\n\n"
+            f"{status_message}\n\n"
+            f"{separator}\n\n"
+            f"{promo_msg}"
+        )
+        
+        await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
     async def send_fallback_mode_startup_notification(self, symbols_count: int):
         """Thông báo khi bot khởi động ở chế độ dự phòng (không có AI)."""
@@ -156,7 +169,7 @@ class NotificationHandler:
             f"📡 Monitoring `{symbols_count}` pairs on the `{self.esc(config.TIMEFRAME)}` timeframe\\."
         )
         promo_msg = f"💰 *New \\#Binance\\?* [Get a \\$100 Bonus]({binance_link})\\!"
-        separator = self.esc("-----------------------------------------")
+        separator = self.esc("---------------------------------")
         caption = (
             f"🚀 *AI Trading Bot Activated \\(Fallback Mode\\)*\n\n"
             f"{main_msg}\n"
