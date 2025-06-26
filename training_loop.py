@@ -1,4 +1,4 @@
-# training_loop.py (Phiên bản đã sửa lỗi và tối ưu logic)
+# training_loop.py (Phiên bản Hoàn thiện)
 import asyncio
 import logging
 from trainer import train_model
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 async def training_loop(notification_handler: NotificationHandler):
     """
-    Vòng lặp chạy việc huấn luyện model định kỳ mỗi 8 giờ và gửi một thông báo kết hợp duy nhất.
+    Vòng lặp chạy việc huấn luyện model định kỳ và gửi một thông báo kết hợp duy nhất.
     """
     while True:
         try:
@@ -25,7 +25,6 @@ async def training_loop(notification_handler: NotificationHandler):
             logger.info("✅ Training task finished.")
 
             # Bước 3: Gọi MỘT hàm thông báo duy nhất, truyền cả stats và accuracy
-            # Hàm này tương ứng với phiên bản "notifications.py" mới nhất của bạn.
             await notification_handler.send_training_and_summary_notification(stats, accuracy)
 
         except Exception as e:
