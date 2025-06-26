@@ -1,6 +1,6 @@
-# analysis_engine.py (Phiên bản tích hợp 2 chiến lược: AI/Fallback và Elliotv8)
+# analysis_engine.py (Phiên bản đã hoàn thiện logic cho cả 2 chiến lược)
 import pandas as pd
-import pandas_ta as ta
+import pandas_ta as ta 
 import sqlite3
 import logging
 from typing import Dict, Any, List, Optional
@@ -58,14 +58,13 @@ async def perform_ai_fallback_analysis(
     model_features: Optional[List[str]]
 ) -> None:
     """
-    Hàm chính cho chiến lược AI/Fallback.
-    Nó lấy dữ liệu và thực hiện phân tích.
+    Hàm chính cho chiến lược AI/Fallback, đã được hoàn thiện.
     """
     try:
         df = await get_market_data(client, symbol, TIMEFRAME, limit=500)
-        if df is None or df.empty: return
+        if df is None or df.empty or len(df) < EMA_SLOW: return
 
-        # Tính toán tất cả các chỉ báo cần thiết cho chiến lược này
+        # 1. Tính toán tất cả các chỉ báo kỹ thuật
         df.ta.ema(length=EMA_FAST, append=True)
         df.ta.ema(length=EMA_MEDIUM, append=True)
         df.ta.ema(length=EMA_SLOW, append=True)
@@ -80,24 +79,55 @@ async def perform_ai_fallback_analysis(
         price = last.get('close')
         if price is None: return
 
-        # Logic lọc và xác định trend (như code cũ của bạn)
-        # ... (bộ lọc ATR, Volume) ...
+        # 2. Áp dụng các bộ lọc cơ bản
+        atr_value = last.get(f'ATRr_{ATR_PERIOD}')
+        if atr_value is None or atr_value == 0: return
+        if (atr_value / price) * 100 < MIN_ATR_PERCENT: return
+        current_volume = last.get('volume')
+        volume_sma = last.get(f'VOLUME_SMA_{VOLUME_SMA_PERIOD}')
+        if current_volume is None or volume_sma is None or current_volume < (volume_sma * MIN_VOLUME_RATIO): return
 
         trend = TREND_SIDEWAYS
         analysis_method = ""
 
+        # 3. CHỌN CHẾ ĐỘ PHÂN TÍCH
         if all([model, label_encoder, model_features]):
             analysis_method = "AI"
-            # ... (logic dự đoán của AI) ...
+            features_for_prediction = [last.get(feature_name) for feature_name in model_features]
+            if any(v is None for v in features_for_prediction): return
+            prediction_encoded = model.predict([features_for_prediction])
+            trend = label_encoder.inverse_transform(prediction_encoded)[0]
         else:
             analysis_method = "Rule-Based"
-            # ... (logic dự phòng bằng EMA) ...
-        
+            if not all(k in last for k in [f'EMA_{EMA_FAST}', f'EMA_{EMA_MEDIUM}', f'EMA_{EMA_SLOW}']): return
+            ema_f, ema_m, ema_s = last[f'EMA_{EMA_FAST}'], last[f'EMA_{EMA_MEDIUM}'], last[f'EMA_{EMA_SLOW}']
+            if price > ema_f > ema_m > ema_s: trend = TREND_STRONG_BULLISH
+            elif price < ema_f < ema_m < ema_s: trend = TREND_STRONG_BEARISH
+            elif price > ema_s and ema_f > ema_m: trend = TREND_BULLISH
+            elif price < ema_s and ema_f < ema_m: trend = TREND_BEARISH
+
+        # 4. TÍNH TOÁN VÀ LƯU TÍN HIỆU
         if trend.startswith("STRONG"):
-            # ... (logic tính SL/TP và lưu vào DB) ...
-            pass # Giữ lại logic chi tiết của bạn ở đây
-        
-        logger.info(f"{symbol}: (AI/Fallback) Analysis complete. Trend is '{trend}'.")
+            entry = price
+            if trend == TREND_STRONG_BULLISH:
+                sl = entry - (atr_value * ATR_MULTIPLIER_SL)
+                tp1, tp2, tp3 = entry + (atr_value * ATR_MULTIPLIER_TP1), entry + (atr_value * ATR_MULTIPLIER_TP2), entry + (atr_value * ATR_MULTIPLIER_TP3)
+            else: # TREND_STRONG_BEARISH
+                sl = entry + (atr_value * ATR_MULTIPLIER_SL)
+                tp1, tp2, tp3 = entry - (atr_value * ATR_MULTIPLIER_TP1), entry - (atr_value * ATR_MULTIPLIER_TP2), entry - (atr_value * ATR_MULTIPLIER_TP3)
+            
+            signal_data = {
+                "analysis_time": pd.to_datetime('now', utc=True).isoformat(), "symbol": symbol, "timeframe": TIMEFRAME, "price": price,
+                "kline_time": last.name.isoformat(), "kline_timestamp": last.name.timestamp(),
+                "ema_fast_len": EMA_FAST, "ema_fast_val": last.get(f'EMA_{EMA_FAST}'), "ema_medium_len": EMA_MEDIUM, "ema_medium_val": last.get(f'EMA_{EMA_MEDIUM}'), "ema_slow_len": EMA_SLOW, "ema_slow_val": last.get(f'EMA_{EMA_SLOW}'),
+                "rsi_len": RSI_PERIOD, "rsi_val": last.get(f'RSI_{RSI_PERIOD}'), "trend": trend, "method": analysis_method,
+                "bb_lower": last.get(f'BBL_{BBANDS_PERIOD}_{BBANDS_STD_DEV}'), "bb_middle": last.get(f'BBM_{BBANDS_PERIOD}_{BBANDS_STD_DEV}'), "bb_upper": last.get(f'BBU_{BBANDS_PERIOD}_{BBANDS_STD_DEV}'),
+                "atr": atr_value, "macd": last.get(f'MACD_{MACD_FAST_PERIOD}_{MACD_SLOW_PERIOD}_{MACD_SIGNAL_PERIOD}'), "macd_signal": last.get(f'MACDs_{MACD_FAST_PERIOD}_{MACD_SLOW_PERIOD}_{MACD_SIGNAL_PERIOD}'), "macd_hist": last.get(f'MACDh_{MACD_FAST_PERIOD}_{MACD_SLOW_PERIOD}_{MACD_SIGNAL_PERIOD}'), "adx": last.get(f'ADX_{ADX_PERIOD}'),
+                "entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2, "tp3": tp3
+            }
+            _save_signal_to_db(signal_data)
+        else:
+            logger.info(f"{symbol}: ({analysis_method}) Analysis complete. Trend is '{trend}', no strong signal generated.")
 
     except Exception as e:
         logger.error(f"❌ FAILED TO PROCESS SYMBOL {symbol} with AI/Fallback: {e}", exc_info=True)
@@ -107,31 +137,19 @@ async def perform_ai_fallback_analysis(
 
 def _ewo_indicator(dataframe, ema_length=5, ema2_length=35):
     """Hàm tính chỉ báo Elliot Wave Oscillator."""
-    df = dataframe.copy()
-    ema1 = ta.ema(df["close"], length=ema_length)
-    ema2 = ta.ema(df["close"], length=ema2_length)
-    emadif = (ema1 - ema2) / df['close'] * 100
-    return emadif
+    df = dataframe.copy(); ema1 = ta.ema(df["close"], length=ema_length); ema2 = ta.ema(df["close"], length=ema2_length)
+    return (ema1 - ema2) / df['close'] * 100
 
 async def perform_elliotv8_analysis(client: AsyncClient, symbol: str) -> None:
-    """
-    Hàm chính cho chiến lược Elliotv8.
-    """
+    """Hàm chính cho chiến lược Elliotv8."""
     try:
-        # Chiến lược này dùng timeframe 5m và cần nhiều nến hơn
         df = await get_market_data(client, symbol, '5m', limit=400)
         if df is None or df.empty or len(df) < 200: return
 
-        # --- 1. Lấy thông số (có thể đưa vào config.py) ---
-        base_nb_candles_buy = 14
-        low_offset = 0.975
-        ewo_low = -19.988
-        ewo_high = 2.327
-        rsi_buy_value = 69
-        base_nb_candles_sell = 24
-        high_offset_sell = 0.991
+        # 1. Lấy thông số
+        base_nb_candles_buy, low_offset, ewo_low, ewo_high, rsi_buy_value, base_nb_candles_sell, high_offset_sell = 14, 0.975, -19.988, 2.327, 69, 24, 0.991
 
-        # --- 2. Tính toán các chỉ báo cần thiết ---
+        # 2. Tính toán chỉ báo
         df[f'ma_buy_{base_nb_candles_buy}'] = ta.ema(df["close"], length=base_nb_candles_buy)
         df[f'ma_sell_{base_nb_candles_sell}'] = ta.ema(df["close"], length=base_nb_candles_sell)
         df['EWO'] = _ewo_indicator(df, 50, 200)
@@ -139,39 +157,22 @@ async def perform_elliotv8_analysis(client: AsyncClient, symbol: str) -> None:
         df['rsi_fast'] = ta.rsi(df["close"], length=4)
         df['atr'] = ta.atr(df["high"], df["low"], df["close"], length=ATR_PERIOD)
 
-        last = df.iloc[-1]
-        price = last['close']
+        last, price = df.iloc[-1], df.iloc[-1]['close']
         
-        # --- 3. Áp dụng logic vào lệnh của Elliotv8 ---
+        # 3. Áp dụng logic vào lệnh
         buy_conditions = [
-            (
-                (last['rsi_fast'] < 35) &
-                (last['close'] < (last[f'ma_buy_{base_nb_candles_buy}'] * low_offset)) &
-                (last['EWO'] > ewo_high) &
-                (last['rsi'] < rsi_buy_value) &
-                (last['volume'] > 0) &
-                (last['close'] < (last[f'ma_sell_{base_nb_candles_sell}'] * high_offset_sell))
-            ),
-            (
-                (last['rsi_fast'] < 35) &
-                (last['close'] < (last[f'ma_buy_{base_nb_candles_buy}'] * low_offset)) &
-                (last['EWO'] < ewo_low) &
-                (last['volume'] > 0) &
-                (last['close'] < (last[f'ma_sell_{base_nb_candles_sell}'] * high_offset_sell))
-            )
+            ((last['rsi_fast'] < 35) & (last['close'] < (last[f'ma_buy_{base_nb_candles_buy}'] * low_offset)) & (last['EWO'] > ewo_high) & (last['rsi'] < rsi_buy_value)),
+            ((last['rsi_fast'] < 35) & (last['close'] < (last[f'ma_buy_{base_nb_candles_buy}'] * low_offset)) & (last['EWO'] < ewo_low))
         ]
         should_buy = reduce(lambda x, y: x | y, buy_conditions)
 
-        # --- 4. Tính toán và lưu tín hiệu nếu có ---
-        if should_buy:
-            trend = TREND_STRONG_BULLISH
+        # 4. Tính toán và lưu tín hiệu nếu có
+        if should_buy and last['volume'] > 0 and (last['close'] < (last[f'ma_sell_{base_nb_candles_sell}'] * high_offset_sell)):
             atr_value = last.get('atr')
             if atr_value is None or atr_value == 0: return
-
-            entry = price
+            entry, trend = price, TREND_STRONG_BULLISH
             sl = entry - (atr_value * ATR_MULTIPLIER_SL)
             tp1, tp2, tp3 = entry + (atr_value * ATR_MULTIPLIER_TP1), entry + (atr_value * ATR_MULTIPLIER_TP2), entry + (atr_value * ATR_MULTIPLIER_TP3)
-
             signal_data = {
                 "analysis_time": pd.to_datetime('now', utc=True).isoformat(), "symbol": symbol, "timeframe": '5m', "price": price,
                 "kline_time": last.name.isoformat(), "kline_timestamp": last.name.timestamp(),
@@ -181,6 +182,5 @@ async def perform_elliotv8_analysis(client: AsyncClient, symbol: str) -> None:
             _save_signal_to_db(signal_data)
         else:
             logger.info(f"{symbol}: (Elliotv8) Analysis complete. No buy signal generated.")
-
     except Exception as e:
         logger.error(f"❌ FAILED TO PROCESS SYMBOL {symbol} with Elliotv8: {e}", exc_info=True)

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 // SỬA LỖI: Đã xóa các import không sử dụng như BarChart, XAxis, etc.
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-
+import './App.css';
 // --- MOCK DATA (Dữ liệu giả) ---
 // Dữ liệu này giờ chỉ dùng làm dự phòng khi không kết nối được backend
 const MOCK_STATS = {
