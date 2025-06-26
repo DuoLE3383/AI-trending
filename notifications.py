@@ -1,4 +1,4 @@
-# notifications.py (Phiên bản đã sửa lỗi cú pháp MarkdownV2)
+# notifications.py (Phiên bản đã sửa lỗi cú pháp MarkdownV2 dứt điểm)
 import logging
 from typing import List, Dict, Any
 import asyncio
@@ -50,68 +50,51 @@ class NotificationHandler:
 
     async def send_batch_trend_alert_notification(self, analysis_results: List[Dict[str, Any]]):
         if not analysis_results: return
-        self.logger.info(f"Preparing a batch of {len(analysis_results)} new signals.")
-
         header = f"📈 *New AI Trading Signals \\({self.esc(config.TIMEFRAME)}\\)*"
         message_parts = [header]
         separator = self.esc("\n\n" + "-"*25 + "\n")
-
         for result in analysis_results:
-            symbol = self.esc(result.get('symbol', 'N/A'))
-            trend_raw = result.get('trend', '')
-            direction = "LONG 🔼" if 'BULLISH' in trend_raw else "SHORT 🔽"
-            
-            tv_link = f"https://www.tradingview.com/chart/?symbol=BINANCE%3A{result.get('symbol', 'N/A')}.P"
-            
+            symbol = result.get('symbol', 'N/A')
+            direction = "LONG 🔼" if 'BULLISH' in result.get('trend', '') else "SHORT 🔽"
+            tv_link = f"https://www.tradingview.com/chart/?symbol=BINANCE%3A{symbol}.P"
             signal_block = (
-                f"\n*{symbol}* \\| [Chart]({tv_link})" # URL trong link không cần escape
+                f"\n*{self.esc(symbol)}* \\| [Chart]({tv_link})"
                 f"\n🧭 *Direction:* {self.esc(direction)}"
                 f"\n👉 *Entry:* `{self.format_and_escape(result.get('entry_price'))}`"
                 f"\n🛡️ *Stop Loss:* `{self.format_and_escape(result.get('stop_loss'))}`"
                 f"\n🎯 *Take Profit 1:* `{self.format_and_escape(result.get('take_profit_1'))}`"
             )
             message_parts.append(signal_block)
-
-        full_message = separator.join(message_parts)
-        await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID, disable_web_page_preview=True)
+        await self._send_to_both(separator.join(message_parts), thread_id=config.TELEGRAM_MESSAGE_THREAD_ID, disable_web_page_preview=True)
 
     async def send_trade_outcome_notification(self, trade_details: Dict[str, Any]):
-        self.logger.info(f"Preparing outcome notification for {trade_details.get('symbol', 'N/A')}...")
         try:
             status_raw = trade_details.get('status', 'N/A')
             trend_raw = trade_details.get('trend', '')
             is_win = "TP" in status_raw
-            
             header_icon, header_text = ("🟢", "WIN") if is_win else ("🔴", "LOSS")
             header = f"{header_icon} *Trade Closed: {self.esc(header_text)}*"
-
-            symbol = self.esc(trade_details.get('symbol', 'N/A'))
+            symbol = trade_details.get('symbol', 'N/A')
             direction = "LONG 🔼" if 'BULLISH' in trend_raw else "SHORT 🔽"
-            
-            entry_time_str = trade_details.get('entry_timestamp_utc')
-            outcome_time_str = trade_details.get('outcome_timestamp_utc')
             duration_str = ""
-            if entry_time_str and outcome_time_str:
+            entry_time, outcome_time = trade_details.get('entry_timestamp_utc'), trade_details.get('outcome_timestamp_utc')
+            if entry_time and outcome_time:
                 try:
-                    duration = pd.to_datetime(outcome_time_str) - pd.to_datetime(entry_time_str)
-                    total_seconds = duration.total_seconds()
-                    hours, remainder = divmod(total_seconds, 3600)
-                    minutes, _ = divmod(remainder, 60)
-                    duration_str = f" \\| ⏳ {int(hours)}h {int(minutes)}m"
+                    duration = pd.to_datetime(outcome_time) - pd.to_datetime(entry_time)
+                    h, rem = divmod(duration.total_seconds(), 3600); m, _ = divmod(rem, 60)
+                    duration_str = f" \\| ⏳ {int(h)}h {int(m)}m"
                 except Exception: pass
-
-            entry_p, closing_p = trade_details.get('entry_price'), trade_details.get('exit_price')
             pnl_str = "—"
+            entry_p, closing_p = trade_details.get('entry_price'), trade_details.get('exit_price')
             if entry_p and closing_p:
                 try:
                     pnl = ((float(closing_p) - float(entry_p)) / float(entry_p)) * 100
                     if 'BEARISH' in trend_raw: pnl *= -1
                     pnl_str = self.esc(f"{pnl * config.LEVERAGE:+.2f}%")
-                except (ValueError, TypeError): pass
-
+                except Exception: pass
             message = (
                 f"{header}\n\n"
-                f"*{symbol}* \\| {self.esc(direction)}\n"
+                f"*{self.esc(symbol)}* \\| {self.esc(direction)}\n"
                 f"🏁 *Result:* {self.esc(status_raw)}{self.esc(duration_str)}\n"
                 f"💰 *PNL \\(x{config.LEVERAGE}\\):* `{pnl_str}`"
             )
@@ -120,33 +103,34 @@ class NotificationHandler:
             self.logger.error(f"Failed to send trade outcome notification: {e}", exc_info=True)
 
     async def send_startup_notification(self, symbols_count: int, accuracy: float | None):
-        """SỬA LỖI CÚ PHÁP: Cấu trúc lại cách tạo caption để đảm bảo an toàn."""
+        """SỬA LỖI: Xây dựng caption một cách an toàn tuyệt đối."""
         self.logger.info("Preparing startup notification...")
         
-        # Phần 1: Kết quả training
+        # 1. Chuẩn bị các phần động và escape chúng
+        safe_accuracy_msg = ""
         if accuracy is not None:
-            training_msg = f"✅ *Initial Model Trained* \\| *Accuracy:* `{self.esc(f'{accuracy:.2%}')}`"
+            safe_accuracy_msg = f"✅ *Initial Model Trained* \\| *Accuracy:* `{self.esc(f'{accuracy:.2%}')}`"
         else:
-            training_msg = "⚠️ *Initial Model Training Failed/Skipped*"
+            safe_accuracy_msg = "⚠️ *Initial Model Training Failed/Skipped*"
         
-        # Phần 2: Thông tin bot
-        monitoring_msg = f"📡 Monitoring `{symbols_count}` pairs on the `{self.esc(config.TIMEFRAME)}` timeframe\\."
-        
-        # Phần 3: Quảng cáo
+        safe_timeframe_str = self.esc(config.TIMEFRAME)
         binance_link = 'https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P'
+
+        # 2. Xây dựng các khối văn bản tĩnh (đã được escape thủ công)
+        monitoring_msg = f"📡 Monitoring `{symbols_count}` pairs on the `{safe_timeframe_str}` timeframe\\."
         promo_msg = (
             f"💰 *New \\#Binance\\? Get a \\$100 Bonus\\!*\n"
             f"Sign up and earn a *100 USD trading fee rebate voucher\\!*\n\n"
-            f"🔗 [Register Now]({binance_link})" # Dùng link Markdown chuẩn
+            f"🔗 [Register Now]({binance_link})"
         )
-        
-        # Ghép nối tất cả các phần lại
-        separator = "\n\n" + self.esc("-----------------------------------------") + "\n"
+        separator = self.esc("-----------------------------------------")
+
+        # 3. Ghép nối tất cả các phần lại
         caption = (
             f"🚀 *AI Trading Bot Activated*\n\n"
-            f"{self.esc(training_msg)}\n\n"
-            f"{monitoring_msg}"
-            f"{separator}\n"
+            f"{safe_accuracy_msg}\n\n"
+            f"{monitoring_msg}\n\n"
+            f"{separator}\n\n"
             f"{promo_msg}"
         )
         
@@ -154,27 +138,28 @@ class NotificationHandler:
         await self._send_photo_to_both(photo=photo_url, caption=caption, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
     async def send_fallback_mode_startup_notification(self, symbols_count: int):
-        """SỬA LỖI CÚ PHÁP: Thông báo khi chạy ở chế độ dự phòng."""
+        """SỬA LỖI: Xây dựng caption an toàn cho chế độ dự phòng."""
         self.logger.info("Preparing fallback mode startup notification...")
+        
+        safe_timeframe_str = self.esc(config.TIMEFRAME)
+        binance_link = 'https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P'
         
         main_msg = (
             f"⚠️ *AI Model not available* \\- not enough training data\\.\n\n"
             f"✅ Bot is now running in *Rule\\-Based Mode* and will collect data for future training\\.\n\n"
-            f"📡 Monitoring `{symbols_count}` pairs on the `{self.esc(config.TIMEFRAME)}` timeframe\\."
+            f"📡 Monitoring `{symbols_count}` pairs on the `{safe_timeframe_str}` timeframe\\."
         )
-
-        binance_link = 'https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P'
         promo_msg = (
             f"💰 *New \\#Binance\\? Get a \\$100 Bonus\\!*\\n"
             f"Sign up and earn a *100 USD trading fee rebate voucher\\!*\n\n"
             f"🔗 [Register Now]({binance_link})"
         )
-        
-        separator = "\n\n" + self.esc("-----------------------------------------") + "\n"
+        separator = self.esc("-----------------------------------------")
+
         caption = (
             f"🚀 *AI Trading Bot Activated \\(Fallback Mode\\)*\n\n"
-            f"{self.esc(main_msg)}"
-            f"{separator}\n"
+            f"{main_msg}\n\n"
+            f"{separator}\n\n"
             f"{promo_msg}"
         )
         
@@ -184,10 +169,8 @@ class NotificationHandler:
     async def send_training_complete_notification(self, accuracy: float | None):
         header = self.esc("🤖 AI Model Update")
         if accuracy is not None:
-            status_message = f"✅ *Periodic Training Complete*\\.\n*New Accuracy:* `{accuracy:.2%}`"
+            status_message = f"✅ *Periodic Training Complete*\\.\n*New Accuracy:* `{self.esc(f'{accuracy:.2%}')}`"
         else:
             status_message = "❌ *Periodic Training Failed*\\."
-        
         await self._send_to_both(f"{header}\n\n{status_message}", thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
-
 
