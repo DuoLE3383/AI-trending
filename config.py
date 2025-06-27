@@ -67,7 +67,7 @@ VOLUME_SMA_PERIOD = 20
 MIN_VOLUME_RATIO = 1.0 # Volume hiện tại phải >= 1.0 * Volume SMA
 
 # Volatility Filter: Tín hiệu sẽ bị bỏ qua nếu biến động (ATR) dưới mức này
-MIN_ATR_PERCENT = 0.7
+MIN_ATR_PERCENT = 1.2
 
 # Trade Parameter Multipliers (dựa trên ATR)
 ATR_MULTIPLIER_SL = 2.8   # StopLoss = 1.5 * ATR
