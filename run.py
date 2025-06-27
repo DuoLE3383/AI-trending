@@ -121,10 +121,10 @@ async def outcome_check_loop(notifier: NotificationHandler):
 async def update_loop(notifier: NotificationHandler):
     """
     Vòng lặp định kỳ kiểm tra cập nhật từ Git và khởi động lại bot nếu có.
-    """
+    """ 
     logger.info("✅ Auto-update Loop starting...")
     while True:
-        await asyncio.sleep(10 * 60) # Kiểm tra mỗi 30 phút
+        await asyncio.sleep(10 * 60) # Kiểm tra mỗi 10 phút
         
         try:
             logger.info("📡 Checking for code updates from git...")
