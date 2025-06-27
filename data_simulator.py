@@ -48,10 +48,16 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, num_trades_per_
     """
     logger.info(f"Starting trade data simulation for {num_trades_per_symbol} trades per symbol over {lookback_days} days.")
 
-    # Get symbols (using a subset for simulation to keep it fast)
-    # In a real scenario, you might fetch all symbols from Binance or a predefined list
-    symbols_to_simulate = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"] 
-    
+    # Lấy danh sách symbols từ config và chọn một mẫu ngẫu nhiên để giả lập cho nhanh
+    all_symbols = config.SYMBOLS
+    num_symbols_to_simulate = 10  # Bạn có thể điều chỉnh số lượng này
+    if len(all_symbols) > num_symbols_to_simulate:
+        symbols_to_simulate = random.sample(all_symbols, num_symbols_to_simulate)
+    else:
+        symbols_to_simulate = all_symbols
+
+    logger.info(f"Will simulate data for {len(symbols_to_simulate)} symbols: {symbols_to_simulate}")
+
     # Clear existing data to ensure a fresh start for simulation
     try:
         with get_db_connection(db_path) as conn:
