@@ -2,9 +2,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import dynamic from 'next/dynamic';
-import { StatCard, TradesTable } from '@/components/dashboard';
-
+import { StatCard, TradesTable, WinLossPieChart } from '@/components/dashboard';
 import type { Stats, Trade } from '@/lib/types';
 
 // --- Định nghĩa kiểu dữ liệu với TypeScript ---
@@ -17,11 +15,6 @@ const MOCK_STATS: Stats = {
 };
 const MOCK_TRADES: Trade[] = [];
 
-// Dynamic import cho WinLossPieChart để giảm kích thước bundle ban đầu
-const DynamicWinLossPieChart = dynamic(() => import('@/components/dashboard').then(mod => mod.WinLossPieChart), {
-    ssr: false, // Đảm bảo component này chỉ được render ở client
-});
-
 // --- Component chính của ứng dụng ---
 export default function Home() {
     const [stats, setStats] = useState<Stats>(MOCK_STATS);
@@ -29,8 +22,7 @@ export default function Home() {
     const [closedTrades, setClosedTrades] = useState<Trade[]>(MOCK_TRADES);
     const [error, setError] = useState<string | null>(null);
     
-    // Địa chỉ IP của backend đang chạy
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL; 
 
     const fetchData = async () => {
         // Sử dụng Promise.allSettled để tất cả các API call có thể hoàn thành,
@@ -121,7 +113,7 @@ export default function Home() {
                         <TradesTable title="Active Trades" trades={activeTrades} type="active" />
                     </div>
                     <div>
-                        <DynamicWinLossPieChart data={stats} />
+                        <WinLossPieChart data={stats} />
                     </div>
                     <div className="lg:col-span-3">
                          <TradesTable title="Recent Trade History" trades={closedTrades} type="closed" />
