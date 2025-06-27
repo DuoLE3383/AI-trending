@@ -78,8 +78,8 @@ def init_sqlite_db(db_path: str):
             "macd_hist": "REAL",
             "adx": "REAL",
             "method": "TEXT",
-            "pnl_percentage": "REAL", -- Ensure this column exists
-            "pnl_with_leverage": "REAL", -- Ensure this column exists
+            "pnl_percentage": "REAL", 
+            "pnl_with_leverage": "REAL",
             "exit_price": "REAL",
             "outcome_timestamp_utc": "TEXT",
             "entry_timestamp_utc": "TEXT"
