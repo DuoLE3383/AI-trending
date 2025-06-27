@@ -2,7 +2,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { StatCard, TradesTable, WinLossPieChart } from '@/components/dashboard';
+import dynamic from 'next/dynamic';
+import { StatCard, TradesTable } from '@/components/dashboard';
+
 import type { Stats, Trade } from '@/lib/types';
 
 // --- Định nghĩa kiểu dữ liệu với TypeScript ---
@@ -15,6 +17,11 @@ const MOCK_STATS: Stats = {
 };
 const MOCK_TRADES: Trade[] = [];
 
+// Dynamic import cho WinLossPieChart để giảm kích thước bundle ban đầu
+const DynamicWinLossPieChart = dynamic(() => import('@/components/dashboard').then(mod => mod.WinLossPieChart), {
+    ssr: false, // Đảm bảo component này chỉ được render ở client
+});
+
 // --- Component chính của ứng dụng ---
 export default function Home() {
     const [stats, setStats] = useState<Stats>(MOCK_STATS);
@@ -23,36 +30,54 @@ export default function Home() {
     const [error, setError] = useState<string | null>(null);
     
     // Địa chỉ IP của backend đang chạy
-    const API_BASE_URL = 'http://35.228.208.66:5000';
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
 
     const fetchData = async () => {
-        try {
-            const [statsRes, activeRes, closedRes] = await Promise.all([
-                fetch(`${API_BASE_URL}/api/stats`),
-                fetch(`${API_BASE_URL}/api/trades?status=active`),
-                fetch(`${API_BASE_URL}/api/trades?status=closed&limit=15`)
-            ]);
+        // Sử dụng Promise.allSettled để tất cả các API call có thể hoàn thành,
+        // ngay cả khi một trong số chúng thất bại.
+        const results = await Promise.allSettled([
+            fetch(`${API_BASE_URL}/api/stats`),
+            fetch(`${API_BASE_URL}/api/trades?status=active`),
+            fetch(`${API_BASE_URL}/api/trades?status=closed&limit=15`)
+        ]);
 
-            if (!statsRes.ok || !activeRes.ok || !closedRes.ok) {
-                throw new Error('One or more network responses were not ok');
-            }
-            
-            const statsData = await statsRes.json();
-            const activeTradesData = await activeRes.json();
-            const closedTradesData = await closedRes.json();
-            
+        const [statsResult, activeTradesResult, closedTradesResult] = results;
+        let hasError = false;
+
+        // Xử lý kết quả của /api/stats
+        if (statsResult.status === 'fulfilled' && statsResult.value.ok) {
+            const statsData = await statsResult.value.json();
             setStats(statsData);
+        } else {
+            console.error("Lỗi khi lấy dữ liệu thống kê (stats):", statsResult.status === 'rejected' ? statsResult.reason : 'Response not OK');
+            setStats(MOCK_STATS); // Quay về dữ liệu giả khi có lỗi
+            hasError = true;
+        }
+
+        // Xử lý kết quả của /api/trades?status=active
+        if (activeTradesResult.status === 'fulfilled' && activeTradesResult.value.ok) {
+            const activeTradesData = await activeTradesResult.value.json();
             setActiveTrades(activeTradesData);
+        } else {
+            console.error("Lỗi khi lấy giao dịch đang hoạt động (active trades):", activeTradesResult.status === 'rejected' ? activeTradesResult.reason : 'Response not OK');
+            setActiveTrades(MOCK_TRADES); // Quay về dữ liệu giả khi có lỗi
+            hasError = true;
+        }
+
+        // Xử lý kết quả của /api/trades?status=closed
+        if (closedTradesResult.status === 'fulfilled' && closedTradesResult.value.ok) {
+            const closedTradesData = await closedTradesResult.value.json();
             setClosedTrades(closedTradesData);
-            
+        } else {
+            console.error("Lỗi khi lấy lịch sử giao dịch (closed trades):", closedTradesResult.status === 'rejected' ? closedTradesResult.reason : 'Response not OK');
+            setClosedTrades(MOCK_TRADES); // Quay về dữ liệu giả khi có lỗi
+            hasError = true;
+        }
+
+        if (hasError) {
+            setError("Không thể kết nối đến một hoặc nhiều dịch vụ. Hiển thị dữ liệu dự phòng cho các thành phần bị lỗi.");
+        } else {
             setError(null);
-        } catch (err) {
-            console.error("Error fetching data:", err);
-            setError("Could not connect to the backend server. Displaying fallback data.");
-            // Quay về dữ liệu giả khi có lỗi
-            setStats(MOCK_STATS);
-            setActiveTrades(MOCK_TRADES);
-            setClosedTrades(MOCK_TRADES);
         }
     };
 
@@ -96,7 +121,7 @@ export default function Home() {
                         <TradesTable title="Active Trades" trades={activeTrades} type="active" />
                     </div>
                     <div>
-                        <WinLossPieChart data={stats} />
+                        <DynamicWinLossPieChart data={stats} />
                     </div>
                     <div className="lg:col-span-3">
                          <TradesTable title="Recent Trade History" trades={closedTrades} type="closed" />
