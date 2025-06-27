@@ -4,6 +4,7 @@ import logging
 import asyncio
 import sqlite3
 import joblib
+import json
 import os # Import os để thực hiện restart
 from dotenv import load_dotenv
 
@@ -21,6 +22,7 @@ from updater import get_usdt_futures_symbols, check_signal_outcomes
 from trainer import train_model
 from training_loop import training_loop
 from data_simulator import simulate_trade_data # NEW: Import data simulator
+from pairlistupdater import perform_single_pairlist_update, CONFIG_FILE_PATH as PAIRLIST_CONFIG_PATH
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -172,7 +174,25 @@ async def main():
         
         # --- NEW: Chạy giả lập dữ liệu khi khởi động ---
         logger.info("📊 Running data simulation to prepare training data...")
-        await simulate_trade_data(client, config.SQLITE_DB_PATH)
+        
+        # Step 1: Update pairlist to get the latest symbols for simulation.
+        logger.info("Updating pairlist before data simulation...")
+        await perform_single_pairlist_update()
+
+        # Step 2: Load the updated symbols from config.json.
+        # This is necessary because the initial `import config` does not see file changes.
+        try:
+            with open(PAIRLIST_CONFIG_PATH, 'r') as f:
+                current_config_data = json.load(f)
+            latest_all_symbols = current_config_data.get('trading', {}).get('symbols', [])
+            if not latest_all_symbols:
+                logger.warning("No symbols found in config.json for simulation. Using fallback from initial config.")
+                latest_all_symbols = config.trading.symbols if hasattr(config, 'trading') and hasattr(config.trading, 'symbols') else []
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.error(f"Error loading config.json for simulation: {e}. Using fallback from initial config.")
+            latest_all_symbols = config.trading.symbols if hasattr(config, 'trading') and hasattr(config.trading, 'symbols') else []
+
+        await simulate_trade_data(client, config.SQLITE_DB_PATH, latest_all_symbols)
         logger.info("📊 Data simulation completed.")
         # --- END NEW ---
         tg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN)
