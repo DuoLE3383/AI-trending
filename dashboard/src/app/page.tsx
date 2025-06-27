@@ -2,35 +2,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-// SỬA LỖI: Sử dụng thư viện chart.js nhẹ hơn để vẽ biểu đồ
-import { Pie } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  ArcElement,
-  Tooltip,
-  Legend,
-  ChartOptions,
-} from 'chart.js';
-
-// Đăng ký các thành phần cần thiết cho Chart.js
-ChartJS.register(ArcElement, Tooltip, Legend);
+import { StatCard, TradesTable, WinLossPieChart } from '@/components/dashboard';
+import type { Stats, Trade } from '@/lib/types';
 
 // --- Định nghĩa kiểu dữ liệu với TypeScript ---
-interface Stats {
-    win_rate: number;
-    total_completed_trades: number;
-    wins: number;
-    losses: number;
-}
-
-interface Trade {
-    symbol: string;
-    status: string;
-    pnl_percent?: number;
-    trend?: string;
-    entry_price?: number;
-}
-
 // --- Dữ liệu giả (Dùng khi không kết nối được backend) ---
 const MOCK_STATS: Stats = {
     win_rate: 0,
@@ -39,129 +14,6 @@ const MOCK_STATS: Stats = {
     losses: 0
 };
 const MOCK_TRADES: Trade[] = [];
-
-// --- Các thành phần giao diện (UI Components) ---
-
-const StatCard = ({ title, value, unit, icon, color }: { title: string, value: string | number, unit?: string, icon: string, color: string }) => (
-    <div className="bg-gray-800 p-6 rounded-lg shadow-lg flex items-center">
-        <div className={`text-4xl mr-4 ${color}`}>{icon}</div>
-        <div>
-            <div className="text-sm text-gray-400">{title}</div>
-            <div className="text-2xl font-bold text-white">{value}{unit}</div>
-        </div>
-    </div>
-);
-
-const TradesTable = ({ title, trades, type }: { title: string, trades: Trade[], type: 'active' | 'closed' }) => {
-    const isClosed = type === 'closed';
-    return (
-        <div className="bg-gray-800 p-6 rounded-lg shadow-lg h-full">
-            <h2 className="text-xl font-bold text-white mb-4">{title}</h2>
-            <div className="overflow-y-auto max-h-80">
-                <table className="w-full text-left">
-                    <thead>
-                        <tr className="border-b border-gray-700">
-                            <th className="p-2 text-gray-400">Pair</th>
-                            {isClosed ? (
-                                <>
-                                    <th className="p-2 text-gray-400">Result</th>
-                                    <th className="p-2 text-gray-400 text-right">Profit (%)</th>
-                                </>
-                            ) : (
-                                <>
-                                    <th className="p-2 text-gray-400">Trend</th>
-                                    <th className="p-2 text-gray-400 text-right">Entry Price</th>
-                                </>
-                            )}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {trades.map((trade, index) => (
-                            <tr key={index} className="border-b border-gray-700 last:border-b-0 hover:bg-gray-700/50">
-                                <td className="p-3 font-semibold text-white">{trade.symbol}</td>
-                                {isClosed ? (
-                                    <>
-                                        <td className="p-3">
-                                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${trade.status?.includes('TP') ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                                                {trade.status}
-                                            </span>
-                                        </td>
-                                        <td className={`p-3 text-right font-mono ${trade.pnl_percent && trade.pnl_percent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                            {trade.pnl_percent ? trade.pnl_percent.toFixed(2) : 'N/A'}%
-                                        </td>
-                                    </>
-                                ) : (
-                                    <>
-                                        <td className="p-3">
-                                            <span className={`font-semibold ${trade.trend?.includes('BULLISH') ? 'text-green-400' : 'text-red-400'}`}>
-                                                {trade.trend ? trade.trend.replace('STRONG_', '') : 'N/A'}
-                                            </span>
-                                        </td>
-                                        <td className="p-3 text-right font-mono">{trade.entry_price || 'N/A'}</td>
-                                    </>
-                                )}
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-                 {trades.length === 0 && <p className="text-center text-gray-500 py-8">No data available</p>}
-            </div>
-        </div>
-    );
-};
-
-// SỬA LỖI: Component biểu đồ được đưa trở lại vào tệp chính để tránh lỗi import
-const WinLossPieChart = ({ data }: { data: Stats }) => {
-    const chartData = {
-        labels: ['Wins', 'Losses'],
-        datasets: [
-            {
-                label: '# of Trades',
-                data: [data.wins || 0, data.losses || 0],
-                backgroundColor: ['#10B981', '#F43F5E'],
-                borderColor: '#1F2937', // bg-gray-800
-                borderWidth: 2,
-            },
-        ],
-    };
-
-    const chartOptions: ChartOptions<'pie'> = {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                position: 'bottom' as const,
-                labels: {
-                    color: '#d1d5db' // text-gray-300
-                }
-            },
-            tooltip: {
-                backgroundColor: '#1F2937',
-                borderColor: '#4B5563',
-                borderWidth: 1,
-            }
-        },
-    };
-
-    if (!data.wins && !data.losses) {
-        return (
-             <div className="bg-gray-800 p-6 rounded-lg shadow-lg h-full flex flex-col justify-center items-center">
-                <h2 className="text-xl font-bold text-white mb-4">Win/Loss Ratio</h2>
-                <p className="text-gray-500">Waiting for trade data...</p>
-            </div>
-        )
-    }
-
-    return (
-        <div className="bg-gray-800 p-6 rounded-lg shadow-lg h-full flex flex-col justify-center items-center">
-            <h2 className="text-xl font-bold text-white mb-4">Win/Loss Ratio</h2>
-            <div className="relative w-full h-[250px]">
-                 <Pie data={chartData} options={chartOptions} />
-            </div>
-        </div>
-    );
-};
-
 
 // --- Component chính của ứng dụng ---
 export default function Home() {
@@ -244,7 +96,6 @@ export default function Home() {
                         <TradesTable title="Active Trades" trades={activeTrades} type="active" />
                     </div>
                     <div>
-                        {/* Gọi component biểu đồ trực tiếp */}
                         <WinLossPieChart data={stats} />
                     </div>
                     <div className="lg:col-span-3">
