@@ -98,20 +98,26 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
             entry_price = entry_kline['close']
             
             # Randomly choose trend
-            trend = random.choice(['BULLISH', 'BEARISH'])
+            trend = random.choice(['BULLISH', 'BEARISH']) # Giữ nguyên random cho mục đích giả lập
             
-            # Define SL/TP based on entry price (e.g., 1% SL, 2% TP)
-            sl_factor = 0.01
-            tp_factor = 0.02
+            # Định nghĩa SL/TP dựa trên các phần trăm yêu cầu
+            sl_factor = 0.025 # 2.5%
+            tp1_factor = 0.028 # 2.8%
+            tp2_factor = 0.036 # 3.6%
+            tp3_factor = 0.049 # 4.9%
             
             if trend == 'BULLISH':
                 stop_loss = entry_price * (1 - sl_factor)
-                take_profit_1 = entry_price * (1 + tp_factor)
+                take_profit_1 = entry_price * (1 + tp1_factor)
+                take_profit_2 = entry_price * (1 + tp2_factor)
+                take_profit_3 = entry_price * (1 + tp3_factor)
             else: # BEARISH
                 stop_loss = entry_price * (1 + sl_factor)
-                take_profit_1 = entry_price * (1 - tp_factor)
+                take_profit_1 = entry_price * (1 - tp1_factor)
+                take_profit_2 = entry_price * (1 - tp2_factor)
+                take_profit_3 = entry_price * (1 - tp3_factor)
 
-            # Simulate outcome over next few candles
+            # Mô phỏng kết quả trong vài nến tiếp theo, kiểm tra tất cả các TP
             exit_price = None
             status = 'ACTIVE'
             
@@ -122,34 +128,50 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
                     if outcome_kline['low'] <= stop_loss:
                         exit_price = stop_loss
                         status = 'SL'
+                        # Đối với mô phỏng, nếu SL bị chạm, dừng kiểm tra TP
                         break
-                    if outcome_kline['high'] >= take_profit_1:
+                    # Kiểm tra TP theo thứ tự tăng dần độ khó (TP3 trước, rồi TP2, rồi TP1)
+                    if outcome_kline['high'] >= take_profit_3:
+                        exit_price = take_profit_3
+                        status = 'TP3'
+                        break
+                    elif outcome_kline['high'] >= take_profit_2:
+                        exit_price = take_profit_2
+                        status = 'TP2'
+                        break
+                    elif outcome_kline['high'] >= take_profit_1:
                         exit_price = take_profit_1
-                        status = 'TP1'
+                        status = 'TP1' # Đây sẽ là TP cao nhất bị chạm
                         break
                 else: # BEARISH
                     if outcome_kline['high'] >= stop_loss:
                         exit_price = stop_loss
                         status = 'SL'
+                        # Đối với mô phỏng, nếu SL bị chạm, dừng kiểm tra TP
                         break
-                    if outcome_kline['low'] <= take_profit_1:
+                    # Kiểm tra TP theo thứ tự tăng dần độ khó (TP3 trước, rồi TP2, rồi TP1)
+                    if outcome_kline['low'] <= take_profit_3:
+                        exit_price = take_profit_3
+                        status = 'TP3'
+                        break
+                    elif outcome_kline['low'] <= take_profit_2:
+                        exit_price = take_profit_2
+                        status = 'TP2'
+                        break
+                    elif outcome_kline['low'] <= take_profit_1:
                         exit_price = take_profit_1
-                        status = 'TP1'
+                        status = 'TP1' # Đây sẽ là TP cao nhất bị chạm
                         break
             
             # If no SL/TP hit within 5 candles, close manually at last candle's close
             if status == 'ACTIVE':
                 exit_price = klines[min(i + 360, len(klines) - 5)]['close']
                 status = 'CLOSED_MANUALLY (OUT OF TIME)'
-
-            # Calculate PnL
-            pnl_percentage = None
-            pnl_with_leverage = None
             if exit_price is not None:
                 try:
                     pnl = ((exit_price - entry_price) / entry_price) * 100
-                    if trend == 'BEARISH': # Correctly invert PnL for short trades
-                        pnl *= -2.5
+                    if trend == 'BEARISH': # Đảo ngược PnL cho lệnh short (nhân với -1)
+                        pnl *= -1 # Đã sửa: Chỉ nên nhân với -1 để đảo dấu
                     # For BULLISH trades, the initial 'pnl' calculation is already correct.
                     pnl_percentage = pnl
                     pnl_with_leverage = pnl * config.LEVERAGE # Assuming LEVERAGE is in config
@@ -161,17 +183,19 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
                 with get_db_connection(db_path) as conn:
                     conn.execute("""
                         INSERT INTO trend_analysis (
-                            symbol, analysis_timestamp_utc, trend, entry_price, 
-                            stop_loss, take_profit_1, exit_price, status, 
+                            symbol, analysis_timestamp_utc, trend, entry_price,
+                            stop_loss, take_profit_1, take_profit_2, take_profit_3, exit_price, status,
                             pnl_percentage, pnl_with_leverage
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         symbol, 
                         entry_kline['open_time'].isoformat(), 
                         trend, 
                         entry_price, 
                         stop_loss, 
-                        take_profit_1, 
+                        take_profit_1,
+                        take_profit_2,
+                        take_profit_3,
                         exit_price, 
                         status, 
                         pnl_percentage, 
@@ -233,6 +257,8 @@ if __name__ == "__main__":
                     entry_price REAL,
                     stop_loss REAL,
                     take_profit_1 REAL,
+                    take_profit_2 REAL,
+                    take_profit_3 REAL,
                     exit_price REAL,
                     status TEXT NOT NULL,
                     pnl_percentage REAL,
