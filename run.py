@@ -77,10 +77,13 @@ async def signal_check_loop(notifier: NotificationHandler):
             with sqlite3.connect(f'file:{config.SQLITE_DB_PATH}?mode=ro', uri=True) as conn:
                 conn.row_factory = sqlite3.Row
                 all_active_signals = conn.execute("SELECT rowid, * FROM trend_analysis WHERE status = 'ACTIVE'").fetchall()
-                new_signals = [s for s in all_active_signals if s['rowid'] not in notified_signal_ids]
-            for signal in new_signals:
-                await notifier.send_batch_trend_alert_notification([dict(signal)])
-                notified_signal_ids.add(signal['rowid'])
+            
+            new_signals_to_notify = [s for s in all_active_signals if s['rowid'] not in notified_signal_ids]
+            
+            if new_signals_to_notify:
+                # Pass all new signals at once to the notification handler
+                await notifier.send_batch_trend_alert_notification([dict(s) for s in new_signals_to_notify])
+                notified_signal_ids.update(s['rowid'] for s in new_signals_to_notify)
         except Exception as e:
             logger.error(f"❌ Error in signal_check_loop: {e}", exc_info=True)
         await asyncio.sleep(config.SIGNAL_CHECK_INTERVAL_SECONDS)
