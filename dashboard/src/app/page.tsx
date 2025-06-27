@@ -2,7 +2,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+// SỬA LỖI: Thay thế thư viện recharts bằng react-chartjs-2 và chart.js nhẹ hơn
+import { Pie } from 'react-chartjs-2';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
+
+// Đăng ký các thành phần cần thiết cho Chart.js
+ChartJS.register(ArcElement, Tooltip, Legend);
 
 // --- Định nghĩa kiểu dữ liệu với TypeScript ---
 interface Stats {
@@ -99,37 +104,54 @@ const TradesTable = ({ title, trades, type }: { title: string, trades: Trade[], 
     );
 };
 
+// SỬA LỖI: Component biểu đồ được viết lại bằng Chart.js
 const WinLossPieChart = ({ data }: { data: Stats }) => {
-    const chartData = [
-        { name: 'Wins', value: data.wins || 0 },
-        { name: 'Losses', value: data.losses || 0 },
-    ];
-    const COLORS = ['#10B981', '#F43F5E'];
+    const chartData = {
+        labels: ['Wins', 'Losses'],
+        datasets: [
+            {
+                label: '# of Trades',
+                data: [data.wins || 0, data.losses || 0],
+                backgroundColor: ['#10B981', '#F43F5E'],
+                borderColor: '#1F2937', // bg-gray-800
+                borderWidth: 2,
+            },
+        ],
+    };
 
-    // Không render biểu đồ nếu không có dữ liệu để tránh lỗi
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom' as const,
+                labels: {
+                    color: '#d1d5db' // text-gray-300
+                }
+            },
+            tooltip: {
+                backgroundColor: '#1F2937',
+                borderColor: '#4B5563',
+                borderWidth: 1,
+            }
+        },
+    };
+
     if (!data.wins && !data.losses) {
         return (
-            <div className="bg-gray-800 p-6 rounded-lg shadow-lg h-full flex flex-col justify-center items-center">
+             <div className="bg-gray-800 p-6 rounded-lg shadow-lg h-full flex flex-col justify-center items-center">
                 <h2 className="text-xl font-bold text-white mb-4">Win/Loss Ratio</h2>
                 <p className="text-gray-500">Waiting for trade data...</p>
             </div>
-        );
+        )
     }
-    
+
     return (
         <div className="bg-gray-800 p-6 rounded-lg shadow-lg h-full flex flex-col justify-center items-center">
             <h2 className="text-xl font-bold text-white mb-4">Win/Loss Ratio</h2>
-            <ResponsiveContainer width="100%" height={250}>
-                <PieChart>
-                    <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} fill="#8884d8" label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}>
-                        {chartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #4B5563' }} />
-                    <Legend />
-                </PieChart>
-            </ResponsiveContainer>
+            <div className="relative w-full h-[250px]">
+                 <Pie data={chartData} options={chartOptions} />
+            </div>
         </div>
     );
 };
