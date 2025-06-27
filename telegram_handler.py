@@ -2,7 +2,7 @@
 import httpx
 import logging
 import re
-from typing import Union, Dict, Any
+from typing import Union, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -11,12 +11,17 @@ class TelegramHandler:
     Handles interactions with the Telegram Bot API, including sending messages
     and photos, with robust error handling and logging.
     """
-    def __init__(self, api_token: str):
+    def __init__(self, api_token: str, proxy_url: Optional[str] = None):
         if not api_token:
             logger.error("Telegram API token is missing.")
             raise ValueError("Telegram API token cannot be empty.")
         self.api_token = api_token
         self.base_url = f"https://api.telegram.org/bot{self.api_token}"
+        # Prepare proxies dict for httpx. It expects a format like {'all://': 'http://proxy.com:port'}
+        self.proxies = {'all://': proxy_url} if proxy_url else None
+        if self.proxies:
+            logger.info(f"Telegram handler configured to use proxy: {proxy_url}")
+
 
     @staticmethod
     def escape_markdownv2(text: str) -> str:
@@ -37,7 +42,7 @@ class TelegramHandler:
         """
         url = f"{self.base_url}/{endpoint}"
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(proxies=self.proxies) as client:
                 response = await client.request(method, url, timeout=30.0, **kwargs)
                 
                 # Check for non-successful status codes and log the exact error from Telegram

@@ -293,6 +293,6 @@
     "telegram": {
         "bot_token_placeholder": "YOUR_TELEGRAM_BOT_TOKEN_PLACEHOLDER",
         "chat_id_placeholder": "YOUR_TELEGRAM_CHAT_ID_PLACEHOLDER",
-        "proxy_url": null
+        "proxy_url": "http://35.228.208.66:PORT"
     }
 }

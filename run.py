@@ -195,7 +195,11 @@ async def main():
         await simulate_trade_data(client, config.SQLITE_DB_PATH, latest_all_symbols)
         logger.info("📊 Data simulation completed.")
         # --- END NEW ---
-        tg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN)
+        # Cập nhật để truyền proxy_url vào TelegramHandler
+        tg_handler = TelegramHandler(
+            api_token=config.TELEGRAM_BOT_TOKEN,
+            proxy_url=config.TELEGRAM_PROXY_URL if hasattr(config, 'TELEGRAM_PROXY_URL') else None
+        )
         notifier = NotificationHandler(telegram_handler=tg_handler)
         
         # --- 2. Tải và Huấn luyện Model ---
