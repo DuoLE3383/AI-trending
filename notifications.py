@@ -88,63 +88,133 @@ class NotificationHandler:
 
     # === CÁC HÀM GỬI THÔNG BÁO ===
 
-    async def send_batch_trend_alert_notification(self, analysis_results: List[Dict[str, Any]]):
-        self.logger.info(f"Preparing to send {len(analysis_results)} new signal alert(s).")
-        if not analysis_results:
+    def queue_signal(self, signal: Dict[str, Any]):
+        """Adds a single signal to the notification queue."""
+        self.signal_notification_queue.append(signal)
+        self.logger.info(f"Queued signal for {signal.get('symbol')}. Queue size: {len(self.signal_notification_queue)}")
+
+    async def flush_signal_queue(self):
+        """
+        Checks the queue and sends notifications.
+        Groups them if the queue size is over the threshold.
+        """
+        if not self.signal_notification_queue:
             return
 
-        # Define threshold for grouping messages
-        BATCH_THRESHOLD = 10 
-        
-        if len(analysis_results) > BATCH_THRESHOLD:
+        signals_to_send = self.signal_notification_queue.copy()
+        self.signal_notification_queue.clear()
+        self.logger.info(f"Flushing signal queue with {len(signals_to_send)} signals.")
+
+        if len(signals_to_send) > self.BATCH_THRESHOLD:
             # Group messages into one
-            header = self.esc(f"🆘 {len(analysis_results)} New Signals Found! 🆘")
+            header = self.esc(f"🆘 {len(signals_to_send)} New Signals Found! 🆘")
             message_parts = [header, self.esc("\n\n----------------------------------------\n\n")]
             
-            for i, result in enumerate(analysis_results):
+            for i, result in enumerate(signals_to_send):
                 trend_raw = result.get('trend', '').replace("_", " ").title()
                 trend_emoji = "🔼 LONG" if "Bullish" in trend_raw else "🔽 SHORT"
                 
                 signal_summary = (
                     f"*{i+1}\\. {self.esc(result.get('symbol', 'N/A'))}* \\| {trend_emoji}\n"
-                    f"  Entry: {self.format_and_escape(result.get('entry_price'))} \\| SL: {self.format_and_escape(result.get('stop_loss'))}\n"
-                    f"  TP1: {self.format_and_escape(result.get('take_profit_1'))}"
+                    f"  Entry: {self.format_and_escape(result.get('entry_price'))} \\| SL: {self.format_and_escape(result.get('stop_loss'))} \\| TP1: {self.format_and_escape(result.get('take_profit_1'))}"
                     f" \\| TP2: {self.format_and_escape(result.get('take_profit_2'))} \\| TP3: {self.format_and_escape(result.get('take_profit_3'))}"
                 )
 
                 message_parts.append(signal_summary)
                 
                 # Add a separator between signals, but not after the last one
-                if i < len(analysis_results) - 1:
+                if i < len(signals_to_send) - 1:
                     message_parts.append(self.esc("---")) 
             
             full_message = "\n".join(message_parts)
             
             # Telegram message limit is 4096 characters. Truncate if necessary.
             if len(full_message) > 4096:
-                self.logger.warning(f"Grouped message for {len(analysis_results)} signals exceeds Telegram limit. Truncating.")
+                self.logger.warning(f"Grouped message for {len(signals_to_send)} signals exceeds Telegram limit. Truncating.")
                 full_message = full_message[:4090] + self.esc("...") # Add ellipsis and ensure it's escaped
             
             await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
         else:
-            # Send individually as before
+            # Send individually if not over threshold
             header = self.esc("🆘 New Signal Found! 🆘") # Changed header for individual messages
             separator = self.esc("\n\n----------------------------------------\n\n")
-            for result in analysis_results:
+            for result in signals_to_send:
                 trend_raw = result.get('trend', '').replace("_", " ").title()
                 trend_emoji = "🔼 LONG" if "Bullish" in trend_raw else "🔽 SHORT"
                 signal_detail = (
                     f"\\#{self.esc(trend_raw)} // {trend_emoji} // {self.esc(result.get('symbol', 'N/A'))}\n"
                     f"📌Entry: {self.format_and_escape(result.get('entry_price'))}\n"
                     f"❌SL: {self.format_and_escape(result.get('stop_loss'))}\n"
-                    f"🎯TP1: {self.format_and_escape(result.get('take_profit_1'))}\n" 
+                    f"🎯TP1: {self.format_and_escape(result.get('take_profit_1'))}\n"
                     f"🎯TP2: {self.format_and_escape(result.get('take_profit_2'))}\n"
                     f"🎯TP3: {self.format_and_escape(result.get('take_profit_3'))}"
                 )
                 full_message = header + separator + signal_detail
                 await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
                 await asyncio.sleep(0.5) # Small delay between individual messages
+
+    async def send_periodic_summary_notification(self):
+        """Fetches performance stats and sends a summary notification."""
+        self.logger.info("Preparing periodic performance summary notification...")
+        
+        try:
+            # Local import to avoid potential circular dependency issues at startup
+            from performance_analyzer import get_performance_stats 
+            loop = asyncio.get_running_loop()
+            stats = await loop.run_in_executor(None, get_performance_stats)
+            
+            if not stats or stats.get('total_completed_trades', 0) == 0:
+                self.logger.info("No completed trades to summarize. Skipping summary notification.")
+                return
+
+            header = self.esc("📊 Hourly Performance Summary")
+            
+            total_trades = stats.get('total_completed_trades', 0)
+            wins = stats.get('wins', 0)
+            losses = stats.get('losses', 0)
+            win_rate = stats.get('win_rate', 0.0)
+
+            summary_msg = (
+                f"Total Trades: `{total_trades}`\n"
+                f"Wins: `{wins}`\n"
+                f"Losses: `{losses}`\n"
+                f"Win Rate: `{win_rate:.2f}%`"
+            )
+            
+            full_message = "\n\n".join([header, self.esc("---"), summary_msg])
+            await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
+
+        except Exception as e:
+            self.logger.error(f"Failed to send periodic summary notification: {e}", exc_info=True)
+
+    async def send_simulation_summary_notification(self, stats: Dict[str, Any]):
+        """Sends a summary of the data simulation results."""
+        self.logger.info("Preparing data simulation summary notification...")
+        
+        if not stats or stats.get('total_completed_trades', 0) == 0:
+            message = self.esc("Data simulation complete, but no trades were generated to analyze.")
+            await self._send_to_both(message)
+            return
+
+        header = self.esc("📊 Data Simulation Complete & Analyzed 📊")
+        
+        total_trades = stats.get('total_completed_trades', 0)
+        wins = stats.get('wins', 0)
+        losses = stats.get('losses', 0)
+        win_rate = stats.get('win_rate', 0.0)
+
+        summary_msg = (
+            f"Total Simulated Trades: `{total_trades}`\n"
+            f"Wins: `{wins}`\n"
+            f"Losses: `{losses}`\n"
+            f"Win Rate: `{win_rate:.2f}%`"
+        )
+        
+        footer = self.esc("The bot will now start with this historical data for training.")
+        
+        full_message = "\n\n".join([header, self.esc("---"), summary_msg, self.esc("---"), footer])
+        await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
     async def send_trade_outcome_notification(self, trade_details: Dict[str, Any]):
         self.logger.info(f"Preparing to send trade outcome notification for {trade_details.get('symbol')}.")
@@ -153,7 +223,7 @@ class NotificationHandler:
             trend_raw = trade_details.get('trend', '')
             pnl_percentage_from_db = trade_details.get('pnl_percentage') # Lấy PnL từ DB
 
-            is_win = ("TP" in status_raw) or (pnl_percentage_from_db is not None and pnl_percentage_from_db > 0) # Check PnL from DB for win/loss
+            is_win = ("TP" in status_raw) or (pnl_percentage_from_db is not None and pnl_percentage_from_db > 0)
             outcome_emoji, outcome_text = ("✅", "WIN") if is_win else ("❌", "LOSS")
             header = f"{outcome_emoji} *Trade Closed: {self.esc(outcome_text)}* {outcome_emoji}"
             symbol = self.esc(trade_details.get('symbol', 'N/A'))

@@ -222,6 +222,15 @@ async def main():
             proxy_url=config.TELEGRAM_PROXY_URL if hasattr(config, 'TELEGRAM_PROXY_URL') else None
         )
         notifier = NotificationHandler(telegram_handler=tg_handler)
+
+        # --- GỬI THÔNG BÁO TỔNG KẾT GIẢ LẬP ---
+        logger.info("Calculating simulation results and sending summary...")
+        loop = asyncio.get_running_loop()
+        # Chạy hàm đồng bộ trong một executor để không chặn event loop
+        simulation_stats = await loop.run_in_executor(None, get_performance_stats)
+        await notifier.send_simulation_summary_notification(simulation_stats)
+        logger.info("Simulation summary notification sent.")
+        # --- KẾT THÚC THÔNG BÁO TỔNG KẾT ---
         
         # --- 2. Tải và Huấn luyện Model ---
         logger.info("🧠 Loading/Training AI Model...")
