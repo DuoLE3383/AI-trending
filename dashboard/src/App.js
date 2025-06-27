@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 // FIX: Removed unused imports like BarChart, XAxis, etc.
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 // FIX: Removed the import for App.css as it's not needed in this environment and was causing a build error.
+import './App.css';
 
 // --- MOCK DATA ---
 // This data is now only used as a fallback when the backend cannot be reached.
