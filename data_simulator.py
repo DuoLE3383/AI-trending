@@ -52,7 +52,7 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
     logger.info(f"Starting trade data simulation for {num_trades_per_symbol} trades per symbol over {lookback_days} days.")
     
     # all_symbols is now passed as an argument, reflecting the latest from config.json
-    num_symbols_to_simulate = 100  # Default to 100 symbols if available  
+    num_symbols_to_simulate = 10 # Default to 100 symbols if available  
 
     if len(all_symbols) > num_symbols_to_simulate:
         symbols_to_simulate = random.sample(all_symbols, num_symbols_to_simulate)
