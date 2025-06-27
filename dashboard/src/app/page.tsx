@@ -3,7 +3,9 @@
 
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { StatCard, TradesTable } from '@/components/dashboard';
+// Corrected paths, using absolute imports relative to the /src directory
+import {StatCard} from '../components/components/StatCard';
+import {TradesTable} from '../components/components/TradesTable';
 
 import type { Stats, Trade } from '@/lib/types';
 
@@ -17,9 +19,13 @@ const MOCK_STATS: Stats = {
 };
 const MOCK_TRADES: Trade[] = [];
 
-// Dynamic import cho WinLossPieChart để giảm kích thước bundle ban đầu
-const DynamicWinLossPieChart = dynamic(() => import('@/components/dashboard').then(mod => mod.WinLossPieChart), {
-    ssr: false, // Đảm bảo component này chỉ được render ở client
+// Tối ưu hóa: Dynamic import cho WinLossPieChart để giảm kích thước bundle
+const DynamicWinLossPieChart = dynamic(
+    // Sửa lỗi đường dẫn: Trỏ trực tiếp đến file component để tree-shaking hiệu quả hơn
+    () => import('../components/components/WinLossPieChart').then((mod) => mod.WinLossPieChart),
+    { 
+        ssr: false,
+        loading: () => <div className="bg-gray-800 rounded-lg p-6 h-full flex items-center justify-center min-h-[300px]"><p className="text-gray-400">Loading Chart...</p></div>
 });
 
 // --- Component chính của ứng dụng ---
@@ -27,57 +33,63 @@ export default function Home() {
     const [stats, setStats] = useState<Stats>(MOCK_STATS);
     const [activeTrades, setActiveTrades] = useState<Trade[]>(MOCK_TRADES);
     const [closedTrades, setClosedTrades] = useState<Trade[]>(MOCK_TRADES);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null); // Consider using a more specific error type
+    const [isLoading, setIsLoading] = useState<boolean>(true); // Add loading state
     
     const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL; 
 
+    // Helper function to handle individual fetch results
+    const handleFetchResult = async <T,>(
+        result: PromiseSettledResult<Response>,
+        setter: React.Dispatch<React.SetStateAction<T>>,
+        mockData: T,
+        errorMessage: string
+    ): Promise<boolean> => {
+        if (result.status === 'fulfilled' && result.value.ok) {
+            const data = await result.value.json(); // Consider adding type validation here
+            setter(data);
+            return false; // No error for this specific fetch
+        } else {
+            console.error(errorMessage, result.status === 'rejected' ? result.reason : 'Response not OK');
+            setter(mockData); // Fallback to mock data
+            return true; // Error occurred for this specific fetch
+        }
+    };
+
     const fetchData = async () => {
-        // Sử dụng Promise.allSettled để tất cả các API call có thể hoàn thành,
+        setIsLoading(true); // Set loading to true at the start of fetch
+
+        // Validate API_BASE_URL - Consider moving this validation to build time
+        if (!API_BASE_URL) {
+            console.error("API_BASE_URL is not defined. Please check your .env.local file.");
+            setError("Cấu hình API không đúng. Vui lòng kiểm tra biến môi trường.");
+            setStats(MOCK_STATS);
+            setActiveTrades(MOCK_TRADES);
+            setClosedTrades(MOCK_TRADES);
+            setIsLoading(false);
+            return;
+        }
+
+        // Sử dụng Promise.allSettled để tất cả các API call có thể hoàn thành, - Good practice!
         // ngay cả khi một trong số chúng thất bại.
         const results = await Promise.allSettled([
             fetch(`${API_BASE_URL}/api/stats`),
             fetch(`${API_BASE_URL}/api/trades?status=active`),
             fetch(`${API_BASE_URL}/api/trades?status=closed&limit=15`)
         ]);
+        
+        let anyError = false;
 
-        const [statsResult, activeTradesResult, closedTradesResult] = results;
-        let hasError = false;
+        anyError = await handleFetchResult<Stats>(results[0], setStats, MOCK_STATS, "Lỗi khi lấy dữ liệu thống kê (stats):") || anyError;
+        anyError = await handleFetchResult<Trade[]>(results[1], setActiveTrades, MOCK_TRADES, "Lỗi khi lấy giao dịch đang hoạt động (active trades):") || anyError;
+        anyError = await handleFetchResult<Trade[]>(results[2], setClosedTrades, MOCK_TRADES, "Lỗi khi lấy lịch sử giao dịch (closed trades):") || anyError;
 
-        // Xử lý kết quả của /api/stats
-        if (statsResult.status === 'fulfilled' && statsResult.value.ok) {
-            const statsData = await statsResult.value.json();
-            setStats(statsData);
-        } else {
-            console.error("Lỗi khi lấy dữ liệu thống kê (stats):", statsResult.status === 'rejected' ? statsResult.reason : 'Response not OK');
-            setStats(MOCK_STATS); // Quay về dữ liệu giả khi có lỗi
-            hasError = true;
-        }
-
-        // Xử lý kết quả của /api/trades?status=active
-        if (activeTradesResult.status === 'fulfilled' && activeTradesResult.value.ok) {
-            const activeTradesData = await activeTradesResult.value.json();
-            setActiveTrades(activeTradesData);
-        } else {
-            console.error("Lỗi khi lấy giao dịch đang hoạt động (active trades):", activeTradesResult.status === 'rejected' ? activeTradesResult.reason : 'Response not OK');
-            setActiveTrades(MOCK_TRADES); // Quay về dữ liệu giả khi có lỗi
-            hasError = true;
-        }
-
-        // Xử lý kết quả của /api/trades?status=closed
-        if (closedTradesResult.status === 'fulfilled' && closedTradesResult.value.ok) {
-            const closedTradesData = await closedTradesResult.value.json();
-            setClosedTrades(closedTradesData);
-        } else {
-            console.error("Lỗi khi lấy lịch sử giao dịch (closed trades):", closedTradesResult.status === 'rejected' ? closedTradesResult.reason : 'Response not OK');
-            setClosedTrades(MOCK_TRADES); // Quay về dữ liệu giả khi có lỗi
-            hasError = true;
-        }
-
-        if (hasError) {
+        if (anyError) {
             setError("Không thể kết nối đến một hoặc nhiều dịch vụ. Hiển thị dữ liệu dự phòng cho các thành phần bị lỗi.");
         } else {
             setError(null);
         }
+        setIsLoading(false); // Set loading to false after all fetches
     };
 
     // Fetch dữ liệu khi component được tải và sau đó cập nhật sau mỗi 5 giây
@@ -107,23 +119,41 @@ export default function Home() {
                 )}
 
                 {/* Stat Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                    <StatCard title="Win Rate" value={stats.win_rate ? stats.win_rate.toFixed(2) : '0.00'} unit="%" icon="🏆" color="text-yellow-400" />
-                    <StatCard title="Total Closed Trades" value={stats.total_completed_trades} unit="" icon="📈" color="text-blue-400" />
-                    <StatCard title="Trades Won" value={stats.wins} unit="" icon="✅" color="text-green-400" />
-                    <StatCard title="Trades Lost" value={stats.losses} unit="" icon="❌" color="text-red-400" />
-                </div>
+                {isLoading ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        {/* Simple loading skeletons for StatCards */}
+                        <div className="bg-gray-800 rounded-lg p-6 h-32 animate-pulse"></div>
+                        <div className="bg-gray-800 rounded-lg p-6 h-32 animate-pulse"></div>
+                        <div className="bg-gray-800 rounded-lg p-6 h-32 animate-pulse"></div>
+                        <div className="bg-gray-800 rounded-lg p-6 h-32 animate-pulse"></div>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <StatCard title="Win Rate" value={stats.win_rate ? stats.win_rate.toFixed(2) : '0.00'} unit="%" icon="🏆" color="text-yellow-400" />
+                        <StatCard title="Total Closed Trades" value={stats.total_completed_trades} unit="" icon="📈" color="text-blue-400" />
+                        <StatCard title="Trades Won" value={stats.wins} unit="" icon="✅" color="text-green-400" />
+                        <StatCard title="Trades Lost" value={stats.losses} unit="" icon="❌" color="text-red-400" />
+                    </div>
+                )}
 
                 {/* Main Content Area */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-2">
-                        <TradesTable title="Active Trades" trades={activeTrades} type="active" />
+                        {isLoading ? (
+                            <div className="bg-gray-800 rounded-lg p-6 min-h-[300px] animate-pulse"></div>
+                        ) : (
+                            <TradesTable title="Active Trades" trades={activeTrades} type="active" />
+                        )}
                     </div>
                     <div>
                         <DynamicWinLossPieChart data={stats} />
                     </div>
                     <div className="lg:col-span-3">
-                         <TradesTable title="Recent Trade History" trades={closedTrades} type="closed" />
+                        {isLoading ? (
+                            <div className="bg-gray-800 rounded-lg p-6 min-h-[300px] animate-pulse"></div>
+                        ) : (
+                            <TradesTable title="Recent Trade History" trades={closedTrades} type="closed" />
+                        )}
                     </div>
                 </div>
 

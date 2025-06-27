@@ -3,11 +3,10 @@ import sqlite3
 import logging
 from flask import Flask, jsonify
 from flask_cors import CORS
+from flask import Flask, jsonify, request
 import config # Import config để lấy đường dẫn DB
 from performance_analyzer import get_performance_stats # Import hàm tính toán đã có
-
-# --- Cấu hình ---
-# Tạo một Flask app
+# --- Chạy Server ---
 app = Flask(__name__)
 # Kích hoạt CORS để React app có thể gọi API từ một domain khác (khi phát triển)
 CORS(app)
@@ -16,7 +15,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def get_db_connection():
-    """Tạo kết nối đến database SQLite."""
     conn = sqlite3.connect(f'file:{config.SQLITE_DB_PATH}?mode=ro', uri=True)
     conn.row_factory = sqlite3.Row # Giúp truy cập dữ liệu theo tên cột
     return conn
@@ -25,10 +23,7 @@ def get_db_connection():
 
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
-    """
-    Endpoint cung cấp các số liệu thống kê tổng quan.
-    Ví dụ: http://127.0.0.1:5000/api/stats
-    """
+    
     try:
         stats = get_performance_stats()
         return jsonify(stats)
@@ -39,12 +34,7 @@ def get_stats():
 
 @app.route('/api/trades', methods=['GET'])
 def get_trades():
-    """
-    Endpoint cung cấp danh sách các giao dịch.
-    Lọc theo status: ?status=active hoặc ?status=closed
-    Lấy giới hạn: ?limit=10
-    Ví dụ: http://127.0.0.1:5000/api/trades?status=closed&limit=15
-    """
+    
     from flask import request
     status_filter = request.args.get('status', 'all')
     limit = request.args.get('limit', 20, type=int)
@@ -69,16 +59,6 @@ def get_trades():
         logger.error(f"Lỗi khi lấy danh sách giao dịch: {e}")
         return jsonify({"error": "Không thể lấy danh sách giao dịch"}), 500
 
-# --- Chạy Server ---
-from flask import Flask
-from flask_cors import CORS # <--- 1. Import thư viện
-
-# ... (các import khác)
-
-app = Flask(__name__)
-CORS(app) # <--- 2. Kích hoạt CORS cho toàn bộ ứng dụng
-
-# --- Chạy Flask server ---
 
 if __name__ == '__main__':
     logger.info("🚀 Starting Flask API server for Trading Bot Dashboard...")
