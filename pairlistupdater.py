@@ -108,36 +108,46 @@ async def notify_of_changes(added: Set[str], removed: Set[str]):
         logger.error(f"Failed to send Telegram notification: {e}")
 
 
+# --- New function for single update check ---
+async def perform_single_pairlist_update() -> List[str]:
+    """
+    Performs a single check for pairlist updates, updates config.json if necessary,
+    and returns the *newly updated* list of symbols.
+    """
+    logger.info("--- Performing single pairlist update check ---")
+    
+    local_symbols = get_local_symbols(CONFIG_FILE_PATH)
+    latest_symbols = get_latest_binance_symbols()
+
+    if local_symbols is None or latest_symbols is None:
+        logger.error("Failed to get local or latest symbols. Cannot perform update.")
+        # Return the local symbols if fetching latest failed, to at least use something
+        return list(local_symbols) if local_symbols else []
+
+    if local_symbols == latest_symbols:
+        logger.info("No changes detected. Pairlist is up-to-date.")
+        return list(local_symbols)
+    else:
+        logger.warning("Change detected! Updating local pairlist.")
+        added = latest_symbols - local_symbols
+        removed = local_symbols - latest_symbols
+        
+        # Update the config.json file
+        update_config_file(CONFIG_FILE_PATH, list(latest_symbols))
+        
+        # Send a notification about the update
+        if added or removed:
+            await notify_of_changes(added, removed)
+        
+        logger.info("Single pairlist update check complete.")
+        return list(latest_symbols) # Return the newly updated list
+
 # --- Main Application Loop ---
 
 async def main_loop():
     logger.info("Starting real-time pairlist updater script.")
     while True:
-        logger.info("--- Running periodic check ---")
-        
-        local_symbols = get_local_symbols(CONFIG_FILE_PATH)
-        latest_symbols = get_latest_binance_symbols()
-
-        # Gracefully handle potential errors
-        if local_symbols is None or latest_symbols is None:
-            logger.warning("Skipping this cycle due to an error reading local file or fetching from API.")
-            await asyncio.sleep(CHECK_INTERVAL_SECONDS)
-            continue
-
-        if local_symbols == latest_symbols:
-            logger.info("No changes detected. Pairlist is up-to-date.")
-        else:
-            logger.warning("Change detected! Updating local pairlist.")
-            added = latest_symbols - local_symbols
-            removed = local_symbols - latest_symbols
-            
-            # Update the config.json file
-            update_config_file(CONFIG_FILE_PATH, list(latest_symbols))
-            
-            # Send a notification about the update
-            if added or removed:
-                await notify_of_changes(added, removed)
-            
+        await perform_single_pairlist_update() # Call the new single-check function
         logger.info(f"Next check in {CHECK_INTERVAL_SECONDS / 3600:.1f} hour(s).")
         await asyncio.sleep(CHECK_INTERVAL_SECONDS)
 
@@ -146,4 +156,3 @@ if __name__ == "__main__":
         asyncio.run(main_loop())
     except KeyboardInterrupt:
         logger.info("Updater script stopped by user.")
-

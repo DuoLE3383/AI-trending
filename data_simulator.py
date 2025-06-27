@@ -4,7 +4,10 @@ import sqlite3
 import random
 from datetime import datetime, timedelta
 import logging
-import os
+import os 
+import json # Import json to read config.json directly
+
+from pairlistupdater import perform_single_pairlist_update, CONFIG_FILE_PATH as PAIRLIST_CONFIG_PATH
 
 # Assume config.py exists in the same directory or is importable
 import config
@@ -41,14 +44,14 @@ async def fetch_klines(client, symbol, interval, start_str, end_str=None):
         logger.error(f"Error fetching klines for {symbol}: {e}")
         return []
 
-async def simulate_trade_data(client: AsyncClient, db_path: str, num_trades_per_symbol: int = 50, lookback_days: int = 90):
+async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: list, num_trades_per_symbol: int = 50, lookback_days: int = 90):
     """
     Simulates historical trade data and inserts it into the trend_analysis table.
     This function will clear existing data in trend_analysis before inserting new.
     """
     logger.info(f"Starting trade data simulation for {num_trades_per_symbol} trades per symbol over {lookback_days} days.")
-
-    all_symbols = config.trading.symbols # Giả định config.trading.symbols được tải đúng từ config.json
+    
+    # all_symbols is now passed as an argument, reflecting the latest from config.json
     num_symbols_to_simulate = 10  # Số lượng symbols muốn giả lập. Bạn có thể điều chỉnh hoặc lấy từ config.
 
     if len(all_symbols) > num_symbols_to_simulate:
@@ -184,7 +187,31 @@ async def main():
     client = None
     try:
         client = await AsyncClient.create(config.API_KEY, config.API_SECRET)
-        await simulate_trade_data(client, config.SQLITE_DB_PATH)
+        
+        # Step 1: Run pairlist updater to ensure config.json is up-to-date
+        logger.info("Running pairlist updater to get the latest symbols...")
+        updated_symbols = await perform_single_pairlist_update()
+        
+        # Step 2: Load the updated config.json to get the latest symbols and other settings
+        # This is crucial because `import config` at the top only loads it once.
+        try:
+            with open(PAIRLIST_CONFIG_PATH, 'r') as f:
+                current_config_data = json.load(f)
+            # Ensure config.trading.symbols is updated for simulate_trade_data
+            # and other config values are accessible if needed.
+            # For this specific case, we only need the symbols list.
+            # If config.py is designed to be reloaded, that would be another approach.
+            # For now, we pass the symbols directly.
+            latest_all_symbols = current_config_data.get('trading', {}).get('symbols', [])
+            if not latest_all_symbols:
+                logger.warning("No symbols found in updated config.json. Using default or empty list.")
+                # Fallback to config.py's symbols if config.json is empty or malformed
+                latest_all_symbols = config.trading.symbols if hasattr(config, 'trading') and hasattr(config.trading, 'symbols') else []
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.error(f"Error loading config.json after pairlist update: {e}. Using symbols from initial config import.")
+            latest_all_symbols = config.trading.symbols if hasattr(config, 'trading') and hasattr(config.trading, 'symbols') else []
+
+        await simulate_trade_data(client, config.SQLITE_DB_PATH, latest_all_symbols) # Pass the updated symbols
         logger.info("Data simulation complete. You can now run the bot.")
     except Exception as e:
         logger.critical(f"A critical error occurred during data simulation: {e}", exc_info=True)
