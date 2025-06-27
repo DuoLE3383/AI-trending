@@ -59,8 +59,9 @@ def init_sqlite_db(db_path: str):
             
             entry_timestamp_utc TEXT,
             outcome_timestamp_utc TEXT,
-            exit_price REAL,
-            pnl_percent REAL
+            exit_price REAL, 
+            pnl_percentage REAL, -- Changed from pnl_percent to pnl_percentage
+            pnl_with_leverage REAL -- Added new column for PnL with leverage
         );
         """
         cursor.execute(create_table_query)
@@ -76,8 +77,9 @@ def init_sqlite_db(db_path: str):
             "macd_signal": "REAL",
             "macd_hist": "REAL",
             "adx": "REAL",
-            "method": "TEXT", # SỬA LỖI: Đã thêm cột còn thiếu
-            "pnl_percent": "REAL",
+            "method": "TEXT",
+            "pnl_percentage": "REAL", -- Ensure this column exists
+            "pnl_with_leverage": "REAL", -- Ensure this column exists
             "exit_price": "REAL",
             "outcome_timestamp_utc": "TEXT",
             "entry_timestamp_utc": "TEXT"
