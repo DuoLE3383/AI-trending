@@ -188,32 +188,48 @@ class NotificationHandler:
         except Exception as e:
             self.logger.error(f"Failed to send periodic summary notification: {e}", exc_info=True)
 
-    async def send_simulation_summary_notification(self, stats: Dict[str, Any]):
-        """Sends a summary of the data simulation results."""
+    async def send_simulation_summary_notification(self, stats_by_symbol: Dict[str, Any]):
+        """Sends a per-symbol summary of the data simulation results."""
         self.logger.info("Preparing data simulation summary notification...")
         
-        if not stats or stats.get('total_completed_trades', 0) == 0:
+        if not stats_by_symbol:
             message = self.esc("Data simulation complete, but no trades were generated to analyze.")
             await self._send_to_both(message)
             return
 
-        header = self.esc("📊 Data Simulation Complete & Analyzed 📊")
+        header = self.esc("📊 Data Simulation Complete - Per-Symbol Summary 📊")
         
-        total_trades = stats.get('total_completed_trades', 0)
-        wins = stats.get('wins', 0)
-        losses = stats.get('losses', 0)
-        win_rate = stats.get('win_rate', 0.0)
+        message_parts = [header]
+        
+        # Sort symbols by the number of trades, descending
+        sorted_symbols = sorted(stats_by_symbol.items(), key=lambda item: item[1].get('total_trades', 0), reverse=True)
 
-        summary_msg = (
-            f"Total Simulated Trades: `{total_trades}`\n"
-            f"Wins: `{wins}`\n"
-            f"Losses: `{losses}`\n"
-            f"Win Rate: `{win_rate:.2f}%`"
-        )
+        for symbol, stats in sorted_symbols:
+            total_trades = stats.get('total_trades', 0)
+            wins = stats.get('wins', 0)
+            losses = stats.get('losses', 0)
+            win_rate = stats.get('win_rate', 0.0)
+            net_pnl = stats.get('net_pnl_percentage', 0.0)
+
+            symbol_header = f"*{self.esc(symbol)} Summary*"
+            symbol_details = (
+                f"Total Trades: `{total_trades}`\n"
+                f"Wins: `{wins}` \\| Losses: `{losses}`\n"
+                f"Win Rate: `{win_rate:.2f}%`\n"
+                f"Net PnL: `{net_pnl:+.2f}%`"
+            )
+            message_parts.append("\n\n".join([self.esc("---"), symbol_header, symbol_details]))
         
         footer = self.esc("The bot will now start with this historical data for training.")
+        message_parts.append("\n\n" + footer)
         
-        full_message = "\n\n".join([header, self.esc("---"), summary_msg, self.esc("---"), footer])
+        full_message = "\n".join(message_parts)
+
+        # Truncate if message is too long for Telegram
+        if len(full_message) > 4096:
+            self.logger.warning("Per-symbol summary message exceeds Telegram limit. Truncating.")
+            full_message = full_message[:4090] + self.esc("\n... (message truncated)")
+
         await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
     async def send_trade_outcome_notification(self, trade_details: Dict[str, Any]):
