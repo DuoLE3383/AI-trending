@@ -47,21 +47,15 @@ class TelegramHandler:
             # that do not recognize the 'proxies' dictionary argument.
             async with httpx.AsyncClient(proxy=self.proxy_url) as client:
                 response = await client.request(method, url, timeout=30.0, **kwargs)
-                
-                # Check for non-successful status codes and log the exact error from Telegram
-                if response.status_code != 200:
-                    logger.error(
-                        f"Telegram API Error for endpoint '{endpoint}': {response.status_code} - {response.text}"
-                    )
-                else:
-                    logger.debug(f"Telegram API request to '{endpoint}' successful: {response.status_code}")
-
                 response.raise_for_status()
-                
+                logger.debug(f"Telegram API request to '{endpoint}' successful: {response.status_code}")
                 return response.json()
 
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error occurred while requesting '{endpoint}': {e}", exc_info=False)
+            # Log the detailed error response from Telegram for better debugging
+            logger.critical(
+                f"HTTP error for endpoint '{endpoint}': {e.response.status_code} - {e.response.text}"
+            )
             raise
         except httpx.RequestError as e:
             logger.error(f"A network request error occurred while requesting '{endpoint}': {e}", exc_info=True)
