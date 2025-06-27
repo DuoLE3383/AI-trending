@@ -139,7 +139,7 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
             
             # If no SL/TP hit within 5 candles, close manually at last candle's close
             if status == 'ACTIVE':
-                exit_price = klines[min(i + 5, len(klines) - 1)]['close']
+                exit_price = klines[min(i + 50, len(klines) - 5)]['close']
                 status = 'CLOSED_MANUALLY'
 
             # Calculate PnL
@@ -149,7 +149,7 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
                 try:
                     pnl = ((exit_price - entry_price) / entry_price) * 100
                     if trend == 'BEARISH': # Invert PnL for short trades
-                        pnl *= -1
+                        pnl *= -2
                     pnl_percentage = pnl
                     pnl_with_leverage = pnl * config.LEVERAGE # Assuming LEVERAGE is in config
                 except (TypeError, ZeroDivisionError):
