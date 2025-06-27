@@ -1,0 +1,8 @@
+{
+  "name": "dashboard",
+  "compatibility_date": "2025-06-27",
+  "main": "src/index.ts", // This line is for Workers, remove or comment out if only deploying static assets
+  "assets": {
+    "directory": "./.next" // <--- IMPORTANT: Change this to your actual Next.js build output directory (e.g., "./out" for static export, or "./.next" for serverless/SSR)
+  }
+}
