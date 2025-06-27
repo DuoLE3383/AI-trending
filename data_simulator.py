@@ -1,0 +1,214 @@
+# data_simulator.py
+import asyncio
+import sqlite3
+import random
+from datetime import datetime, timedelta
+import logging
+import os
+
+# Assume config.py exists in the same directory or is importable
+import config
+from binance import AsyncClient
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# --- Helper Functions ---
+def get_db_connection(db_path):
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+async def fetch_klines(client, symbol, interval, start_str, end_str=None):
+    """Fetches historical klines from Binance."""
+    try:
+        klines = await client.get_historical_klines(symbol, interval, start_str, end_str)
+        # Convert klines to a more usable format (list of dicts)
+        parsed_klines = []
+        for kline in klines:
+            parsed_klines.append({
+                'open_time': datetime.fromtimestamp(kline[0] / 1000),
+                'open': float(kline[1]),
+                'high': float(kline[2]),
+                'low': float(kline[3]),
+                'close': float(kline[4]),
+                'volume': float(kline[5]),
+                'close_time': datetime.fromtimestamp(kline[6] / 1000)
+            })
+        return parsed_klines
+    except Exception as e:
+        logger.error(f"Error fetching klines for {symbol}: {e}")
+        return []
+
+async def simulate_trade_data(client: AsyncClient, db_path: str, num_trades_per_symbol: int = 50, lookback_days: int = 90):
+    """
+    Simulates historical trade data and inserts it into the trend_analysis table.
+    This function will clear existing data in trend_analysis before inserting new.
+    """
+    logger.info(f"Starting trade data simulation for {num_trades_per_symbol} trades per symbol over {lookback_days} days.")
+
+    # Get symbols (using a subset for simulation to keep it fast)
+    # In a real scenario, you might fetch all symbols from Binance or a predefined list
+    symbols_to_simulate = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"] 
+    
+    # Clear existing data to ensure a fresh start for simulation
+    try:
+        with get_db_connection(db_path) as conn:
+            conn.execute("DELETE FROM trend_analysis")
+            conn.commit()
+        logger.info("Cleared existing data from 'trend_analysis' table.")
+    except Exception as e:
+        logger.error(f"Error clearing 'trend_analysis' table: {e}")
+        return
+
+    for symbol in symbols_to_simulate:
+        logger.info(f"Simulating trades for {symbol}...")
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=lookback_days)
+        
+        klines = await fetch_klines(client, symbol, config.TIMEFRAME, 
+                                    start_date.strftime('%d %b %Y %H:%M:%S'), 
+                                    end_date.strftime('%d %b %Y %H:%M:%S'))
+        
+        if not klines:
+            logger.warning(f"No klines fetched for {symbol}. Skipping simulation for this symbol.")
+            continue
+
+        # Simple strategy: simulate a trade every N candles
+        candles_per_trade = len(klines) // num_trades_per_symbol
+        if candles_per_trade < 1:
+            candles_per_trade = 1 # Ensure at least one trade if not enough klines
+
+        trade_counter = 0
+        for i in range(0, len(klines) - 5, candles_per_trade): # Ensure enough candles for outcome
+            if trade_counter >= num_trades_per_symbol:
+                break
+
+            entry_kline = klines[i]
+            entry_price = entry_kline['close']
+            
+            # Randomly choose trend
+            trend = random.choice(['BULLISH', 'BEARISH'])
+            
+            # Define SL/TP based on entry price (e.g., 1% SL, 2% TP)
+            sl_factor = 0.01
+            tp_factor = 0.02
+            
+            if trend == 'BULLISH':
+                stop_loss = entry_price * (1 - sl_factor)
+                take_profit_1 = entry_price * (1 + tp_factor)
+            else: # BEARISH
+                stop_loss = entry_price * (1 + sl_factor)
+                take_profit_1 = entry_price * (1 - tp_factor)
+
+            # Simulate outcome over next few candles
+            exit_price = None
+            status = 'ACTIVE'
+            
+            for j in range(i + 1, min(i + 6, len(klines))): # Check next 5 candles
+                outcome_kline = klines[j]
+                
+                if trend == 'BULLISH':
+                    if outcome_kline['low'] <= stop_loss:
+                        exit_price = stop_loss
+                        status = 'SL'
+                        break
+                    if outcome_kline['high'] >= take_profit_1:
+                        exit_price = take_profit_1
+                        status = 'TP1'
+                        break
+                else: # BEARISH
+                    if outcome_kline['high'] >= stop_loss:
+                        exit_price = stop_loss
+                        status = 'SL'
+                        break
+                    if outcome_kline['low'] <= take_profit_1:
+                        exit_price = take_profit_1
+                        status = 'TP1'
+                        break
+            
+            # If no SL/TP hit within 5 candles, close manually at last candle's close
+            if status == 'ACTIVE':
+                exit_price = klines[min(i + 5, len(klines) - 1)]['close']
+                status = 'CLOSED_MANUALLY'
+
+            # Calculate PnL
+            pnl_percentage = None
+            pnl_with_leverage = None
+            if exit_price is not None:
+                try:
+                    pnl = ((exit_price - entry_price) / entry_price) * 100
+                    if trend == 'BEARISH': # Invert PnL for short trades
+                        pnl *= -1
+                    pnl_percentage = pnl
+                    pnl_with_leverage = pnl * config.LEVERAGE # Assuming LEVERAGE is in config
+                except (TypeError, ZeroDivisionError):
+                    logger.warning(f"Could not calculate PnL for {symbol} trade at {entry_kline['open_time']}.")
+
+            # Insert into DB
+            try:
+                with get_db_connection(db_path) as conn:
+                    conn.execute("""
+                        INSERT INTO trend_analysis (
+                            symbol, analysis_timestamp_utc, trend, entry_price, 
+                            stop_loss, take_profit_1, exit_price, status, 
+                            pnl_percentage, pnl_with_leverage
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        symbol, 
+                        entry_kline['open_time'].isoformat(), 
+                        trend, 
+                        entry_price, 
+                        stop_loss, 
+                        take_profit_1, 
+                        exit_price, 
+                        status, 
+                        pnl_percentage, 
+                        pnl_with_leverage
+                    ))
+                    conn.commit()
+                trade_counter += 1
+            except Exception as e:
+                logger.error(f"Error inserting simulated trade for {symbol}: {e}")
+        logger.info(f"Finished simulating {trade_counter} trades for {symbol}.")
+
+async def main():
+    logger.info("Initializing data simulation...")
+    client = None
+    try:
+        client = await AsyncClient.create(config.API_KEY, config.API_SECRET)
+        await simulate_trade_data(client, config.SQLITE_DB_PATH)
+        logger.info("Data simulation complete. You can now run the bot.")
+    except Exception as e:
+        logger.critical(f"A critical error occurred during data simulation: {e}", exc_info=True)
+    finally:
+        if client:
+            await client.close_connection()
+            logger.info("Binance client connection closed.")
+
+if __name__ == "__main__":
+    # Ensure the database file exists and table is created if not
+    try:
+        with get_db_connection(config.SQLITE_DB_PATH) as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS trend_analysis (
+                    symbol TEXT NOT NULL,
+                    analysis_timestamp_utc TEXT NOT NULL,
+                    trend TEXT NOT NULL,
+                    entry_price REAL,
+                    stop_loss REAL,
+                    take_profit_1 REAL,
+                    exit_price REAL,
+                    status TEXT NOT NULL,
+                    pnl_percentage REAL,
+                    pnl_with_leverage REAL
+                );
+            """)
+            conn.commit()
+        logger.info(f"Database '{config.SQLITE_DB_PATH}' and 'trend_analysis' table ensured.")
+    except Exception as e:
+        logger.critical(f"Error ensuring database/table existence: {e}")
+        exit(1) # Exit if DB cannot be prepared
+
+    asyncio.run(main())
