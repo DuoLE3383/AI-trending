@@ -20,6 +20,7 @@ from performance_analyzer import get_performance_stats
 from updater import get_usdt_futures_symbols, check_signal_outcomes
 from trainer import train_model
 from training_loop import training_loop
+from data_simulator import simulate_trade_data # NEW: Import data simulator
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -168,6 +169,12 @@ async def main():
         # --- 1. Khởi tạo các thành phần ---
         client = await AsyncClient.create(config.API_KEY, config.API_SECRET)
         init_sqlite_db(config.SQLITE_DB_PATH)
+        
+        # --- NEW: Chạy giả lập dữ liệu khi khởi động ---
+        logger.info("📊 Running data simulation to prepare training data...")
+        await simulate_trade_data(client, config.SQLITE_DB_PATH)
+        logger.info("📊 Data simulation completed.")
+        # --- END NEW ---
         tg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN)
         notifier = NotificationHandler(telegram_handler=tg_handler)
         
