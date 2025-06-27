@@ -35,7 +35,7 @@ def index():
 
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
-    
+    logger.info(f"API request received for /api/stats from {request.remote_addr}")
     try:
         stats = get_performance_stats()
         return jsonify(stats)
@@ -46,6 +46,7 @@ def get_stats():
 
 @app.route('/api/trades', methods=['GET'])
 def get_trades():
+    logger.info(f"API request received for /api/trades from {request.remote_addr} with params: {request.args}")
     status_filter = request.args.get('status', 'all')
     limit = request.args.get('limit', 20, type=int)
 
