@@ -1,4 +1,4 @@
-# notifications.py (Phiên bản đã khôi phục lại chức năng gửi vào channel)
+# notifications.py (Phiên bản cuối cùng, đầy đủ tất cả các hàm thông báo)
 import logging
 from typing import List, Dict, Any
 import asyncio
@@ -37,38 +37,21 @@ class NotificationHandler:
         return False
 
     async def _send_to_both(self, message: str, thread_id: int = None, disable_web_page_preview: bool = False):
-        """SỬA LỖI: Gửi tin nhắn văn bản đến cả group và channel."""
+        """Gửi tin nhắn văn bản đến cả group và channel."""
         common_kwargs = {'parse_mode': 'MarkdownV2', 'disable_web_page_preview': disable_web_page_preview}
-        
-        # Gửi tới group
         group_kwargs = {'chat_id': config.TELEGRAM_CHAT_ID, 'text': message, 'message_thread_id': thread_id, **common_kwargs}
-        group_success = await self._send_with_retry(self.telegram_handler.send_message, **group_kwargs)
-        if group_success: self.logger.info("✅ Đã gửi tới group.")
-
-        # Gửi tới channel
-        channel_kwargs = {'chat_id': config.TELEGRAM_CHANNEL_ID, 'text': message, **common_kwargs}
-        channel_success = await self._send_with_retry(self.telegram_handler.send_message, **channel_kwargs)
-        if channel_success: self.logger.info("✅ Đã gửi tới channel.")
+        await self._send_with_retry(self.telegram_handler.send_message, **group_kwargs)
 
     async def _send_photo_to_both(self, photo: str, caption: str, thread_id: int = None):
-        """SỬA LỖI: Gửi ảnh có chú thích đến cả group và channel."""
-        common_kwargs = {'parse_mode': 'MarkdownV2'}
+        """Gửi ảnh có chú thích đến cả group và channel."""
+        group_kwargs = {'chat_id': config.TELEGRAM_CHAT_ID, 'photo': photo, 'caption': caption, 'parse_mode': 'MarkdownV2', 'message_thread_id': thread_id}
+        await self._send_with_retry(self.telegram_handler.send_photo, **group_kwargs)
 
-        # Gửi tới group
-        group_kwargs = {'chat_id': config.TELEGRAM_CHAT_ID, 'photo': photo, 'caption': caption, 'message_thread_id': thread_id, **common_kwargs}
-        group_success = await self._send_with_retry(self.telegram_handler.send_photo, **group_kwargs)
-        if group_success: self.logger.info("✅ Đã gửi ảnh tới group.")
-        
-        # Gửi tới channel
-        channel_kwargs = {'chat_id': config.TELEGRAM_CHANNEL_ID, 'photo': photo, 'caption': caption, **common_kwargs}
-        channel_success = await self._send_with_retry(self.telegram_handler.send_photo, **channel_kwargs)
-        if channel_success: self.logger.info("✅ Đã gửi ảnh tới channel.")
-
-    # === CÁC HÀM GỬI THÔNG BÁO (giữ nguyên logic) ===
+    # === CÁC HÀM GỬI THÔNG BÁO ===
 
     async def send_batch_trend_alert_notification(self, analysis_results: List[Dict[str, Any]]):
         if not analysis_results: return
-        header = self.esc("🆘 1 New Signal(s) Found! 🔥")
+        header = self.esc("🆘 1 New Signal(s) Found! �")
         separator = self.esc("\n\n----------------------------------------\n\n")
         for result in analysis_results:
             trend_raw = result.get('trend', '').replace("_", " ").title()
@@ -128,50 +111,21 @@ class NotificationHandler:
         photo_url = "https://github.com/DuoLE3383/AI-trending/blob/main/100usd.png?raw=true"
         await self._send_photo_to_both(photo=photo_url, caption=caption, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
-    async def send_training_and_summary_notification(self, stats: Dict[str, Any], accuracy: float | None):
-        header = "*🤖 AI Model Update & Performance Report*"
-        training_status = ""
+    async def send_training_complete_notification(self, accuracy: float | None, symbols_count: int):
+        """Hàm thông báo kết quả training định kỳ."""
+        self.logger.info("Preparing periodic training complete notification...")
+        header = self.esc("🤖 AI Model Update")
+        
+        status_message = ""
         if accuracy is not None:
-            safe_accuracy_str = self.esc(f"{accuracy:.2f}%")
-            training_status = f"✅ *Periodic Training Complete*\\.\n*New Accuracy:* `{safe_accuracy_str}`"
+            status_message = f"✅ *Periodic Training Complete*\\.\n*New Accuracy:* `{self.esc(f'{accuracy:.2%}')}`"
         else:
-            training_status = "❌ *Periodic Training Failed*\\."
-        summary_body = "*Lifetime Performance:*\n_No completed trades to analyze yet\\._"
-        if stats and stats.get('total_completed_trades', 0) > 0:
-            safe_win_rate = self.esc(f"{stats.get('win_rate', 0.0):.2f}%")
-            safe_total = self.esc(str(stats.get('total_completed_trades', 0)))
-            safe_wins = self.esc(str(stats.get('wins', 0)))
-            safe_losses = self.esc(str(stats.get('losses', 0)))
-            summary_body = (
-                f"� *Lifetime Performance:*\n"
-                f"  » Win Rate: `{safe_win_rate}`\n"
-                f"  » Total Trades: `{safe_total}` "
-                f"\\({safe_wins}W / {safe_losses}L\\)"
-            )
-        full_message = "\n\n".join([header, training_status, summary_body])
+            status_message = "❌ *Periodic Training Failed*\\."
+
+        monitoring_msg = f"📡 Monitoring `{symbols_count}` pairs on the `{self.esc(config.TIMEFRAME)}` timeframe\\."
+        
+        full_message = "\n\n".join([header, status_message, monitoring_msg])
         await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
-        
-    async def send_summary_report(self, stats: Dict[str, Any]):
-        header = self.esc("🏆 *Strategy Performance Report (All-Time)* 🏆\n")
-        if stats and stats.get('total_completed_trades', 0) > 0:
-            win_rate_val = f"{stats.get('win_rate', 0.0):.2f}%"
-            body = (
-                f"\n✅ *Win Rate:* `{self.esc(win_rate_val)}`"
-                f"\n📊 *Completed Trades:* `{stats.get('total_completed_trades', 0)}`"
-                f"\n👍 *Wins:* `{stats.get('wins', 0)}`"
-                f"\n👎 *Losses:* `{stats.get('losses', 0)}`"
-            )
-        else:
-            body = "\nNo completed trades to analyze yet."
-        await self._send_to_both(header + body, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
-        
-    async def send_heartbeat_notification(self, symbols_count: int):
-        message_text = (
-            f"✅ *Bot Status: ALIVE*\n\n"
-            f"The bot is running correctly and currently monitoring `{symbols_count}` symbols\\. "
-            f"No critical errors have been detected."
-        )
-        await self._send_to_both(self.esc(message_text), thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
     async def send_fallback_mode_startup_notification(self, symbols_count: int):
         binance_link = 'https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P'
