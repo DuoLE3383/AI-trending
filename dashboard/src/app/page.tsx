@@ -2,7 +2,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { StatCard, TradesTable, WinLossPieChart } from '@/components/dashboard';
+import dynamic from 'next/dynamic';
+import { StatCard, TradesTable } from '@/components/dashboard';
+
 import type { Stats, Trade } from '@/lib/types';
 
 // --- Định nghĩa kiểu dữ liệu với TypeScript ---
@@ -14,6 +16,11 @@ const MOCK_STATS: Stats = {
     losses: 0
 };
 const MOCK_TRADES: Trade[] = [];
+
+// Dynamic import cho WinLossPieChart để giảm kích thước bundle ban đầu
+const DynamicWinLossPieChart = dynamic(() => import('@/components/dashboard').then(mod => mod.WinLossPieChart), {
+    ssr: false, // Đảm bảo component này chỉ được render ở client
+});
 
 // --- Component chính của ứng dụng ---
 export default function Home() {
@@ -113,7 +120,7 @@ export default function Home() {
                         <TradesTable title="Active Trades" trades={activeTrades} type="active" />
                     </div>
                     <div>
-                        <WinLossPieChart data={stats} />
+                        <DynamicWinLossPieChart data={stats} />
                     </div>
                     <div className="lg:col-span-3">
                          <TradesTable title="Recent Trade History" trades={closedTrades} type="closed" />
