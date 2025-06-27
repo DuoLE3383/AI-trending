@@ -140,7 +140,7 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
             # If no SL/TP hit within 5 candles, close manually at last candle's close
             if status == 'ACTIVE':
                 exit_price = klines[min(i + 360, len(klines) - 5)]['close']
-                status = 'CLOSED_MANUALLY'
+                status = 'CLOSED_MANUALLY (OUT OF TIME)'
 
             # Calculate PnL
             pnl_percentage = None
