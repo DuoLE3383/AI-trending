@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 # --- BOT LOOPS ---
 
-async def analysis_loop(client, symbols, model, label_encoder, model_features):
+async def analysis_loop(client, model, label_encoder, model_features): # Removed 'symbols' parameter
     """LOOP 1: Phân tích thị trường, chọn chiến lược từ config."""
     logger.info(f"✅ Analysis Loop starting (Strategy: {config.STRATEGY_MODE})")
     semaphore = asyncio.Semaphore(config.CONCURRENT_REQUESTS)
@@ -45,8 +45,14 @@ async def analysis_loop(client, symbols, model, label_encoder, model_features):
 
     while True:
         try:
-            logger.info(f"--- Starting analysis cycle for {len(symbols)} symbols ---")
-            tasks = [process_with_semaphore(s) for s in list(symbols)]
+            # Periodically refresh the symbol list
+            current_symbols = await get_usdt_futures_symbols(client)
+            if not current_symbols:
+                logger.warning("No symbols fetched for analysis. Skipping cycle.")
+                await asyncio.sleep(config.LOOP_SLEEP_INTERVAL_SECONDS)
+                continue
+            logger.info(f"--- Starting analysis cycle for {len(current_symbols)} symbols ---")
+            tasks = [process_with_semaphore(s) for s in list(current_symbols)] # Use current_symbols
             await asyncio.gather(*tasks)
             logger.info(f"--- Analysis cycle complete. Sleeping for {config.LOOP_SLEEP_INTERVAL_SECONDS} seconds. ---")
             await asyncio.sleep(config.LOOP_SLEEP_INTERVAL_SECONDS)
@@ -60,18 +66,15 @@ async def signal_check_loop(notifier: NotificationHandler):
     try:
         with sqlite3.connect(f'file:{config.SQLITE_DB_PATH}?mode=ro', uri=True) as conn:
             existing_ids = conn.execute("SELECT rowid FROM trend_analysis WHERE status = 'ACTIVE'").fetchall()
-            notified_signal_ids.update(r[0] for r in existing_ids)
+            notified_signal_ids.update(row['rowid'] for row in existing_ids) # Use row['rowid'] for clarity
     except Exception as e:
         logger.error(f"❌ Error initializing signal_check_loop: {e}")
     while True:
         try:
             with sqlite3.connect(f'file:{config.SQLITE_DB_PATH}?mode=ro', uri=True) as conn:
                 conn.row_factory = sqlite3.Row
-                if not notified_signal_ids:
-                    new_signals = conn.execute("SELECT rowid, * FROM trend_analysis WHERE status = 'ACTIVE'").fetchall()
-                else:
-                    query = "SELECT rowid, * FROM trend_analysis WHERE status = 'ACTIVE' AND rowid NOT IN ({})".format(','.join('?' for _ in notified_signal_ids))
-                    new_signals = conn.execute(query, tuple(notified_signal_ids)).fetchall()
+                all_active_signals = conn.execute("SELECT rowid, * FROM trend_analysis WHERE status = 'ACTIVE'").fetchall()
+                new_signals = [s for s in all_active_signals if s['rowid'] not in notified_signal_ids]
             for signal in new_signals:
                 await notifier.send_batch_trend_alert_notification([dict(signal)])
                 notified_signal_ids.add(signal['rowid'])
@@ -94,18 +97,15 @@ async def outcome_check_loop(notifier: NotificationHandler):
     try:
         with sqlite3.connect(f'file:{config.SQLITE_DB_PATH}?mode=ro', uri=True) as conn:
             closed_trades = conn.execute("SELECT rowid FROM trend_analysis WHERE status != 'ACTIVE'").fetchall()
-            notified_trade_ids.update(r[0] for r in closed_trades)
+            notified_trade_ids.update(row['rowid'] for row in closed_trades) # Use row['rowid'] for clarity
     except Exception as e:
         logger.error(f"❌ Error initializing outcome_check_loop: {e}")
     while True:
         try:
             with sqlite3.connect(f'file:{config.SQLITE_DB_PATH}?mode=ro', uri=True) as conn:
                 conn.row_factory = sqlite3.Row
-                if not notified_trade_ids:
-                    newly_closed_trades = conn.execute("SELECT rowid, * FROM trend_analysis WHERE status != 'ACTIVE'").fetchall()
-                else:
-                    query = "SELECT rowid, * FROM trend_analysis WHERE status != 'ACTIVE' AND rowid NOT IN ({})".format(','.join('?' for _ in notified_trade_ids))
-                    newly_closed_trades = conn.execute(query, tuple(notified_trade_ids)).fetchall()
+                all_closed_trades = conn.execute("SELECT rowid, * FROM trend_analysis WHERE status != 'ACTIVE'").fetchall()
+                newly_closed_trades = [t for t in all_closed_trades if t['rowid'] not in notified_trade_ids]
             for trade in newly_closed_trades:
                 await notifier.send_trade_outcome_notification(dict(trade))
                 notified_trade_ids.add(trade['rowid'])
@@ -156,6 +156,7 @@ async def main():
     logger.info("--- 🚀 Initializing Bot ---")
     client = None
     # CẢI TIẾN: Tạo một danh sách để quản lý các tác vụ
+    initial_accuracy = None # Initialize to None
     running_tasks = [] 
     
     try:
@@ -174,7 +175,7 @@ async def main():
         except FileNotFoundError:
             logger.warning("⚠️ Model files not found. Performing initial training...")
             loop = asyncio.get_running_loop()
-            initial_accuracy = await loop.run_in_executor(None, train_model)
+            initial_accuracy = await loop.run_in_executor(None, train_model) # This will set initial_accuracy
             if initial_accuracy is not None:
                 logger.info("Reloading model after initial training...")
                 model, label_encoder, model_features = (joblib.load("model_trend.pkl"), joblib.load("trend_label_encoder.pkl"), joblib.load("model_features.pkl"))
@@ -186,8 +187,8 @@ async def main():
             return
 
         if all([model, label_encoder, model_features]):
-            # Accuracy chỉ có từ lần training đầu tiên, nếu tải từ file thì là None
-            await notifier.send_startup_notification(len(all_symbols), locals().get('initial_accuracy', None))
+            # Pass initial_accuracy directly
+            await notifier.send_startup_notification(len(all_symbols), initial_accuracy)
         else:
             await notifier.send_fallback_mode_startup_notification(len(all_symbols))
 
@@ -195,8 +196,8 @@ async def main():
         logger.info("--- 🟢 Bot is now running. All loops are active. ---")
         
         # CẢI TIẾN: Tạo và thêm các tác vụ vào danh sách quản lý
-        running_tasks = [
-            asyncio.create_task(analysis_loop(client, all_symbols, model, label_encoder, model_features)),
+        running_tasks = [ # Removed all_symbols from analysis_loop as it will fetch its own
+            asyncio.create_task(analysis_loop(client, model, label_encoder, model_features)),
             asyncio.create_task(signal_check_loop(notifier)),
             asyncio.create_task(updater_loop(client)),
             asyncio.create_task(outcome_check_loop(notifier)),
