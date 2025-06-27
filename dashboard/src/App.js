@@ -1,22 +1,22 @@
 import React, { useState, useEffect } from 'react';
-// SỬA LỖI: Đã xóa các import không sử dụng như BarChart, XAxis, etc.
+// FIX: Removed unused imports like BarChart, XAxis, etc.
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-import './App.css';
-// --- MOCK DATA (Dữ liệu giả) ---
-// Dữ liệu này giờ chỉ dùng làm dự phòng khi không kết nối được backend
+// FIX: Removed the import for App.css as it's not needed in this environment and was causing a build error.
+
+// --- MOCK DATA ---
+// This data is now only used as a fallback when the backend cannot be reached.
 const MOCK_STATS = {
     win_rate: 0,
     total_completed_trades: 0,
     wins: 0,
     losses: 0
 };
-
 const MOCK_CLOSED_TRADES = [];
 const MOCK_ACTIVE_TRADES = [];
 // ------------------------------------
 
 
-// --- Các thành phần giao diện ---
+// --- UI Components ---
 
 const StatCard = ({ title, value, unit, icon, color }) => (
     <div className="bg-gray-800 p-6 rounded-lg shadow-lg flex items-center">
@@ -37,16 +37,16 @@ const TradesTable = ({ title, trades, type }) => {
                 <table className="w-full text-left">
                     <thead>
                         <tr className="border-b border-gray-700">
-                            <th className="p-2 text-gray-400">Cặp Giao Dịch</th>
+                            <th className="p-2 text-gray-400">Pair</th>
                             {isClosed ? (
                                 <>
-                                    <th className="p-2 text-gray-400">Kết quả</th>
-                                    <th className="p-2 text-gray-400 text-right">Lợi nhuận (%)</th>
+                                    <th className="p-2 text-gray-400">Result</th>
+                                    <th className="p-2 text-gray-400 text-right">Profit (%)</th>
                                 </>
                             ) : (
                                 <>
-                                    <th className="p-2 text-gray-400">Xu Hướng</th>
-                                    <th className="p-2 text-gray-400 text-right">Giá Vào Lệnh</th>
+                                    <th className="p-2 text-gray-400">Trend</th>
+                                    <th className="p-2 text-gray-400 text-right">Entry Price</th>
                                 </>
                             )}
                         </tr>
@@ -80,7 +80,7 @@ const TradesTable = ({ title, trades, type }) => {
                         ))}
                     </tbody>
                 </table>
-                 {trades.length === 0 && <p className="text-center text-gray-500 py-8">Không có dữ liệu</p>}
+                 {trades.length === 0 && <p className="text-center text-gray-500 py-8">No data available</p>}
             </div>
         </div>
     );
@@ -88,14 +88,14 @@ const TradesTable = ({ title, trades, type }) => {
 
 const WinLossPieChart = ({ data }) => {
     const chartData = [
-        { name: 'Thắng', value: data.wins },
-        { name: 'Thua', value: data.losses },
+        { name: 'Wins', value: data.wins },
+        { name: 'Losses', value: data.losses },
     ];
     const COLORS = ['#10B981', '#F43F5E'];
 
     return (
         <div className="bg-gray-800 p-6 rounded-lg shadow-lg h-full flex flex-col justify-center items-center">
-            <h2 className="text-xl font-bold text-white mb-4">Tỷ Lệ Thắng/Thua</h2>
+            <h2 className="text-xl font-bold text-white mb-4">Win/Loss Ratio</h2>
             <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
                     <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} fill="#8884d8" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
@@ -112,16 +112,16 @@ const WinLossPieChart = ({ data }) => {
 };
 
 
-// --- Component chính của ứng dụng ---
+// --- Main App Component ---
 export default function App() {
     const [stats, setStats] = useState(MOCK_STATS);
     const [activeTrades, setActiveTrades] = useState(MOCK_ACTIVE_TRADES);
     const [closedTrades, setClosedTrades] = useState(MOCK_CLOSED_TRADES);
     const [error, setError] = useState(null);
+    // The IP address of your running backend server.
     const API_BASE_URL = 'http://35.228.208.66:5000';
 
     const fetchData = async () => {
-        // SỬA LỖI: Đã đổi try: thành try { và thêm } catch (err) { ... }
         try {
             const statsResponse = await fetch(`${API_BASE_URL}/api/stats`);
             if (!statsResponse.ok) throw new Error('Network response for stats was not ok');
@@ -140,18 +140,20 @@ export default function App() {
             
             setError(null);
         } catch (err) {
-            console.error("Lỗi khi fetch dữ liệu:", err);
-            setError("Không thể kết nối đến máy chủ backend. Đang hiển thị dữ liệu dự phòng.");
+            console.error("Error fetching data:", err);
+            setError("Could not connect to the backend server. Displaying fallback data.");
+            // Fallback to mock data on error
             setStats(MOCK_STATS);
             setActiveTrades(MOCK_ACTIVE_TRADES);
             setClosedTrades(MOCK_CLOSED_TRADES);
         }
     };
 
+    // Fetch data on initial load and then set up an interval to poll for new data.
     useEffect(() => {
         fetchData(); 
-        const interval = setInterval(fetchData, 5000); 
-        return () => clearInterval(interval); 
+        const interval = setInterval(fetchData, 5000); // Poll every 5 seconds
+        return () => clearInterval(interval); // Cleanup interval on component unmount
     }, []);
 
 
@@ -162,35 +164,35 @@ export default function App() {
                 <header className="mb-8 flex justify-between items-center">
                     <div>
                         <h1 className="text-4xl font-bold text-white">AI Trading Bot Dashboard</h1>
-                        <p className="text-gray-400">Thống kê hiệu suất thời gian thực</p>
+                        <p className="text-gray-400">Real-time performance statistics</p>
                     </div>
                     <div className="w-4 h-4 rounded-full bg-green-500 animate-pulse" title="Live Status"></div>
                 </header>
 
                 {error && (
                     <div className="bg-red-500/20 text-red-400 p-4 rounded-lg mb-6">
-                        <strong>Lỗi kết nối:</strong> {error}
+                        <strong>Connection Error:</strong> {error}
                     </div>
                 )}
 
                 {/* Stat Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                    <StatCard title="Tỷ Lệ Thắng" value={stats.win_rate ? stats.win_rate.toFixed(2) : '0.00'} unit="%" icon="🏆" color="text-yellow-400" />
-                    <StatCard title="Tổng Lệnh Đã Đóng" value={stats.total_completed_trades} unit="" icon="📈" color="text-blue-400" />
-                    <StatCard title="Số Lệnh Thắng" value={stats.wins} unit="" icon="✅" color="text-green-400" />
-                    <StatCard title="Số Lệnh Thua" value={stats.losses} unit="" icon="❌" color="text-red-400" />
+                    <StatCard title="Win Rate" value={stats.win_rate ? stats.win_rate.toFixed(2) : '0.00'} unit="%" icon="🏆" color="text-yellow-400" />
+                    <StatCard title="Total Closed Trades" value={stats.total_completed_trades} unit="" icon="📈" color="text-blue-400" />
+                    <StatCard title="Trades Won" value={stats.wins} unit="" icon="✅" color="text-green-400" />
+                    <StatCard title="Trades Lost" value={stats.losses} unit="" icon="❌" color="text-red-400" />
                 </div>
 
                 {/* Main Content Area */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-2">
-                        <TradesTable title="Giao Dịch Đang Hoạt Động" trades={activeTrades} type="active" />
+                        <TradesTable title="Active Trades" trades={activeTrades} type="active" />
                     </div>
                     <div>
                         <WinLossPieChart data={stats} />
                     </div>
                     <div className="lg:col-span-3">
-                         <TradesTable title="Lịch Sử Giao Dịch Gần Đây" trades={closedTrades} type="closed" />
+                         <TradesTable title="Recent Trade History" trades={closedTrades} type="closed" />
                     </div>
                 </div>
 
