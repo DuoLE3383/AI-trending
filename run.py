@@ -23,6 +23,7 @@ from trainer import train_model
 from training_loop import training_loop
 from data_simulator import simulate_trade_data # NEW: Import data simulator
 from pairlistupdater import perform_single_pairlist_update, CONFIG_FILE_PATH as PAIRLIST_CONFIG_PATH
+from api_server import app as flask_app # Import the Flask app instance
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -179,6 +180,13 @@ async def update_loop(notifier: NotificationHandler):
         except Exception as e:
             logger.error(f"❌ Error during update check: {e}", exc_info=True)
 
+def run_api_server():
+    """
+    Hàm đồng bộ để chạy Flask server. Sẽ được chạy trong một thread riêng.
+    """
+    logger.info("✅ Starting API server in a background thread...")
+    # Sử dụng debug=False trong môi trường tích hợp/production
+    flask_app.run(host='0.0.0.0', port=5000, debug=False)
 
 # --- MAIN FUNCTION ---
 async def main():
@@ -275,7 +283,8 @@ async def main():
             asyncio.create_task(updater_loop(client)),
             asyncio.create_task(outcome_check_loop(notifier)),
             asyncio.create_task(training_loop(notifier, len(all_symbols))),
-            asyncio.create_task(notification_flush_loop(notifier)), # Add notification flush loop
+            loop.run_in_executor(None, run_api_server), # Chạy API server trong một thread
+            asyncio.create_task(notification_flush_loop(notifier)),
             asyncio.create_task(summary_loop(notifier)) # Add summary loop
         ]
         await asyncio.gather(*running_tasks)
