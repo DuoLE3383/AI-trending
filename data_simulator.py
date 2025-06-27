@@ -44,7 +44,7 @@ async def fetch_klines(client, symbol, interval, start_str, end_str=None):
         logger.error(f"Error fetching klines for {symbol}: {e}")
         return []
 
-async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: list, num_trades_per_symbol: int = 50, lookback_days: int = 90):
+async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: list, num_trades_per_symbol: int = 3, lookback_days: int = 90):
     """
     Simulates historical trade data and inserts it into the trend_analysis table.
     This function will clear existing data in trend_analysis before inserting new.
@@ -52,7 +52,7 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
     logger.info(f"Starting trade data simulation for {num_trades_per_symbol} trades per symbol over {lookback_days} days.")
     
     # all_symbols is now passed as an argument, reflecting the latest from config.json
-    num_symbols_to_simulate = 5  
+    num_symbols_to_simulate = 100  # Default to 100 symbols if available  
 
     if len(all_symbols) > num_symbols_to_simulate:
         symbols_to_simulate = random.sample(all_symbols, num_symbols_to_simulate)
