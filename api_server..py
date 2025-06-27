@@ -70,9 +70,18 @@ def get_trades():
         return jsonify({"error": "Không thể lấy danh sách giao dịch"}), 500
 
 # --- Chạy Server ---
+from flask import Flask
+from flask_cors import CORS # <--- 1. Import thư viện
+
+# ... (các import khác)
+
+app = Flask(__name__)
+CORS(app) # <--- 2. Kích hoạt CORS cho toàn bộ ứng dụng
+
+# --- Chạy Flask server ---
 
 if __name__ == '__main__':
     logger.info("🚀 Starting Flask API server for Trading Bot Dashboard...")
     # Chạy server ở địa chỉ 127.0.0.1 (localhost) và cổng 5000
-    app.run(host='35.228.208.66', port=5000, debug=True)
+    app.run(host='30.0.0.0', port=5000, debug=True)
 
