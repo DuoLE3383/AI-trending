@@ -4,6 +4,7 @@ from typing import List, Dict, Any
 import asyncio
 from telegram_handler import TelegramHandler
 import httpx # Import httpx to catch its specific exceptions
+import json # Import json for parsing Telegram API error responses
 import config
 import re
 import pandas as pd
@@ -87,21 +88,56 @@ class NotificationHandler:
 
     async def send_batch_trend_alert_notification(self, analysis_results: List[Dict[str, Any]]):
         self.logger.info(f"Preparing to send {len(analysis_results)} new signal alert(s).")
-        if not analysis_results: return
-        header = self.esc("🆘 1 New Signal(s) Found! �")
-        separator = self.esc("\n\n----------------------------------------\n\n")
-        for result in analysis_results:
-            trend_raw = result.get('trend', '').replace("_", " ").title()
-            trend_emoji = "🔼 LONG" if "Bullish" in trend_raw else "🔽 SHORT"
-            signal_detail = (
-                f"\\#{self.esc(trend_raw)} // {trend_emoji} // {self.esc(result.get('symbol', 'N/A'))}\n"
-                f"📌Entry: {self.format_and_escape(result.get('entry_price'))}\n"
-                f"❌SL: {self.format_and_escape(result.get('stop_loss'))}\n"
-                f"🎯TP1: {self.format_and_escape(result.get('take_profit_1'))}"
-            )
-            full_message = header + separator + signal_detail
+        if not analysis_results:
+            return
+
+        # Define threshold for grouping messages
+        BATCH_THRESHOLD = 10 
+        
+        if len(analysis_results) > BATCH_THRESHOLD:
+            # Group messages into one
+            header = self.esc(f"🆘 {len(analysis_results)} New Signals Found! 🆘")
+            message_parts = [header, self.esc("\n\n----------------------------------------\n\n")]
+            
+            for i, result in enumerate(analysis_results):
+                trend_raw = result.get('trend', '').replace("_", " ").title()
+                trend_emoji = "🔼 LONG" if "Bullish" in trend_raw else "🔽 SHORT"
+                
+                signal_summary = (
+                    f"*{i+1}\\. {self.esc(result.get('symbol', 'N/A'))}* \\| {trend_emoji}\n"
+                    f"  Entry: {self.format_and_escape(result.get('entry_price'))} \\| SL: {self.format_and_escape(result.get('stop_loss'))} \\| TP1: {self.format_and_escape(result.get('take_profit_1'))}"
+                )
+                message_parts.append(signal_summary)
+                
+                # Add a separator between signals, but not after the last one
+                if i < len(analysis_results) - 1:
+                    message_parts.append(self.esc("---")) 
+            
+            full_message = "\n".join(message_parts)
+            
+            # Telegram message limit is 4096 characters. Truncate if necessary.
+            if len(full_message) > 4096:
+                self.logger.warning(f"Grouped message for {len(analysis_results)} signals exceeds Telegram limit. Truncating.")
+                full_message = full_message[:4090] + self.esc("...") # Add ellipsis and ensure it's escaped
+            
             await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
-            await asyncio.sleep(0.5)
+
+        else:
+            # Send individually as before
+            header = self.esc("🆘 New Signal Found! 🆘") # Changed header for individual messages
+            separator = self.esc("\n\n----------------------------------------\n\n")
+            for result in analysis_results:
+                trend_raw = result.get('trend', '').replace("_", " ").title()
+                trend_emoji = "🔼 LONG" if "Bullish" in trend_raw else "🔽 SHORT"
+                signal_detail = (
+                    f"\\#{self.esc(trend_raw)} // {trend_emoji} // {self.esc(result.get('symbol', 'N/A'))}\n"
+                    f"📌Entry: {self.format_and_escape(result.get('entry_price'))}\n"
+                    f"❌SL: {self.format_and_escape(result.get('stop_loss'))}\n"
+                    f"🎯TP1: {self.format_and_escape(result.get('take_profit_1'))}"
+                )
+                full_message = header + separator + signal_detail
+                await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
+                await asyncio.sleep(0.5) # Small delay between individual messages
 
     async def send_trade_outcome_notification(self, trade_details: Dict[str, Any]):
         self.logger.info(f"Preparing to send trade outcome notification for {trade_details.get('symbol')}.")
