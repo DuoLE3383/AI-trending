@@ -29,6 +29,7 @@ class NotificationHandler:
         for attempt in range(max_retries):
             try:
                 await send_func(**kwargs)
+                self.logger.debug(f"Successfully sent Telegram message/photo (attempt {attempt + 1}).")
                 return True
             except Exception as e:
                 self.logger.error(f"Lỗi khi gửi (lần {attempt + 1}/{max_retries}): {e}")
@@ -38,18 +39,21 @@ class NotificationHandler:
 
     async def _send_to_both(self, message: str, thread_id: int = None, disable_web_page_preview: bool = False):
         """Gửi tin nhắn văn bản đến cả group và channel."""
+        self.logger.debug(f"Preparing to send text message to Telegram: {message[:100]}...")
         common_kwargs = {'parse_mode': 'MarkdownV2', 'disable_web_page_preview': disable_web_page_preview}
         group_kwargs = {'chat_id': config.TELEGRAM_CHAT_ID, 'text': message, 'message_thread_id': thread_id, **common_kwargs}
         await self._send_with_retry(self.telegram_handler.send_message, **group_kwargs)
 
     async def _send_photo_to_both(self, photo: str, caption: str, thread_id: int = None):
         """Gửi ảnh có chú thích đến cả group và channel."""
+        self.logger.debug(f"Preparing to send photo to Telegram with caption: {caption[:100]}...")
         group_kwargs = {'chat_id': config.TELEGRAM_CHAT_ID, 'photo': photo, 'caption': caption, 'parse_mode': 'MarkdownV2', 'message_thread_id': thread_id}
         await self._send_with_retry(self.telegram_handler.send_photo, **group_kwargs)
 
     # === CÁC HÀM GỬI THÔNG BÁO ===
 
     async def send_batch_trend_alert_notification(self, analysis_results: List[Dict[str, Any]]):
+        self.logger.info(f"Preparing to send {len(analysis_results)} new signal alert(s).")
         if not analysis_results: return
         header = self.esc("🆘 1 New Signal(s) Found! �")
         separator = self.esc("\n\n----------------------------------------\n\n")
@@ -67,6 +71,7 @@ class NotificationHandler:
             await asyncio.sleep(0.5)
 
     async def send_trade_outcome_notification(self, trade_details: Dict[str, Any]):
+        self.logger.info(f"Preparing to send trade outcome notification for {trade_details.get('symbol')}.")
         try:
             status_raw, trend_raw = trade_details.get('status', 'N/A'), trade_details.get('trend', '')
             is_win = "TP" in status_raw
@@ -98,6 +103,7 @@ class NotificationHandler:
             self.logger.error(f"Failed to send trade outcome notification: {e}", exc_info=True)
 
     async def send_startup_notification(self, symbols_count: int, accuracy: float | None):
+        self.logger.info(f"Preparing to send startup notification (symbols: {symbols_count}, accuracy: {accuracy}).")
         safe_accuracy_msg = ""
         if accuracy is not None:
             safe_accuracy_msg = f"✅ *Initial Model Trained* \\| *Accuracy:* `{self.esc(f'{accuracy:.2%}')}`"
@@ -112,6 +118,7 @@ class NotificationHandler:
         await self._send_photo_to_both(photo=photo_url, caption=caption, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
     async def send_training_complete_notification(self, accuracy: float | None, symbols_count: int):
+        self.logger.info("Preparing periodic training complete notification...")
         """Hàm thông báo kết quả training định kỳ."""
         self.logger.info("Preparing periodic training complete notification...")
         header = self.esc("🤖 AI Model Update")
@@ -128,6 +135,7 @@ class NotificationHandler:
         await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
 
     async def send_fallback_mode_startup_notification(self, symbols_count: int):
+        self.logger.info(f"Preparing to send fallback mode startup notification (symbols: {symbols_count}).")
         binance_link = 'https://www.binance.com/activity/referral-entry/CPA?ref=CPA_006MBW985P'
         main_msg = (
             f"⚠️ *AI Model not available* \\- not enough training data\\.\n"

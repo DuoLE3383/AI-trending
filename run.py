@@ -194,6 +194,14 @@ async def main():
 
         # --- 4. Khởi chạy tất cả các vòng lặp nền ---
         logger.info("--- 🟢 Bot is now running. All loops are active. ---")
+        # --- Logging Configuration ---
+        logging.basicConfig(
+            level=logging.DEBUG, # Thay đổi từ INFO sang DEBUG
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        logger = logging.getLogger(__name__)
+        
         
         # CẢI TIẾN: Tạo và thêm các tác vụ vào danh sách quản lý
         running_tasks = [ # Removed all_symbols from analysis_loop as it will fetch its own
