@@ -141,7 +141,7 @@ export default function App() {
             setError(null);
         } catch (err) {
             console.error("Error fetching data:", err);
-            setError("Could not connect to the backend server. Displaying fallback data.");
+            setError('Could not connect to the backend server. Displaying fallback data.');
             // Fallback to mock data on error
             setStats(MOCK_STATS);
             setActiveTrades(MOCK_ACTIVE_TRADES);
