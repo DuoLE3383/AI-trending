@@ -175,9 +175,8 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
             
             # If no SL/TP hit within 5 candles, close manually at last candle's close
             if status == 'ACTIVE':
-                exit_price = klines[min(i + 360, len(klines) - 5)]['close']
+                exit_price = klines[min(i + 360, len(klines) - 60)]['close']
                 status = 'CLOSED_MANUALLY (OUT OF TIME)' # Standardize status for clarity
-
             pnl_percentage = None
             pnl_with_leverage = None
             if exit_price is not None:
@@ -190,7 +189,6 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
                     pnl_with_leverage = pnl * config.LEVERAGE # Assuming LEVERAGE is in config
                 except (TypeError, ZeroDivisionError):
                     logger.warning(f"Could not calculate PnL for {symbol} trade at {entry_kline['open_time']}.")
-
             # Insert into DB
             try:
                 with get_db_connection(db_path) as conn:

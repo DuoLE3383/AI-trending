@@ -79,6 +79,7 @@ async def signal_check_loop(notifier: NotificationHandler):
                 all_active_signals = conn.execute("SELECT rowid, * FROM trend_analysis WHERE status = 'ACTIVE'").fetchall()
             
             new_signals_to_notify = [s for s in all_active_signals if s['rowid'] not in notified_signal_ids]
+            logger.info(f"Found {len(new_signals_to_notify)} new active signals to notify.")
             if new_signals_to_notify:
                 for signal in new_signals_to_notify:
                     notifier.queue_signal(dict(signal))
@@ -143,7 +144,7 @@ async def update_loop(notifier: NotificationHandler):
     Vòng lặp định kỳ kiểm tra cập nhật từ Git và khởi động lại bot nếu có.
     """ 
     logger.info("✅ Auto-update Loop starting...")
-    while True:
+    while True: # Kiểm tra mỗi 10 phút
         await asyncio.sleep(10 * 60) # Kiểm tra mỗi 10 phút
         
         try:

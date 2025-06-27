@@ -17,6 +17,8 @@ class NotificationHandler:
         self.telegram_handler = telegram_handler
         self.logger = logger
         self.esc = self.telegram_handler.escape_markdownv2
+        self.signal_notification_queue: List[Dict[str, Any]] = []
+        self.BATCH_THRESHOLD = 10
 
     def format_and_escape(self, value: Any, precision: int = 5) -> str:
         """Định dạng một giá trị số và escape nó an toàn cho MarkdownV2."""

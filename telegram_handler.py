@@ -17,8 +17,8 @@ class TelegramHandler:
             raise ValueError("Telegram API token cannot be empty.")
         self.api_token = api_token
         self.base_url = f"https://api.telegram.org/bot{self.api_token}"
-        # Store the proxy URL directly. The 'proxy' argument in some httpx versions
-        # expects a string, not a dictionary. This change improves compatibility.
+        # Store the proxy URL directly. The 'proxy' argument in httpx expects a string.
+        # This change improves compatibility with various httpx versions.
         self.proxy_url = proxy_url
         if self.proxy_url:
             logger.info(f"Telegram handler configured to use proxy: {self.proxy_url}")

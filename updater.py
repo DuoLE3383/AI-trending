@@ -94,28 +94,27 @@ async def check_signal_outcomes(client: AsyncClient) -> None:
                     recent_high = market_data['high'].max()
                     
                     # CẢI THIỆN: Logic kiểm tra Multi-TP, ưu tiên TP cao nhất
-                    if 'BULLISH' in trend:
+                    if 'BULLISH' in trend: # For LONG trades
                         if recent_high >= tp3:
                             _update_signal_outcome(conn, signal['rowid'], 'TP3_HIT', tp3)
                         elif recent_high >= tp2:
                             _update_signal_outcome(conn, signal['rowid'], 'TP2_HIT', tp2)
                         elif recent_high >= tp1:
                             _update_signal_outcome(conn, signal['rowid'], 'TP1_HIT', tp1)
-                        elif recent_low <= sl:
+                        elif recent_low <= sl: # SL check for LONG
                             _update_signal_outcome(conn, signal['rowid'], 'SL_HIT', sl)
 
-                    elif 'BEARISH' in trend:
+                    elif 'BEARISH' in trend: # For SHORT trades
                         if recent_low <= tp3:
                             _update_signal_outcome(conn, signal['rowid'], 'TP3_HIT', tp3)
                         elif recent_low <= tp2:
                             _update_signal_outcome(conn, signal['rowid'], 'TP2_HIT', tp2)
                         elif recent_low <= tp1:
                             _update_signal_outcome(conn, signal['rowid'], 'TP1_HIT', tp1)
-                        elif recent_high >= sl:
+                        elif recent_high >= sl: # SL check for SHORT
                             _update_signal_outcome(conn, signal['rowid'], 'SL_HIT', sl)
                             
                 except Exception as e:
                     logger.error(f"❌ Error processing signal outcome ({signal['symbol']}): {e}", exc_info=True)
     except sqlite3.Error as e:
         logger.error(f"❌ DB write operation failed: {e}", exc_info=True)
-
