@@ -123,45 +123,55 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
             
             for j in range(i + 1, min(i + 6, len(klines))): # Check next 5 candles
                 outcome_kline = klines[j]
+                sl_hit = False
+                tp_hit = False
+                exit_price_candidate = None
+                status_candidate = None
                 
                 if trend == 'BULLISH':
+                    # Luôn kiểm tra SL trước (giả định thận trọng)
                     if outcome_kline['low'] <= stop_loss:
-                        exit_price = stop_loss
-                        status = 'SL'
-                        # Đối với mô phỏng, nếu SL bị chạm, dừng kiểm tra TP
-                        break
-                    # Kiểm tra TP theo thứ tự tăng dần độ khó (TP3 trước, rồi TP2, rồi TP1)
+                        sl_hit = True
+                    
+                    # Sau đó kiểm tra các mức TP
                     if outcome_kline['high'] >= take_profit_3:
-                        exit_price = take_profit_3
-                        status = 'TP3'
-                        break
+                        tp_hit = True
+                        exit_price_candidate = take_profit_3
+                        status_candidate = 'TP3'
                     elif outcome_kline['high'] >= take_profit_2:
-                        exit_price = take_profit_2
-                        status = 'TP2'
-                        break
+                        tp_hit = True
+                        exit_price_candidate = take_profit_2
+                        status_candidate = 'TP2'
                     elif outcome_kline['high'] >= take_profit_1:
-                        exit_price = take_profit_1
-                        status = 'TP1' # Đây sẽ là TP cao nhất bị chạm
-                        break
+                        tp_hit = True
+                        exit_price_candidate = take_profit_1
+                        status_candidate = 'TP1'
                 else: # BEARISH
                     if outcome_kline['high'] >= stop_loss:
-                        exit_price = stop_loss
-                        status = 'SL'
-                        # Đối với mô phỏng, nếu SL bị chạm, dừng kiểm tra TP
-                        break
-                    # Kiểm tra TP theo thứ tự tăng dần độ khó (TP3 trước, rồi TP2, rồi TP1)
+                        sl_hit = True
+
                     if outcome_kline['low'] <= take_profit_3:
-                        exit_price = take_profit_3
-                        status = 'TP3'
-                        break
+                        tp_hit = True
+                        exit_price_candidate = take_profit_3
+                        status_candidate = 'TP3'
                     elif outcome_kline['low'] <= take_profit_2:
-                        exit_price = take_profit_2
-                        status = 'TP2'
-                        break
+                        tp_hit = True
+                        exit_price_candidate = take_profit_2
+                        status_candidate = 'TP2'
                     elif outcome_kline['low'] <= take_profit_1:
-                        exit_price = take_profit_1
-                        status = 'TP1' # Đây sẽ là TP cao nhất bị chạm
-                        break
+                        tp_hit = True
+                        exit_price_candidate = take_profit_1
+                        status_candidate = 'TP1'
+                
+                # Ưu tiên SL nếu cả hai cùng bị chạm trong một nến
+                if sl_hit:
+                    exit_price = stop_loss
+                    status = 'SL'
+                    break
+                elif tp_hit:
+                    exit_price = exit_price_candidate
+                    status = status_candidate
+                    break
             
             # If no SL/TP hit within 5 candles, close manually at last candle's close
             if status == 'ACTIVE':
