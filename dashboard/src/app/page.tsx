@@ -1,7 +1,7 @@
 // Thêm dòng này ở đầu để báo cho Next.js đây là một Client Component
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 // Corrected paths, using absolute imports relative to the /src directory
 import {StatCard} from '../components/components/StatCard';
@@ -9,8 +9,6 @@ import {TradesTable} from '../components/components/TradesTable';
 
 import type { Stats, Trade } from '@/lib/types';
 
-// --- Định nghĩa kiểu dữ liệu với TypeScript ---
-// --- Dữ liệu giả (Dùng khi không kết nối được backend) ---
 const MOCK_STATS: Stats = {
     win_rate: 0,
     total_completed_trades: 0,
@@ -39,7 +37,7 @@ export default function Home() {
     const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL; 
 
     // Helper function to handle individual fetch results
-    const handleFetchResult = async <T,>(
+    const handleFetchResult = useCallback(async <T,>(
         result: PromiseSettledResult<Response>,
         setter: React.Dispatch<React.SetStateAction<T>>,
         mockData: T,
@@ -54,9 +52,10 @@ export default function Home() {
             setter(mockData); // Fallback to mock data
             return true; // Error occurred for this specific fetch
         }
-    };
+    }, []);
 
-    const fetchData = async () => {
+    // useCallback để tối ưu, tránh tạo lại hàm mỗi lần render
+    const fetchData = useCallback(async () => {
         setIsLoading(true); // Set loading to true at the start of fetch
 
         // Validate API_BASE_URL - Consider moving this validation to build time
@@ -90,14 +89,14 @@ export default function Home() {
             setError(null);
         }
         setIsLoading(false); // Set loading to false after all fetches
-    };
+    }, [handleFetchResult]);
 
     // Fetch dữ liệu khi component được tải và sau đó cập nhật sau mỗi 5 giây
     useEffect(() => {
         fetchData(); 
         const interval = setInterval(fetchData, 5000); 
         return () => clearInterval(interval); // Dọn dẹp interval khi component bị hủy
-    }, []);
+    }, [fetchData]);
 
 
     return (
