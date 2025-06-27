@@ -70,10 +70,10 @@ MIN_VOLUME_RATIO = 1.0 # Volume hiện tại phải >= 1.0 * Volume SMA
 MIN_ATR_PERCENT = 1.2
 
 # Trade Parameter Multipliers (dựa trên ATR)
-ATR_MULTIPLIER_SL = 2.8   # StopLoss = 1.5 * ATR
-ATR_MULTIPLIER_TP1 = 2.2 # TakeProfit 1 = 1.0 * ATR
-ATR_MULTIPLIER_TP2 = 3.8  # TakeProfit 2 = 2.0 * ATR
-ATR_MULTIPLIER_TP3 = 5.2  # TakeProfit 3 = 3.0 * ATR
+ATR_MULTIPLIER_SL = 2.8   
+ATR_MULTIPLIER_TP1 = 2.2 
+ATR_MULTIPLIER_TP2 = 3.8  
+ATR_MULTIPLIER_TP3 = 5.2  
 
 # ==============================================================================
 # === 5. TREND DEFINITIONS

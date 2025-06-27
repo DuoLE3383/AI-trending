@@ -3,6 +3,7 @@ import logging
 from typing import List, Dict, Any
 import asyncio
 from telegram_handler import TelegramHandler
+import httpx # Import httpx to catch its specific exceptions
 import config
 import re
 import pandas as pd
@@ -10,6 +11,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 class NotificationHandler:
+    # ... (rest of the class)
     def __init__(self, telegram_handler: TelegramHandler):
         self.telegram_handler = telegram_handler
         self.logger = logger
@@ -24,17 +26,40 @@ class NotificationHandler:
             return '`—`'
 
     async def _send_with_retry(self, send_func, **kwargs):
-        """Hàm helper để gửi tin nhắn/ảnh với cơ chế thử lại."""
-        max_retries = 3; delay = 2
+        """
+        Hàm helper để gửi tin nhắn/ảnh với cơ chế thử lại,
+        đặc biệt xử lý lỗi 429 Too Many Requests từ Telegram API.
+        """
+        max_retries = 3
+        initial_delay = 2 # Initial delay for non-429 errors
+
         for attempt in range(max_retries):
             try:
                 await send_func(**kwargs)
                 self.logger.debug(f"Successfully sent Telegram message/photo (attempt {attempt + 1}).")
                 return True
-            except Exception as e:
-                self.logger.error(f"Lỗi khi gửi (lần {attempt + 1}/{max_retries}): {e}")
-                if attempt < max_retries - 1: await asyncio.sleep(delay); delay *= 2
-                else: self.logger.critical(f"❌ Thất bại sau {max_retries} lần thử.")
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    try:
+                        error_json = e.response.json()
+                        retry_after = error_json.get('parameters', {}).get('retry_after')
+                        if retry_after:
+                            self.logger.warning(f"Telegram API hit rate limit (429). Retrying after {retry_after} seconds (attempt {attempt + 1}/{max_retries}).")
+                            await asyncio.sleep(retry_after)
+                            continue # Continue to the next attempt immediately after sleeping
+                    except (json.JSONDecodeError, AttributeError): # Need to import json
+                        self.logger.warning(f"Telegram API hit rate limit (429) but could not parse 'retry_after'. Using exponential backoff (attempt {attempt + 1}/{max_retries}).")
+                
+                # For other HTTP errors or if 429 without retry_after
+                self.logger.error(f"HTTP error occurred while sending (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1: await asyncio.sleep(initial_delay * (2 ** attempt))
+                else: self.logger.critical(f"❌ Failed after {max_retries} attempts due to HTTP error.")
+                raise # Re-raise the last HTTP error if all retries fail
+            except Exception as e: # Catch any other unexpected errors
+                self.logger.error(f"An unexpected error occurred while sending (attempt {attempt + 1}/{max_retries}): {e}", exc_info=True)
+                if attempt < max_retries - 1: await asyncio.sleep(initial_delay * (2 ** attempt))
+                else: self.logger.critical(f"❌ Failed after {max_retries} attempts due to unexpected error.")
+                raise # Re-raise the last unexpected error if all retries fail
         return False
 
     async def _send_to_both(self, message: str, thread_id: int = None, disable_web_page_preview: bool = False):
@@ -103,7 +128,7 @@ class NotificationHandler:
                 f"Outcome: `{self.esc(status_raw)}`\n\n"
                 f"Entry Price: {self.format_and_escape(trade_details.get('entry_price'))}\n"
                 f"Closing Price: {self.format_and_escape(closing_p)}\n"
-                f"PNL \\(1x\\): {pnl_without_leverage_str}\n"
+                # f"PNL \\(1x\\): {pnl_without_leverage_str}\n"
                 f"PNL \\(x{config.LEVERAGE}\\): {pnl_with_leverage_str}"
             )
             await self._send_to_both(message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)

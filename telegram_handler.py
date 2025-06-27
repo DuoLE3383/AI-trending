@@ -65,11 +65,8 @@ class TelegramHandler:
     async def send_message(self, chat_id: Union[str, int], text: str, **kwargs: Any):
         """Sends a text-only message with enhanced error logging."""
         payload = {'chat_id': str(chat_id), 'text': text, **kwargs}
-        try:
-            await self._make_request("POST", "sendMessage", json=payload)
-            logger.info(f"Telegram text message sent successfully to chat_id: {chat_id}.")
-        except Exception:
-            logger.error(f"Failed to send text message to chat_id: {chat_id}.")
+        await self._make_request("POST", "sendMessage", json=payload)
+        logger.info(f"Telegram text message sent successfully to chat_id: {chat_id}.")
 
 
     async def send_photo(
@@ -83,16 +80,13 @@ class TelegramHandler:
         data = {'chat_id': str(chat_id), 'caption': caption, **kwargs}
         files = None
         
-        try:
-            if isinstance(photo, str):
-                data['photo'] = photo
-                await self._make_request("POST", "sendPhoto", json=data)
-            elif isinstance(photo, bytes):
-                files = {'photo': ('image.png', photo, 'image/png')}
-                await self._make_request("POST", "sendPhoto", data=data, files=files)
-            else:
-                raise TypeError(f"Invalid photo type: {type(photo)}. Must be a URL (str) or bytes.")
-            
-            logger.info(f"Telegram photo sent successfully to chat_id: {chat_id}.")
-        except Exception:
-            logger.error(f"Failed to send photo to chat_id: {chat_id}.")
+        if isinstance(photo, str):
+            data['photo'] = photo
+            await self._make_request("POST", "sendPhoto", json=data)
+        elif isinstance(photo, bytes):
+            files = {'photo': ('image.png', photo, 'image/png')}
+            await self._make_request("POST", "sendPhoto", data=data, files=files)
+        else:
+            raise TypeError(f"Invalid photo type: {type(photo)}. Must be a URL (str) or bytes.")
+        
+        logger.info(f"Telegram photo sent successfully to chat_id: {chat_id}.")
