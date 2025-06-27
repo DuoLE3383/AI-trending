@@ -18,6 +18,7 @@ class NotificationHandler:
         self.logger = logger
         self.esc = self.telegram_handler.escape_markdownv2
         self.signal_notification_queue: List[Dict[str, Any]] = []
+        self.outcome_notification_queue: List[Dict[str, Any]] = []
         self.BATCH_THRESHOLD = 10
 
     def format_and_escape(self, value: Any, precision: int = 5) -> str:
@@ -93,6 +94,11 @@ class NotificationHandler:
         self.signal_notification_queue.append(signal)
         self.logger.info(f"Queued signal for {signal.get('symbol')}. Queue size: {len(self.signal_notification_queue)}")
 
+    def queue_trade_outcome(self, trade_details: Dict[str, Any]):
+        """Adds a single closed trade to the outcome notification queue."""
+        self.outcome_notification_queue.append(trade_details)
+        self.logger.info(f"Queued outcome for {trade_details.get('symbol')}. Outcome queue size: {len(self.outcome_notification_queue)}")
+
     async def flush_signal_queue(self):
         """
         Checks the queue and sends notifications.
@@ -153,6 +159,52 @@ class NotificationHandler:
                 full_message = header + separator + signal_detail
                 await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
                 await asyncio.sleep(0.5) # Small delay between individual messages
+
+    async def flush_outcome_queue(self):
+        """
+        Checks the outcome queue and sends notifications.
+        Groups them into a summary if the queue size is over the threshold.
+        """
+        if not self.outcome_notification_queue:
+            return
+
+        outcomes_to_send = self.outcome_notification_queue.copy()
+        self.outcome_notification_queue.clear()
+        self.logger.info(f"Flushing outcome queue with {len(outcomes_to_send)} closed trades.")
+
+        if len(outcomes_to_send) > self.BATCH_THRESHOLD:
+            # Create a summary message
+            wins = 0
+            losses = 0
+            net_pnl = 0.0
+            
+            for trade in outcomes_to_send:
+                pnl = trade.get('pnl_percentage')
+                if pnl is not None:
+                    net_pnl += pnl
+                    if pnl > 0:
+                        wins += 1
+                    else:
+                        losses += 1
+                else: # Fallback for older data without pnl
+                    if "TP" in trade.get('status', ''):
+                        wins += 1
+                    else:
+                        losses += 1
+
+            header = self.esc(f"📈 {len(outcomes_to_send)} Trades Closed Summary 📉")
+            summary_msg = (
+                f"Wins: `{wins}`\n"
+                f"Losses: `{losses}`\n"
+                f"Net PnL \\(1x\\): `{net_pnl:+.2f}%`"
+            )
+            full_message = "\n\n".join([header, self.esc("---"), summary_msg])
+            await self._send_to_both(full_message, thread_id=config.TELEGRAM_MESSAGE_THREAD_ID)
+        else:
+            # Send individually if not over threshold
+            for trade in outcomes_to_send:
+                await self.send_trade_outcome_notification(trade)
+                await asyncio.sleep(0.5) # Keep the delay
 
     async def send_periodic_summary_notification(self):
         """Fetches performance stats and sends a summary notification."""

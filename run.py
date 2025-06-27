@@ -113,9 +113,10 @@ async def outcome_check_loop(notifier: NotificationHandler):
                 conn.row_factory = sqlite3.Row
                 all_closed_trades = conn.execute("SELECT rowid, * FROM trend_analysis WHERE status != 'ACTIVE'").fetchall()
                 newly_closed_trades = [t for t in all_closed_trades if t['rowid'] not in notified_trade_ids]
-            for trade in newly_closed_trades:
-                await notifier.send_trade_outcome_notification(dict(trade))
-                notified_trade_ids.add(trade['rowid'])
+            if newly_closed_trades:
+                for trade in newly_closed_trades:
+                    notifier.queue_trade_outcome(dict(trade))
+                    notified_trade_ids.add(trade['rowid'])
         except Exception as e:
             logger.error(f"❌ Error in outcome_check_loop: {e}", exc_info=True)
         await asyncio.sleep(config.SIGNAL_CHECK_INTERVAL_SECONDS)
@@ -126,7 +127,11 @@ async def notification_flush_loop(notifier: NotificationHandler):
     while True:
         await asyncio.sleep(10 * 60)
         logger.info("⏰ Time-based flush for notification queue...")
-        await notifier.flush_signal_queue()
+        # Flush both new signals and closed trade outcomes
+        await asyncio.gather(
+            notifier.flush_signal_queue(),
+            notifier.flush_outcome_queue()
+        )
 
 async def summary_loop(notifier: NotificationHandler):
     """Periodically sends a performance summary every 60 minutes."""
@@ -284,7 +289,7 @@ async def main():
             asyncio.create_task(outcome_check_loop(notifier)),
             asyncio.create_task(training_loop(notifier, len(all_symbols))),
             loop.run_in_executor(None, run_api_server), # Chạy API server trong một thread
-            asyncio.create_task(notification_flush_loop(notifier)),
+            asyncio.create_task(notification_flush_loop(notifier)), # Add notification flush loop
             asyncio.create_task(summary_loop(notifier)) # Add summary loop
         ]
         await asyncio.gather(*running_tasks)
