@@ -17,10 +17,11 @@ class TelegramHandler:
             raise ValueError("Telegram API token cannot be empty.")
         self.api_token = api_token
         self.base_url = f"https://api.telegram.org/bot{self.api_token}"
-        # Prepare proxies dict for httpx. It expects a format like {'all://': 'http://proxy.com:port'}
-        self.proxies = {'all://': proxy_url} if proxy_url else None
-        if self.proxies:
-            logger.info(f"Telegram handler configured to use proxy: {proxy_url}")
+        # Store the proxy URL directly. The 'proxy' argument in some httpx versions
+        # expects a string, not a dictionary. This change improves compatibility.
+        self.proxy_url = proxy_url
+        if self.proxy_url:
+            logger.info(f"Telegram handler configured to use proxy: {self.proxy_url}")
 
 
     @staticmethod
@@ -42,7 +43,9 @@ class TelegramHandler:
         """
         url = f"{self.base_url}/{endpoint}"
         try:
-            async with httpx.AsyncClient(proxies=self.proxies) as client:
+            # Use the 'proxy' argument for compatibility with older httpx versions
+            # that do not recognize the 'proxies' dictionary argument.
+            async with httpx.AsyncClient(proxy=self.proxy_url) as client:
                 response = await client.request(method, url, timeout=30.0, **kwargs)
                 
                 # Check for non-successful status codes and log the exact error from Telegram
