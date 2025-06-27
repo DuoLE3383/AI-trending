@@ -48,14 +48,14 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, num_trades_per_
     """
     logger.info(f"Starting trade data simulation for {num_trades_per_symbol} trades per symbol over {lookback_days} days.")
 
-    # Lấy danh sách symbols từ config và chọn một mẫu ngẫu nhiên để giả lập cho nhanh
-    all_symbols = config.SYMBOLS
-    num_symbols_to_simulate = 10  # Bạn có thể điều chỉnh số lượng này
+    all_symbols = config.trading.symbols # Giả định config.trading.symbols được tải đúng từ config.json
+    num_symbols_to_simulate = 10  # Số lượng symbols muốn giả lập. Bạn có thể điều chỉnh hoặc lấy từ config.
+
     if len(all_symbols) > num_symbols_to_simulate:
         symbols_to_simulate = random.sample(all_symbols, num_symbols_to_simulate)
     else:
         symbols_to_simulate = all_symbols
-
+        
     logger.info(f"Will simulate data for {len(symbols_to_simulate)} symbols: {symbols_to_simulate}")
 
     # Clear existing data to ensure a fresh start for simulation
