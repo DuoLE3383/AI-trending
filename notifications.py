@@ -105,7 +105,8 @@ class NotificationHandler:
                 
                 signal_summary = (
                     f"*{i+1}\\. {self.esc(result.get('symbol', 'N/A'))}* \\| {trend_emoji}\n"
-                    f"  Entry: {self.format_and_escape(result.get('entry_price'))} \\| SL: {self.format_and_escape(result.get('stop_loss'))} \\| TP1: {self.format_and_escape(result.get('take_profit_1'))}"
+                    f"  Entry: {self.format_and_escape(result.get('entry_price'))} \\| SL: {self.format_and_escape(result.get('stop_loss'))}\n"
+                    f"  TP1: {self.format_and_escape(result.get('take_profit_1'))}"
                     f" \\| TP2: {self.format_and_escape(result.get('take_profit_2'))} \\| TP3: {self.format_and_escape(result.get('take_profit_3'))}"
                 )
 
@@ -135,7 +136,7 @@ class NotificationHandler:
                     f"\\#{self.esc(trend_raw)} // {trend_emoji} // {self.esc(result.get('symbol', 'N/A'))}\n"
                     f"📌Entry: {self.format_and_escape(result.get('entry_price'))}\n"
                     f"❌SL: {self.format_and_escape(result.get('stop_loss'))}\n"
-                    f"🎯TP1: {self.format_and_escape(result.get('take_profit_1'))}\n"
+                    f"🎯TP1: {self.format_and_escape(result.get('take_profit_1'))}\n" 
                     f"🎯TP2: {self.format_and_escape(result.get('take_profit_2'))}\n"
                     f"🎯TP3: {self.format_and_escape(result.get('take_profit_3'))}"
                 )
@@ -150,7 +151,7 @@ class NotificationHandler:
             trend_raw = trade_details.get('trend', '')
             pnl_percentage_from_db = trade_details.get('pnl_percentage') # Lấy PnL từ DB
 
-            is_win = ("TP" in status_raw) or (pnl_percentage_from_db is not None and pnl_percentage_from_db > 0)
+            is_win = ("TP" in status_raw) or (pnl_percentage_from_db is not None and pnl_percentage_from_db > 0) # Check PnL from DB for win/loss
             outcome_emoji, outcome_text = ("✅", "WIN") if is_win else ("❌", "LOSS")
             header = f"{outcome_emoji} *Trade Closed: {self.esc(outcome_text)}* {outcome_emoji}"
             symbol = self.esc(trade_details.get('symbol', 'N/A'))

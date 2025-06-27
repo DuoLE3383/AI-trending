@@ -79,10 +79,9 @@ async def signal_check_loop(notifier: NotificationHandler):
                 all_active_signals = conn.execute("SELECT rowid, * FROM trend_analysis WHERE status = 'ACTIVE'").fetchall()
             
             new_signals_to_notify = [s for s in all_active_signals if s['rowid'] not in notified_signal_ids]
-            
             if new_signals_to_notify:
-                # Pass all new signals at once to the notification handler
-                await notifier.send_batch_trend_alert_notification([dict(s) for s in new_signals_to_notify])
+                for signal in new_signals_to_notify:
+                    notifier.queue_signal(dict(signal))
                 notified_signal_ids.update(s['rowid'] for s in new_signals_to_notify)
         except Exception as e:
             logger.error(f"❌ Error in signal_check_loop: {e}", exc_info=True)
@@ -118,6 +117,24 @@ async def outcome_check_loop(notifier: NotificationHandler):
         except Exception as e:
             logger.error(f"❌ Error in outcome_check_loop: {e}", exc_info=True)
         await asyncio.sleep(config.SIGNAL_CHECK_INTERVAL_SECONDS)
+
+async def notification_flush_loop(notifier: NotificationHandler):
+    """Periodically flushes the notification queue every 10 minutes."""
+    logger.info("✅ Notification Queue Flush Loop starting (10 min interval)...")
+    while True:
+        await asyncio.sleep(10 * 60)
+        logger.info("⏰ Time-based flush for notification queue...")
+        await notifier.flush_signal_queue()
+
+async def summary_loop(notifier: NotificationHandler):
+    """Periodically sends a performance summary every 60 minutes."""
+    logger.info("✅ Periodic Summary Loop starting (60 min interval)...")
+    while True:
+        # Wait for an hour before sending the first summary
+        await asyncio.sleep(60 * 60)
+        logger.info("📰 Generating and sending periodic performance summary...")
+        await notifier.send_periodic_summary_notification()
+
 
 
 # --- HÀM MỚI: VÒNG LẶP TỰ ĐỘNG CẬP NHẬT ---
@@ -243,7 +260,9 @@ async def main():
             asyncio.create_task(signal_check_loop(notifier)),
             asyncio.create_task(updater_loop(client)),
             asyncio.create_task(outcome_check_loop(notifier)),
-            asyncio.create_task(training_loop(notifier, len(all_symbols)))
+            asyncio.create_task(training_loop(notifier, len(all_symbols))),
+            asyncio.create_task(notification_flush_loop(notifier)), # Add notification flush loop
+            asyncio.create_task(summary_loop(notifier)) # Add summary loop
         ]
         await asyncio.gather(*running_tasks)
 

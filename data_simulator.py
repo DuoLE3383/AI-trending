@@ -98,7 +98,7 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
             entry_price = entry_kline['close']
             
             # Randomly choose trend
-            trend = random.choice(['BULLISH', 'BEARISH']) # Giữ nguyên random cho mục đích giả lập
+            trend = random.choice(['BULLISH', 'BEARISH'])
             
             # Định nghĩa SL/TP dựa trên các phần trăm yêu cầu
             sl_factor = 0.025 # 2.5%
@@ -166,7 +166,7 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
             # If no SL/TP hit within 5 candles, close manually at last candle's close
             if status == 'ACTIVE':
                 exit_price = klines[min(i + 360, len(klines) - 5)]['close']
-                status = 'CLOSED_MANUALLY (OUT OF TIME)'
+                status = 'MANUALLY CLOSED' # Giả lập đóng tay nếu không có SL/TP
             if exit_price is not None:
                 try:
                     pnl = ((exit_price - entry_price) / entry_price) * 100
