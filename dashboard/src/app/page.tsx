@@ -2,9 +2,15 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-// SỬA LỖI: Thay thế thư viện recharts bằng react-chartjs-2 và chart.js nhẹ hơn
+// SỬA LỖI: Sử dụng thư viện chart.js nhẹ hơn để vẽ biểu đồ
 import { Pie } from 'react-chartjs-2';
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip,
+  Legend,
+  ChartOptions,
+} from 'chart.js';
 
 // Đăng ký các thành phần cần thiết cho Chart.js
 ChartJS.register(ArcElement, Tooltip, Legend);
@@ -104,7 +110,7 @@ const TradesTable = ({ title, trades, type }: { title: string, trades: Trade[], 
     );
 };
 
-// SỬA LỖI: Component biểu đồ được viết lại bằng Chart.js
+// SỬA LỖI: Component biểu đồ được đưa trở lại vào tệp chính để tránh lỗi import
 const WinLossPieChart = ({ data }: { data: Stats }) => {
     const chartData = {
         labels: ['Wins', 'Losses'],
@@ -119,7 +125,7 @@ const WinLossPieChart = ({ data }: { data: Stats }) => {
         ],
     };
 
-    const chartOptions = {
+    const chartOptions: ChartOptions<'pie'> = {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
@@ -238,6 +244,7 @@ export default function Home() {
                         <TradesTable title="Active Trades" trades={activeTrades} type="active" />
                     </div>
                     <div>
+                        {/* Gọi component biểu đồ trực tiếp */}
                         <WinLossPieChart data={stats} />
                     </div>
                     <div className="lg:col-span-3">
