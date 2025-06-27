@@ -39,16 +39,24 @@ class NotificationHandler:
 
     async def _send_to_both(self, message: str, thread_id: int = None, disable_web_page_preview: bool = False):
         """Gửi tin nhắn văn bản đến cả group và channel."""
-        self.logger.debug(f"Preparing to send text message to Telegram: {message[:100]}...")
+        self.logger.debug(f"Preparing to send text message to Telegram (both group and channel): {message[:100]}...")
         common_kwargs = {'parse_mode': 'MarkdownV2', 'disable_web_page_preview': disable_web_page_preview}
         group_kwargs = {'chat_id': config.TELEGRAM_CHAT_ID, 'text': message, 'message_thread_id': thread_id, **common_kwargs}
         await self._send_with_retry(self.telegram_handler.send_message, **group_kwargs)
+        # Gửi đến channel nếu TELEGRAM_CHANNEL_ID được cấu hình và khác với group ID
+        if hasattr(config, 'TELEGRAM_CHANNEL_ID') and config.TELEGRAM_CHANNEL_ID and config.TELEGRAM_CHANNEL_ID != config.TELEGRAM_CHAT_ID:
+            channel_kwargs = {'chat_id': config.TELEGRAM_CHANNEL_ID, 'text': message, **common_kwargs} # Channel thường không có thread_id
+            await self._send_with_retry(self.telegram_handler.send_message, **channel_kwargs)
 
     async def _send_photo_to_both(self, photo: str, caption: str, thread_id: int = None):
         """Gửi ảnh có chú thích đến cả group và channel."""
         self.logger.debug(f"Preparing to send photo to Telegram with caption: {caption[:100]}...")
         group_kwargs = {'chat_id': config.TELEGRAM_CHAT_ID, 'photo': photo, 'caption': caption, 'parse_mode': 'MarkdownV2', 'message_thread_id': thread_id}
         await self._send_with_retry(self.telegram_handler.send_photo, **group_kwargs)
+        # Gửi ảnh đến channel nếu TELEGRAM_CHANNEL_ID được cấu hình và khác với group ID
+        if hasattr(config, 'TELEGRAM_CHANNEL_ID') and config.TELEGRAM_CHANNEL_ID and config.TELEGRAM_CHANNEL_ID != config.TELEGRAM_CHAT_ID:
+            channel_kwargs = {'chat_id': config.TELEGRAM_CHANNEL_ID, 'photo': photo, 'caption': caption, 'parse_mode': 'MarkdownV2'}
+            await self._send_with_retry(self.telegram_handler.send_photo, **channel_kwargs)
 
     # === CÁC HÀM GỬI THÔNG BÁO ===
 

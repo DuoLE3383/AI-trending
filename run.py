@@ -135,6 +135,11 @@ async def update_loop(notifier: NotificationHandler):
                 continue
             
             logger.info("💡 New code found! Attempting to pull updates...")
+            # OPTIONAL: Force update by discarding local changes. Use with caution!
+            # If you want to ensure the bot always gets the latest code and
+            # don't care about uncommitted local changes, uncomment the line below.
+            # await asyncio.create_subprocess_shell('git reset --hard origin/ai')
+
             pull_process = await asyncio.create_subprocess_shell('git pull origin ai', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             pull_stdout, pull_stderr = await pull_process.communicate()
 
