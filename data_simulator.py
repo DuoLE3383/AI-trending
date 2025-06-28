@@ -203,9 +203,8 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
             if exit_price is not None:
                 try:
                     pnl = ((exit_price - entry_price) / entry_price) * 100
-                    if trend == 'BEARISH': # Đảo ngược PnL cho lệnh short (nhân với -1)
-                        pnl *= -1 # Đã sửa: Chỉ nên nhân với -1 để đảo dấu
-                    # For BULLISH trades, the initial 'pnl' calculation is already correct.
+                    if trend == 'BEARISH':
+                        pnl *= -1 # Đảo dấu PnL cho lệnh short
                     pnl_percentage = pnl
                     pnl_with_leverage = pnl * config.LEVERAGE # Assuming LEVERAGE is in config
                 except (TypeError, ZeroDivisionError):

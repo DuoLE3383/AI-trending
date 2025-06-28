@@ -5,7 +5,7 @@ import asyncio
 import sqlite3
 import joblib
 import os # Import os để thực hiện restart
-from dotenv import load_dotenvs
+from dotenv import load_dotenv
 
 load_dotenv()
 
