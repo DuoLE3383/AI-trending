@@ -12,8 +12,8 @@ load_dotenv()
 
 # --- Project Module Imports ---
 from binance import AsyncClient
-import main.src.core.config as config
-from main.src.handlers.database_handler import init_sqlite_db
+import src.config as config
+from src.handlers.database_handler import init_sqlite_db
 from src.core.analysis_engine import perform_ai_fallback_analysis, perform_elliotv8_analysis
 from src.handlers.telegram_handler import TelegramHandler
 from src.handlers.notifications import NotificationHandler
