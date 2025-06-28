@@ -97,10 +97,11 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
         df.ta.rsi(length=config.RSI_PERIOD, append=True)
         df.ta.bbands(length=config.BBANDS_PERIOD, std=config.BBANDS_STD_DEV, append=True)
         df.ta.atr(length=config.ATR_PERIOD, append=True)
-        # CẢI TIẾN: Thêm các chỉ báo còn thiếu cho training
+        # CẢI TIẾN: Thêm các chỉ báo còn thiếu để khớp với schema
         df.ta.macd(fast=config.MACD_FAST_PERIOD, slow=config.MACD_SLOW_PERIOD, signal=config.MACD_SIGNAL_PERIOD, append=True)
         df.ta.adx(length=config.ADX_PERIOD, append=True)
-        df.dropna(inplace=True) # Xóa các hàng có giá trị NaN sau khi tính toán chỉ báo
+        # CẢI TIẾN: Xóa các hàng có giá trị NaN sau khi tính toán tất cả các chỉ báo
+        df.dropna(inplace=True)
 
         # Simple strategy: simulate a trade every N candles
         candles_per_trade = len(df) // num_trades_per_symbol
@@ -108,7 +109,8 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
             candles_per_trade = 1 # Ensure at least one trade if not enough klines
 
         trade_counter = 0
-        for i in range(0, len(df) - 6, candles_per_trade): # Bắt đầu từ đầu sau khi đã dropna
+        # Bắt đầu từ đầu vì đã dropna()
+        for i in range(0, len(df) - 6, candles_per_trade):
             if trade_counter >= num_trades_per_symbol:
                 break
 
@@ -116,7 +118,7 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
             entry_kline = df.iloc[i]
             entry_price = entry_kline['close']
             
-            # Randomly choose trend for simulation variety
+            # Randomly choose trend
             trend = random.choice(['BULLISH', 'BEARISH'])
             
             # Định nghĩa SL/TP dựa trên các phần trăm yêu cầu
@@ -214,7 +216,7 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
             ema_medium_val = entry_kline.get(f'EMA_{config.EMA_MEDIUM}')
             ema_slow_val = entry_kline.get(f'EMA_{config.EMA_SLOW}')
             rsi_val = entry_kline.get(f'RSI_{config.RSI_PERIOD}')
-            # SỬA LỖI: Lấy đúng giá trị ATR từ cột được tạo bởi pandas-ta (thường có hậu tố 'r')
+            # SỬA LỖI: Lấy đúng giá trị ATR từ cột được tạo bởi pandas-ta
             atr_val = entry_kline.get(f'ATRr_{config.ATR_PERIOD}')
             bb_lower = entry_kline.get(f'BBL_{config.BBANDS_PERIOD}_{config.BBANDS_STD_DEV}')
             bb_middle = entry_kline.get(f'BBM_{config.BBANDS_PERIOD}_{config.BBANDS_STD_DEV}')
@@ -227,7 +229,7 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
             # Insert into DB
             try:
                 with get_db_connection(db_path) as conn:
-                    # SỬA LỖI: Cập nhật câu lệnh INSERT để bao gồm tất cả các cột cần thiết cho training
+                    # SỬA LỖI: Thay thế hoàn toàn câu lệnh INSERT để khớp với schema mới nhất
                     conn.execute("""
                         INSERT INTO trend_analysis (
                             analysis_timestamp_utc, symbol, timeframe, last_price, timestamp_utc,
@@ -236,33 +238,33 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
                             bbands_lower, bbands_middle, bbands_upper, atr_val,
                             macd, macd_signal, macd_hist, adx,
                             entry_price, stop_loss, take_profit_1, take_profit_2, take_profit_3, status, method,
-                            exit_price, pnl_percentage, pnl_with_leverage
+                            exit_price, pnl_percentage, pnl_with_leverage, outcome_timestamp_utc, entry_timestamp_utc
                         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """, (
                         datetime.utcnow().isoformat(),
                         symbol, 
                         config.TIMEFRAME,
-                        entry_price,
-                        entry_kline.name.timestamp(),
+                        entry_price, # last_price
+                        entry_kline.name.timestamp(), # timestamp_utc
                         config.EMA_FAST, ema_fast_val,
                         config.EMA_MEDIUM, ema_medium_val,
                         config.EMA_SLOW, ema_slow_val,
                         config.RSI_PERIOD, rsi_val,
                         trend, 
-                        entry_kline.name.isoformat(),
+                        entry_kline.name.isoformat(), # kline_open_time
                         bb_lower, bb_middle, bb_upper,
                         atr_val,
                         macd, macd_signal, macd_hist, adx,
                         entry_price, 
                         stop_loss, 
-                        take_profit_1,
-                        take_profit_2,
-                        take_profit_3,
+                        take_profit_1, take_profit_2, take_profit_3,
                         status,
-                        "SIMULATED", # Method
+                        "SIMULATED", # method
                         exit_price, 
                         pnl_percentage, 
-                        pnl_with_leverage
+                        pnl_with_leverage,
+                        datetime.utcnow().isoformat() if status != 'ACTIVE' else None, # outcome_timestamp_utc
+                        entry_kline.name.isoformat() # entry_timestamp_utc
                     ))
                     conn.commit()
                 trade_counter += 1
@@ -309,9 +311,9 @@ async def main():
             logger.info("Binance client connection closed.")
 
 if __name__ == "__main__":
-    # Ensure the database file exists and table is created if not
-    # This block is for standalone execution.
-    # It's recommended to run `run.py` which calls `init_sqlite_db` for a robust setup.
+    # SỬA LỖI: Xóa khối CREATE TABLE không đồng bộ và không cần thiết.
+    # Việc khởi tạo DB nên được thực hiện bởi `run.py` thông qua `database_handler.py`
+    # để đảm bảo tính nhất quán.
     logger.info("Running data_simulator.py as a standalone script.")
     logger.warning("Please ensure 'trend_analysis.db' is initialized correctly before running.")
 
