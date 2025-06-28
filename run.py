@@ -157,7 +157,7 @@ async def update_loop(notifier: NotificationHandler):
     remote_branch = f"{remote_name}/{branch_name}"
 
     while True:
-        await asyncio.sleep(60) # Check every 10 minutes
+        await asyncio.sleep(10 * 60) # Check every 10 minutes
         
         try:
             logger.info("📡 Checking for code updates from git...")
