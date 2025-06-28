@@ -21,20 +21,21 @@ def train_model() -> float | None:
 
     try:
         with sqlite3.connect(config.SQLITE_DB_PATH) as conn:
-            # CẬP NHẬT: Query để tạo cột 'outcome' (WIN/LOSS) từ cột 'status'
-            # và chỉ lấy các dòng đã có kết quả rõ ràng.
+            # CẢI TIẾN: Lấy tất cả các giao dịch đã đóng (status != 'ACTIVE')
+            # và bao gồm cả pnl_percentage để xác định kết quả một cách chính xác.
             query = """
             SELECT 
                 ema_fast_val, ema_medium_val, ema_slow_val, 
                 rsi_val, atr_val, 
                 bbands_lower, bbands_middle, bbands_upper, 
                 trend,
-                CASE 
-                    WHEN status LIKE '%TP%' THEN 'WIN'
-                    WHEN status LIKE '%SL%' THEN 'LOSS'
-                END as outcome
+                status,
+                pnl_percentage
             FROM trend_analysis
-            WHERE status LIKE '%TP%' OR status LIKE '%SL%'
+            WHERE 
+                status != 'ACTIVE' 
+                AND pnl_percentage IS NOT NULL 
+                AND trend IS NOT NULL
             """
             df = pd.read_sql(query, conn)
     except Exception as e:
@@ -45,6 +46,12 @@ def train_model() -> float | None:
         logger.warning("⚠️ No completed WIN/LOSS trades found. Skipping training.")
         return None
 
+    # CẢI TIẾN: Tạo cột 'outcome' một cách linh hoạt trong Python.
+    # Một giao dịch là 'WIN' nếu nó chạm TP hoặc có PnL > 0.
+    df['outcome'] = df.apply(
+        lambda row: 'WIN' if ('TP' in row['status'] or row['pnl_percentage'] > 0) else 'LOSS',
+        axis=1
+    )
     # CẬP NHẬT: Danh sách features ban đầu, 'trend' giờ là một feature
     initial_features = [
         'ema_fast_val', 'ema_medium_val', 'ema_slow_val',

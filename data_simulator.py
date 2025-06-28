@@ -137,15 +137,15 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
                     if outcome_kline['high'] >= take_profit_3:
                         tp_hit = True
                         exit_price_candidate = take_profit_3
-                        status_candidate = 'TP3'
+                        status_candidate = 'TP3_HIT'
                     elif outcome_kline['high'] >= take_profit_2:
                         tp_hit = True
                         exit_price_candidate = take_profit_2
-                        status_candidate = 'TP2'
+                        status_candidate = 'TP2_HIT'
                     elif outcome_kline['high'] >= take_profit_1:
                         tp_hit = True
                         exit_price_candidate = take_profit_1
-                        status_candidate = 'TP1'
+                        status_candidate = 'TP1_HIT'
                 else: # BEARISH
                     if outcome_kline['high'] >= stop_loss:
                         sl_hit = True
@@ -153,20 +153,20 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
                     if outcome_kline['low'] <= take_profit_3:
                         tp_hit = True
                         exit_price_candidate = take_profit_3
-                        status_candidate = 'TP3'
+                        status_candidate = 'TP3_HIT'
                     elif outcome_kline['low'] <= take_profit_2:
                         tp_hit = True
                         exit_price_candidate = take_profit_2
-                        status_candidate = 'TP2'
+                        status_candidate = 'TP2_HIT'
                     elif outcome_kline['low'] <= take_profit_1:
                         tp_hit = True
                         exit_price_candidate = take_profit_1
-                        status_candidate = 'TP1'
+                        status_candidate = 'TP1_HIT'
                 
                 # Ưu tiên SL nếu cả hai cùng bị chạm trong một nến
                 if sl_hit:
                     exit_price = stop_loss
-                    status = 'SL'
+                    status = 'SL_HIT'
                     break
                 elif tp_hit:
                     exit_price = exit_price_candidate
@@ -176,7 +176,7 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
             # If no SL/TP hit within 5 candles, close manually at last candle's close
             if status == 'ACTIVE':
                 exit_price = klines[min(i + 360, len(klines) - 60)]['close']
-                status = 'CLOSED_MANUALLY (OUT OF TIME)' # Standardize status for clarity
+                status = 'CLOSED_MANUAL' # Standardize status for clarity
             pnl_percentage = None
             pnl_with_leverage = None
             if exit_price is not None:
