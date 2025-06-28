@@ -5,7 +5,7 @@ import asyncio
 import sqlite3
 import joblib
 import os # Import os để thực hiện restart
-from dotenv import load_dotenv
+from dotenv import load_dotenvs
 
 load_dotenv()
 
@@ -141,39 +141,63 @@ async def update_loop(notifier: NotificationHandler):
     Vòng lặp định kỳ kiểm tra cập nhật từ Git và khởi động lại bot nếu có.
     """
     logger.info("✅ Auto-update Loop starting...")
+    # Define the branch and remote to check against
+    remote_name = "origin"
+    branch_name = "ai"
+    remote_branch = f"{remote_name}/{branch_name}"
+
     while True:
-        await asyncio.sleep(30 * 60) # Kiểm tra mỗi 30 phút
+        await asyncio.sleep(10 * 60) # Check every 10 minutes
         
         try:
             logger.info("📡 Checking for code updates from git...")
-            # Lấy trạng thái từ xa mà không cần pull
-            fetch_process = await asyncio.create_subprocess_shell('git fetch', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            
+            # 1. Fetch the latest changes from the remote without merging
+            fetch_process = await asyncio.create_subprocess_shell(
+                f'git fetch {remote_name}', 
+                stdout=asyncio.subprocess.PIPE, 
+                stderr=asyncio.subprocess.PIPE
+            )
             await fetch_process.wait()
 
-            # So sánh local HEAD với remote HEAD
-            status_process = await asyncio.create_subprocess_shell('git status -uno', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            stdout, _ = await status_process.communicate()
-            
-            # Nếu branch đã "behind", tức là có cập nhật mới
-            if b'Your branch is behind' not in stdout:
-                logger.info("✅ Code is up-to-date.")
+            # 2. Get the commit hash of the local HEAD
+            local_hash_proc = await asyncio.create_subprocess_shell('git rev-parse HEAD', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            local_hash_out, local_hash_err = await local_hash_proc.communicate()
+            if local_hash_proc.returncode != 0:
+                logger.error(f"Could not get local commit hash: {local_hash_err.decode().strip()}")
                 continue
+            local_hash = local_hash_out.decode().strip()
+
+            # 3. Get the commit hash of the remote branch
+            remote_hash_proc = await asyncio.create_subprocess_shell(f'git rev-parse {remote_branch}', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            remote_hash_out, remote_hash_err = await remote_hash_proc.communicate()
+            if remote_hash_proc.returncode != 0:
+                logger.error(f"Could not get remote commit hash for '{remote_branch}': {remote_hash_err.decode().strip()}")
+                continue
+            remote_hash = remote_hash_out.decode().strip()
+
+            # 4. Compare hashes
+            if local_hash == remote_hash:
+                logger.info(f"✅ Code is up-to-date with {remote_branch}.")
+                continue
+
+            logger.info(f"💡 New code found on {remote_branch}! Local: {local_hash[:7]}, Remote: {remote_hash[:7]}. Attempting to pull updates...")
             
-            logger.info("💡 New code found! Attempting to pull updates...")
-            # Thực hiện pull, giả sử branch là 'ai' và remote là 'origin'
-            pull_process = await asyncio.create_subprocess_shell('git pull origin ai', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            pull_process = await asyncio.create_subprocess_shell(f'git pull {remote_name} {branch_name}', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             pull_stdout, pull_stderr = await pull_process.communicate()
 
             if pull_process.returncode == 0:
-                logger.info(pull_stdout.decode())
+                logger.info(f"Git pull successful:\n{pull_stdout.decode()}")
                 logger.critical("🚨 New code applied. Triggering bot restart...")
                 await notifier._send_to_both("🚨 Bot is restarting to apply new updates\\.\\.\\.")
-                # Sử dụng os.execv để thay thế tiến trình hiện tại bằng một tiến trình mới
+                # A small delay to ensure the message is sent before restarting
+                await asyncio.sleep(5)
                 os.execv(sys.executable, ['python'] + sys.argv)
             else:
-                error_message = f"❌ Failed to pull updates: {pull_stderr.decode()}"
-                logger.error(error_message)
-                await notifier._send_to_both(error_message)
+                logger.error(f"❌ Failed to pull updates: {pull_stderr.decode()}")
+                # Escape the error message for MarkdownV2 and send
+                escaped_error = notifier.esc(pull_stderr.decode().strip())
+                await notifier._send_to_both(f"❌ Failed to pull updates from `{notifier.esc(remote_branch)}`:\n```\n{escaped_error}\n```")
 
         except Exception as e:
             logger.error(f"❌ Error during update check: {e}", exc_info=True)
