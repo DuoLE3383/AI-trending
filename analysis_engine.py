@@ -143,7 +143,7 @@ def _ewo_indicator(dataframe, ema_length=5, ema2_length=35):
 async def perform_elliotv8_analysis(client: AsyncClient, symbol: str) -> None:
     """Hàm chính cho chiến lược Elliotv8."""
     try:
-        df = await get_market_data(client, symbol, '5m', limit=400)
+        df = await get_market_data(client, symbol, '15m', limit=400)
         if df is None or df.empty or len(df) < 200: return
 
         # 1. Lấy thông số
@@ -153,7 +153,7 @@ async def perform_elliotv8_analysis(client: AsyncClient, symbol: str) -> None:
         df[f'ma_buy_{base_nb_candles_buy}'] = ta.ema(df["close"], length=base_nb_candles_buy)
         df[f'ma_sell_{base_nb_candles_sell}'] = ta.ema(df["close"], length=base_nb_candles_sell)
         df['EWO'] = _ewo_indicator(df, 50, 200)
-        df['rsi'] = ta.rsi(df["close"], length=14)
+        df['rsi'] = ta.rsi(df["close"], length=13)
         df['rsi_fast'] = ta.rsi(df["close"], length=4)
         df['atr'] = ta.atr(df["high"], df["low"], df["close"], length=ATR_PERIOD)
 
