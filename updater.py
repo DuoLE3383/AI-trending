@@ -27,18 +27,38 @@ async def get_usdt_futures_symbols(client: AsyncClient) -> set:
         logger.error(f"❌ Failed to fetch symbol list: {e}", exc_info=True)
         return set()
 
-def _update_signal_outcome(conn: sqlite3.Connection, row_id: int, new_status: str, exit_price: float) -> None:
+def _update_signal_outcome(conn: sqlite3.Connection, signal_data: Dict[str, Any], new_status: str, exit_price: float) -> None:
     """
-    Cập nhật trạng thái, giá thoát lệnh và thời gian xảy ra cho một tín hiệu.
+    Cập nhật trạng thái, giá thoát lệnh, PnL và thời gian xảy ra cho một tín hiệu.
     """
     try:
         timestamp_utc = pd.Timestamp.utcnow().isoformat()
-        # CẢI THIỆN: Cập nhật cả giá đóng lệnh (exit_price)
+        row_id = signal_data.get('rowid')
+
+        # --- LOGIC MỚI: TÍNH TOÁN PNL KHI ĐÓNG LỆNH ---
+        entry_price = signal_data.get('entry_price')
+        trend = signal_data.get('trend')
+        pnl_percentage = None
+        pnl_with_leverage = None
+
+        if entry_price and exit_price and trend:
+            try:
+                pnl = ((float(exit_price) - float(entry_price)) / float(entry_price)) * 100
+                if 'BEARISH' in trend:
+                    pnl *= -1 # Đảo dấu PnL cho lệnh short
+                pnl_percentage = pnl
+                pnl_with_leverage = pnl * config.LEVERAGE
+            except (ValueError, TypeError, ZeroDivisionError) as pnl_e:
+                logger.error(f"Could not calculate PnL for rowid {row_id}: {pnl_e}")
+        # --- KẾT THÚC LOGIC MỚI ---
+
         conn.execute(
-            "UPDATE trend_analysis SET status = ?, outcome_timestamp_utc = ?, exit_price = ? WHERE rowid = ?",
-            (new_status, timestamp_utc, exit_price, row_id)
+            """UPDATE trend_analysis 
+               SET status = ?, outcome_timestamp_utc = ?, exit_price = ?, pnl_percentage = ?, pnl_with_leverage = ?
+               WHERE rowid = ?""",
+            (new_status, timestamp_utc, exit_price, pnl_percentage, pnl_with_leverage, row_id)
         )
-        logger.info(f"✅ Updated rowid {row_id} to status: {new_status} at price {exit_price}")
+        logger.info(f"✅ Updated rowid {row_id} to status: {new_status} at price {exit_price} with PnL: {pnl_percentage:.2f}%")
     except sqlite3.Error as e:
         logger.error(f"❌ DB update failed (rowid {row_id}): {e}", exc_info=True)
 
@@ -95,24 +115,18 @@ async def check_signal_outcomes(client: AsyncClient) -> None:
                     
                     # CẢI THIỆN: Logic kiểm tra Multi-TP, ưu tiên TP cao nhất
                     if 'BULLISH' in trend: # For LONG trades
-                        if recent_high >= tp3:
-                            _update_signal_outcome(conn, signal['rowid'], 'TP3_HIT', tp3)
-                        elif recent_high >= tp2:
-                            _update_signal_outcome(conn, signal['rowid'], 'TP2_HIT', tp2)
-                        elif recent_high >= tp1:
-                            _update_signal_outcome(conn, signal['rowid'], 'TP1_HIT', tp1)
+                        if recent_high >= tp3: _update_signal_outcome(conn, dict(signal), 'TP3_HIT', tp3)
+                        elif recent_high >= tp2: _update_signal_outcome(conn, dict(signal), 'TP2_HIT', tp2)
+                        elif recent_high >= tp1: _update_signal_outcome(conn, dict(signal), 'TP1_HIT', tp1)
                         elif recent_low <= sl: # SL check for LONG
-                            _update_signal_outcome(conn, signal['rowid'], 'SL_HIT', sl)
+                            _update_signal_outcome(conn, dict(signal), 'SL_HIT', sl)
 
                     elif 'BEARISH' in trend: # For SHORT trades
-                        if recent_low <= tp3:
-                            _update_signal_outcome(conn, signal['rowid'], 'TP3_HIT', tp3)
-                        elif recent_low <= tp2:
-                            _update_signal_outcome(conn, signal['rowid'], 'TP2_HIT', tp2)
-                        elif recent_low <= tp1:
-                            _update_signal_outcome(conn, signal['rowid'], 'TP1_HIT', tp1)
+                        if recent_low <= tp3: _update_signal_outcome(conn, dict(signal), 'TP3_HIT', tp3)
+                        elif recent_low <= tp2: _update_signal_outcome(conn, dict(signal), 'TP2_HIT', tp2)
+                        elif recent_low <= tp1: _update_signal_outcome(conn, dict(signal), 'TP1_HIT', tp1)
                         elif recent_high >= sl: # SL check for SHORT
-                            _update_signal_outcome(conn, signal['rowid'], 'SL_HIT', sl)
+                            _update_signal_outcome(conn, dict(signal), 'SL_HIT', sl)
                             
                 except Exception as e:
                     logger.error(f"❌ Error processing signal outcome ({signal['symbol']}): {e}", exc_info=True)
