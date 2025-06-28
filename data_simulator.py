@@ -5,6 +5,8 @@ import random
 from datetime import datetime, timedelta
 import logging
 import os 
+import pandas as pd
+import pandas_ta as ta
 import json # Import json to read config.json directly
 
 from pairlistupdater import perform_single_pairlist_update, CONFIG_FILE_PATH as PAIRLIST_CONFIG_PATH
@@ -84,17 +86,30 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
             logger.warning(f"No klines fetched for {symbol}. Skipping simulation for this symbol.")
             continue
 
+        # Convert klines to a DataFrame for indicator calculation
+        df = pd.DataFrame(klines)
+        df.set_index('open_time', inplace=True)
+
+        # Calculate all necessary indicators for the entire DataFrame
+        df.ta.ema(length=config.EMA_FAST, append=True)
+        df.ta.ema(length=config.EMA_MEDIUM, append=True)
+        df.ta.ema(length=config.EMA_SLOW, append=True)
+        df.ta.rsi(length=config.RSI_PERIOD, append=True)
+        df.ta.bbands(length=config.BBANDS_PERIOD, std=config.BBANDS_STD_DEV, append=True)
+        df.ta.atr(length=config.ATR_PERIOD, append=True)
+
         # Simple strategy: simulate a trade every N candles
-        candles_per_trade = len(klines) // num_trades_per_symbol
+        candles_per_trade = len(df) // num_trades_per_symbol
         if candles_per_trade < 1:
             candles_per_trade = 1 # Ensure at least one trade if not enough klines
 
         trade_counter = 0
-        for i in range(0, len(klines) - 5, candles_per_trade): # Ensure enough candles for outcome
+        for i in range(config.EMA_SLOW, len(df) - 6, candles_per_trade): # Start after indicators have warmed up
             if trade_counter >= num_trades_per_symbol:
                 break
 
-            entry_kline = klines[i]
+            # Get data for the entry candle from the DataFrame
+            entry_kline = df.iloc[i]
             entry_price = entry_kline['close']
             
             # Randomly choose trend
@@ -121,8 +136,8 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
             exit_price = None
             status = 'ACTIVE'
             
-            for j in range(i + 1, min(i + 6, len(klines))): # Check next 5 candles
-                outcome_kline = klines[j]
+            for j in range(i + 1, min(i + 6, len(df))): # Check next 5 candles
+                outcome_kline = df.iloc[j]
                 sl_hit = False
                 tp_hit = False
                 exit_price_candidate = None
@@ -175,7 +190,7 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
             
             # If no SL/TP hit within 5 candles, close manually at last candle's close
             if status == 'ACTIVE':
-                exit_price = klines[min(i + 360, len(klines) - 60)]['close']
+                exit_price = df.iloc[min(i + 5, len(df) - 1)]['close'] # Close at the end of the check window
                 status = 'CLOSED_MANUAL' # Standardize status for clarity
             pnl_percentage = None
             pnl_with_leverage = None
@@ -188,7 +203,14 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
                     pnl_percentage = pnl
                     pnl_with_leverage = pnl * config.LEVERAGE # Assuming LEVERAGE is in config
                 except (TypeError, ZeroDivisionError):
-                    logger.warning(f"Could not calculate PnL for {symbol} trade at {entry_kline['open_time']}.")
+                    logger.warning(f"Could not calculate PnL for {symbol} trade at {entry_kline.name}.")
+            
+            # Get indicator values for the entry kline
+            ema_fast_val = entry_kline.get(f'EMA_{config.EMA_FAST}')
+            ema_medium_val = entry_kline.get(f'EMA_{config.EMA_MEDIUM}')
+            ema_slow_val = entry_kline.get(f'EMA_{config.EMA_SLOW}')
+            rsi_val = entry_kline.get(f'RSI_{config.RSI_PERIOD}')
+            atr_val = entry_kline
             # Insert into DB
             try:
                 with get_db_connection(db_path) as conn:
