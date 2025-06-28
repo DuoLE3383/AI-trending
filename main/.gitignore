@@ -1,0 +1,19 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+
+# Databases
+*.db
+*.sqlite3
+/data/
+
+# Virtual environment
+venv/
+.venv/
+
+# Node.js dependencies
+/node_modules/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
