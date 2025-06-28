@@ -97,6 +97,10 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
         df.ta.rsi(length=config.RSI_PERIOD, append=True)
         df.ta.bbands(length=config.BBANDS_PERIOD, std=config.BBANDS_STD_DEV, append=True)
         df.ta.atr(length=config.ATR_PERIOD, append=True)
+        # CẢI TIẾN: Thêm các chỉ báo còn thiếu cho training
+        df.ta.macd(fast=config.MACD_FAST_PERIOD, slow=config.MACD_SLOW_PERIOD, signal=config.MACD_SIGNAL_PERIOD, append=True)
+        df.ta.adx(length=config.ADX_PERIOD, append=True)
+        df.dropna(inplace=True) # Xóa các hàng có giá trị NaN sau khi tính toán chỉ báo
 
         # Simple strategy: simulate a trade every N candles
         candles_per_trade = len(df) // num_trades_per_symbol
@@ -104,7 +108,7 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
             candles_per_trade = 1 # Ensure at least one trade if not enough klines
 
         trade_counter = 0
-        for i in range(config.EMA_SLOW, len(df) - 6, candles_per_trade): # Start after indicators have warmed up
+        for i in range(0, len(df) - 6, candles_per_trade): # Bắt đầu từ đầu sau khi đã dropna
             if trade_counter >= num_trades_per_symbol:
                 break
 
@@ -112,7 +116,7 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
             entry_kline = df.iloc[i]
             entry_price = entry_kline['close']
             
-            # Randomly choose trend
+            # Randomly choose trend for simulation variety
             trend = random.choice(['BULLISH', 'BEARISH'])
             
             # Định nghĩa SL/TP dựa trên các phần trăm yêu cầu
@@ -210,27 +214,53 @@ async def simulate_trade_data(client: AsyncClient, db_path: str, all_symbols: li
             ema_medium_val = entry_kline.get(f'EMA_{config.EMA_MEDIUM}')
             ema_slow_val = entry_kline.get(f'EMA_{config.EMA_SLOW}')
             rsi_val = entry_kline.get(f'RSI_{config.RSI_PERIOD}')
-            atr_val = entry_kline
+            # SỬA LỖI: Lấy đúng giá trị ATR từ cột được tạo bởi pandas-ta (thường có hậu tố 'r')
+            atr_val = entry_kline.get(f'ATRr_{config.ATR_PERIOD}')
+            bb_lower = entry_kline.get(f'BBL_{config.BBANDS_PERIOD}_{config.BBANDS_STD_DEV}')
+            bb_middle = entry_kline.get(f'BBM_{config.BBANDS_PERIOD}_{config.BBANDS_STD_DEV}')
+            bb_upper = entry_kline.get(f'BBU_{config.BBANDS_PERIOD}_{config.BBANDS_STD_DEV}')
+            macd = entry_kline.get(f'MACD_{config.MACD_FAST_PERIOD}_{config.MACD_SLOW_PERIOD}_{config.MACD_SIGNAL_PERIOD}')
+            macd_signal = entry_kline.get(f'MACDs_{config.MACD_FAST_PERIOD}_{config.MACD_SLOW_PERIOD}_{config.MACD_SIGNAL_PERIOD}')
+            macd_hist = entry_kline.get(f'MACDh_{config.MACD_FAST_PERIOD}_{config.MACD_SLOW_PERIOD}_{config.MACD_SIGNAL_PERIOD}')
+            adx = entry_kline.get(f'ADX_{config.ADX_PERIOD}')
+
             # Insert into DB
             try:
                 with get_db_connection(db_path) as conn:
+                    # SỬA LỖI: Cập nhật câu lệnh INSERT để bao gồm tất cả các cột cần thiết cho training
                     conn.execute("""
                         INSERT INTO trend_analysis (
-                            symbol, analysis_timestamp_utc, trend, entry_price,
-                            stop_loss, take_profit_1, take_profit_2, take_profit_3, exit_price, status,
-                            pnl_percentage, pnl_with_leverage
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            analysis_timestamp_utc, symbol, timeframe, last_price, timestamp_utc,
+                            ema_fast_len, ema_fast_val, ema_medium_len, ema_medium_val, ema_slow_len, ema_slow_val,
+                            rsi_len, rsi_val, trend, kline_open_time,
+                            bbands_lower, bbands_middle, bbands_upper, atr_val,
+                            macd, macd_signal, macd_hist, adx,
+                            entry_price, stop_loss, take_profit_1, take_profit_2, take_profit_3, status, method,
+                            exit_price, pnl_percentage, pnl_with_leverage
+                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """, (
+                        datetime.utcnow().isoformat(),
                         symbol, 
-                        entry_kline['open_time'].isoformat(), 
+                        config.TIMEFRAME,
+                        entry_price,
+                        entry_kline.name.timestamp(),
+                        config.EMA_FAST, ema_fast_val,
+                        config.EMA_MEDIUM, ema_medium_val,
+                        config.EMA_SLOW, ema_slow_val,
+                        config.RSI_PERIOD, rsi_val,
                         trend, 
+                        entry_kline.name.isoformat(),
+                        bb_lower, bb_middle, bb_upper,
+                        atr_val,
+                        macd, macd_signal, macd_hist, adx,
                         entry_price, 
                         stop_loss, 
                         take_profit_1,
                         take_profit_2,
                         take_profit_3,
+                        status,
+                        "SIMULATED", # Method
                         exit_price, 
-                        status, 
                         pnl_percentage, 
                         pnl_with_leverage
                     ))
@@ -280,28 +310,9 @@ async def main():
 
 if __name__ == "__main__":
     # Ensure the database file exists and table is created if not
-    try:
-        with get_db_connection(config.SQLITE_DB_PATH) as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS trend_analysis (
-                    symbol TEXT NOT NULL,
-                    analysis_timestamp_utc TEXT NOT NULL,
-                    trend TEXT NOT NULL,
-                    entry_price REAL,
-                    stop_loss REAL,
-                    take_profit_1 REAL,
-                    take_profit_2 REAL,
-                    take_profit_3 REAL,
-                    exit_price REAL,
-                    status TEXT NOT NULL,
-                    pnl_percentage REAL,
-                    pnl_with_leverage REAL
-                );
-            """)
-            conn.commit()
-        logger.info(f"Database '{config.SQLITE_DB_PATH}' and 'trend_analysis' table ensured.")
-    except Exception as e:
-        logger.critical(f"Error ensuring database/table existence: {e}")
-        exit(1) # Exit if DB cannot be prepared
+    # This block is for standalone execution.
+    # It's recommended to run `run.py` which calls `init_sqlite_db` for a robust setup.
+    logger.info("Running data_simulator.py as a standalone script.")
+    logger.warning("Please ensure 'trend_analysis.db' is initialized correctly before running.")
 
     asyncio.run(main())
