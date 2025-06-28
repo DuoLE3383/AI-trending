@@ -157,7 +157,7 @@ async def update_loop(notifier: NotificationHandler):
     remote_branch = f"{remote_name}/{branch_name}"
 
     while True:
-        await asyncio.sleep(10 * 60) # Check every 10 minutes
+        await asyncio.sleep(60) # Check every 10 minutes
         
         try:
             logger.info("📡 Checking for code updates from git...")
@@ -193,19 +193,31 @@ async def update_loop(notifier: NotificationHandler):
 
             logger.info(f"💡 New code found on {remote_branch}! Local: {local_hash[:7]}, Remote: {remote_hash[:7]}. Attempting to pull updates...")
             
-            pull_process = await asyncio.create_subprocess_shell(f'git pull {remote_name} {branch_name}', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            # CẢI TIẾN: Sử dụng git stash để tạm cất các thay đổi cục bộ (ví dụ: config.json)
+            # trước khi pull, nhằm tránh xung đột. Đây là một cách an toàn để đảm bảo pull thành công.
+            logger.info("Stashing local changes to prevent pull conflicts...")
+            stash_proc = await asyncio.create_subprocess_shell(
+                'git stash', 
+                stdout=asyncio.subprocess.PIPE, 
+                stderr=asyncio.subprocess.PIPE
+            )
+            await stash_proc.wait()
+
+            pull_process = await asyncio.create_subprocess_shell(
+                f'git pull {remote_name} {branch_name}', 
+                stdout=asyncio.subprocess.PIPE, 
+                stderr=asyncio.subprocess.PIPE
+            )
             pull_stdout, pull_stderr = await pull_process.communicate()
 
             if pull_process.returncode == 0:
                 logger.info(f"Git pull successful:\n{pull_stdout.decode()}")
                 logger.critical("🚨 New code applied. Triggering bot restart...")
                 await notifier._send_to_both("🚨 Bot is restarting to apply new updates\\.\\.\\.")
-                # A small delay to ensure the message is sent before restarting
                 await asyncio.sleep(5)
                 os.execv(sys.executable, ['python'] + sys.argv)
             else:
                 logger.error(f"❌ Failed to pull updates: {pull_stderr.decode()}")
-                # Escape the error message for MarkdownV2 and send
                 escaped_error = notifier.esc(pull_stderr.decode().strip())
                 await notifier._send_to_both(f"❌ Failed to pull updates from `{notifier.esc(remote_branch)}`:\n```\n{escaped_error}\n```")
 
