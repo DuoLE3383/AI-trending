@@ -123,9 +123,10 @@ async def outcome_check_loop(notifier: NotificationHandler):
 
 async def notification_flush_loop(notifier: NotificationHandler):
     """Periodically flushes the notification queue every 10 minutes."""
-    logger.info("✅ Notification Queue Flush Loop starting (10 min interval)...")
+    interval_seconds = config.NOTIFICATION_FLUSH_INTERVAL_MINUTES * 60
+    logger.info(f"✅ Notification Queue Flush Loop starting ({config.NOTIFICATION_FLUSH_INTERVAL_MINUTES} min interval)...")
     while True:
-        await asyncio.sleep(10 * 60)
+        await asyncio.sleep(interval_seconds)
         logger.info("⏰ Time-based flush for notification queue...")
         # Flush both new signals and closed trade outcomes
         await asyncio.gather(
@@ -135,10 +136,11 @@ async def notification_flush_loop(notifier: NotificationHandler):
 
 async def summary_loop(notifier: NotificationHandler):
     """Periodically sends a performance summary every 60 minutes."""
-    logger.info("✅ Periodic Summary Loop starting (60 min interval)...")
+    interval_seconds = config.SUMMARY_INTERVAL_MINUTES * 60
+    logger.info(f"✅ Periodic Summary Loop starting ({config.SUMMARY_INTERVAL_MINUTES} min interval)...")
     while True:
         # Wait for an hour before sending the first summary
-        await asyncio.sleep(60 * 60)
+        await asyncio.sleep(interval_seconds)
         logger.info("📰 Generating and sending periodic performance summary...")
         await notifier.send_periodic_summary_notification()
 
@@ -149,9 +151,10 @@ async def update_loop(notifier: NotificationHandler):
     """
     Vòng lặp định kỳ kiểm tra cập nhật từ Git và khởi động lại bot nếu có.
     """ 
-    logger.info("✅ Auto-update Loop starting...")
-    while True: # Kiểm tra mỗi 10 phút
-        await asyncio.sleep(10 * 60) # Kiểm tra mỗi 10 phút
+    interval_seconds = config.AUTO_UPDATE_CHECK_INTERVAL_MINUTES * 60
+    logger.info(f"✅ Auto-update Loop starting ({config.AUTO_UPDATE_CHECK_INTERVAL_MINUTES} min interval)...")
+    while True:
+        await asyncio.sleep(interval_seconds)
         
         try:
             logger.info("📡 Checking for code updates from git...")
@@ -170,7 +173,7 @@ async def update_loop(notifier: NotificationHandler):
             # don't care about uncommitted local changes, uncomment the line below.
             # await asyncio.create_subprocess_shell('git reset --hard origin/ai')
 
-            pull_process = await asyncio.create_subprocess_shell('git pull origin ai', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            pull_process = await asyncio.create_subprocess_shell(f'git pull {config.GIT_REMOTE_NAME} {config.GIT_BRANCH_NAME}', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             pull_stdout, pull_stderr = await pull_process.communicate()
 
             if pull_process.returncode == 0:
@@ -191,7 +194,7 @@ def run_api_server():
     """
     logger.info("✅ Starting API server in a background thread...")
     # Sử dụng debug=False trong môi trường tích hợp/production
-    flask_app.run(host='0.0.0.0', port=5000, debug=False)
+    flask_app.run(host=config.API_HOST, port=config.API_PORT, debug=False)
 
 # --- MAIN FUNCTION ---
 async def main():
