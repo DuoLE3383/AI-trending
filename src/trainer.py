@@ -1,5 +1,6 @@
 # trainer.py (Phiên bản nâng cấp với Data Balancing và Target thực tế)
 import logging
+import time
 import sqlite3
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
@@ -132,3 +133,38 @@ def train_model() -> float | None:
     logger.info(f"\n{report}")
     
     return accuracy
+
+if __name__ == "__main__":
+    # Cấu hình logging cơ bản nếu script được chạy trực tiếp
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler() # In log ra console
+        ]
+    )
+
+    # Lấy khoảng thời gian huấn luyện từ config, với giá trị mặc định là 1 giờ
+    training_interval = getattr(config, 'TRAINING_INTERVAL_SECONDS', 3600)
+    logger.info(f"🤖 Model Trainer started in looping mode. Retraining every {training_interval} seconds.")
+
+    while True:
+        try:
+            logger.info("="*50)
+            logger.info("🏁 Starting new training cycle...")
+            accuracy = train_model()
+
+            if accuracy is not None:
+                logger.info(f"✅ Training cycle completed. Model accuracy: {accuracy:.2%}")
+            else:
+                logger.warning("⚠️ Training cycle finished without producing a new model.")
+
+            logger.info(f"😴 Waiting for {training_interval} seconds before next training cycle...")
+            time.sleep(training_interval)
+        except KeyboardInterrupt:
+            logger.info("🛑 Training loop stopped by user.")
+            break
+        except Exception as e:
+            logger.error(f"💥 An unexpected error occurred in the training loop: {e}", exc_info=True)
+            logger.info(f"😴 Retrying after {training_interval} seconds...")
+            time.sleep(training_interval)

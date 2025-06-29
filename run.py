@@ -21,7 +21,6 @@ from src.notifications import NotificationHandler
 from src.performance_analyzer import get_performance_stats
 from src.updater import get_usdt_futures_symbols, check_signal_outcomes
 from trainer import train_model
-from src.training_loop import training_loop
 from src.data_simulator import simulate_trade_data  # NEW: Import data simulator
 from src.pairlist_updater import perform_single_pairlist_update, CONFIG_FILE_PATH as PAIRLIST_CONFIG_PATH
 from src.api_server import app as flask_app  # Import the Flask app instance
@@ -150,11 +149,11 @@ async def update_loop(notifier: NotificationHandler):
     """
     Vòng lặp định kỳ kiểm tra cập nhật từ Git và khởi động lại bot nếu có.
     """ 
-    logger.info("✅ Auto-update Loop starting...")
-    # Define the branch and remote to check against
-    remote_name = "origin"
-    branch_name = "ai"
+    # CẢI TIẾN: Lấy thông tin git từ config để dễ dàng thay đổi
+    remote_name = getattr(config, 'GIT_REMOTE_NAME', 'origin')
+    branch_name = getattr(config, 'GIT_BRANCH_NAME', 'ai')
     remote_branch = f"{remote_name}/{branch_name}"
+    logger.info(f"✅ Auto-update Loop starting (checking {remote_branch})...")
 
     while True:
         await asyncio.sleep(10 * 60) # Check every 10 minutes
@@ -326,7 +325,6 @@ async def main():
             asyncio.create_task(signal_check_loop(notifier)),
             asyncio.create_task(updater_loop(client)),
             asyncio.create_task(outcome_check_loop(notifier)),
-            asyncio.create_task(training_loop(notifier, len(all_symbols))),
             loop.run_in_executor(None, run_api_server), # Chạy API server trong một thread
             asyncio.create_task(notification_flush_loop(notifier)), # Add notification flush loop
             asyncio.create_task(summary_loop(notifier)) # Add summary loop
