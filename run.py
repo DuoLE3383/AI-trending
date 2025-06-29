@@ -249,6 +249,16 @@ async def main():
     
     try:
         # --- 1. Khởi tạo các thành phần ---
+        # CẢI TIẾN: Kiểm tra API keys trước khi kết nối để đưa ra lỗi rõ ràng hơn.
+        if not config.API_KEY or not config.API_SECRET:
+            logger.critical("❌ LỖI NGHIÊM TRỌNG: Binance API_KEY hoặc API_SECRET chưa được cấu hình.")
+            logger.critical("Vui lòng tạo một file tên là .env trong thư mục gốc của dự án (cùng cấp với run.py).")
+            logger.critical("Nội dung file .env nên như sau:")
+            logger.critical("BINANCE_API_KEY='your_api_key_here'")
+            logger.critical("BINANCE_API_SECRET='your_api_secret_here'")
+            logger.critical("Bot sẽ thoát ngay bây giờ.")
+            sys.exit(1) # Thoát ứng dụng với mã lỗi
+
         client = await AsyncClient.create(config.API_KEY, config.API_SECRET)
         init_sqlite_db(config.SQLITE_DB_PATH)
         
