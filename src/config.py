@@ -17,7 +17,7 @@ TELEGRAM_MESSAGE_THREAD_ID = os.getenv("TELEGRAM_MESSAGE_THREAD_ID") # ID của 
 # ==============================================================================
 # === 2. DATABASE
 # ==============================================================================
-SQLITE_DB_PATH = "trend_analysis.db"
+SQLITE_DB_PATH = "./src/trend_analysis.db"
 
 # ==============================================================================
 # === 3. SYMBOL & MARKET DATA SETTINGS
