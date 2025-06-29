@@ -4,7 +4,7 @@ import sqlite3
 import logging
 from typing import Dict, Any
 import pandas as pd
-import main.src.config as config
+from . import config
 
 logger = logging.getLogger(__name__)
 
