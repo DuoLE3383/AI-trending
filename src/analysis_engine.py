@@ -12,7 +12,7 @@ from sklearn.preprocessing import LabelEncoder
 
 # Import các biến và hàm cần thiết
 from config import *
-from market_data_handler import get_market_data
+from .market_data_handler import get_market_data
 from binance import AsyncClient
 
 logger = logging.getLogger(__name__)
