@@ -20,7 +20,7 @@ from src.telegram_handler import TelegramHandler
 from src.notifications import NotificationHandler
 from src.performance_analyzer import get_performance_stats
 from src.updater import get_usdt_futures_symbols, check_signal_outcomes
-from trainer import train_model
+from src.trainer import train_model
 from src.data_simulator import simulate_trade_data  # NEW: Import data simulator
 from src.pairlist_updater import perform_single_pairlist_update, CONFIG_FILE_PATH as PAIRLIST_CONFIG_PATH
 from src.api_server import app as flask_app  # Import the Flask app instance
@@ -42,7 +42,7 @@ async def analysis_loop(client, model, label_encoder, model_features): # Removed
     
     async def process_with_semaphore(symbol: str):
         async with semaphore:
-            if config.STRATEGY_MODE == 'Elliotv8':
+            if config.STRATEGY_MODE == 'AI':
                 await perform_elliotv8_analysis(client, symbol)
             else: # Mặc định là 'AI'
                 await perform_ai_fallback_analysis(client, symbol, model, label_encoder, model_features)
@@ -69,8 +69,12 @@ async def signal_check_loop(notifier: NotificationHandler):
     notified_signal_ids = set()
     try:
         with sqlite3.connect(f'file:{config.SQLITE_DB_PATH}?mode=ro', uri=True) as conn:
+            # CẢI TIẾN: Lấy ID của các tín hiệu đã tồn tại để không thông báo lại khi khởi động.
             existing_ids = conn.execute("SELECT rowid FROM trend_analysis WHERE status = 'ACTIVE'").fetchall()
-            notified_signal_ids.update(row['rowid'] for row in existing_ids) # Use row['rowid'] for clarity
+            # SỬA LỖI: fetchall() trả về list of tuples, truy cập bằng index [0].
+            notified_signal_ids.update(row[0] for row in existing_ids)
+            if notified_signal_ids:
+                logger.info(f"Found {len(notified_signal_ids)} existing active signals. They will not be re-notified.")
     except Exception as e:
         logger.error(f"❌ Error initializing signal_check_loop: {e}")
     while True:
@@ -103,8 +107,12 @@ async def outcome_check_loop(notifier: NotificationHandler):
     notified_trade_ids = set()
     try:
         with sqlite3.connect(f'file:{config.SQLITE_DB_PATH}?mode=ro', uri=True) as conn:
+            # CẢI TIẾN: Lấy ID của các giao dịch đã đóng để không thông báo lại khi khởi động.
             closed_trades = conn.execute("SELECT rowid FROM trend_analysis WHERE status != 'ACTIVE'").fetchall()
-            notified_trade_ids.update(row['rowid'] for row in closed_trades) # Use row['rowid'] for clarity
+            # SỬA LỖI: fetchall() trả về list of tuples, truy cập bằng index [0].
+            notified_trade_ids.update(row[0] for row in closed_trades)
+            if notified_trade_ids:
+                logger.info(f"Found {len(notified_trade_ids)} existing closed trades. They will not be re-notified.")
     except Exception as e:
         logger.error(f"❌ Error initializing outcome_check_loop: {e}")
     while True:
@@ -324,6 +332,7 @@ async def main():
             asyncio.create_task(analysis_loop(client, model, label_encoder, model_features)),
             asyncio.create_task(signal_check_loop(notifier)),
             asyncio.create_task(updater_loop(client)),
+            asyncio.create_task(update_loop(notifier)), # THÊM: Chạy vòng lặp tự động cập nhật
             asyncio.create_task(outcome_check_loop(notifier)),
             loop.run_in_executor(None, run_api_server), # Chạy API server trong một thread
             asyncio.create_task(notification_flush_loop(notifier)), # Add notification flush loop
