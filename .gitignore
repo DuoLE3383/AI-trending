@@ -1,0 +1,81 @@
+# ===================================================================
+# ### BẢO MẬT - CÁC FILE CHỨA THÔNG TIN NHẠY CẢM ###
+# Tuyệt đối không đưa những file này lên repository
+# ===================================================================
+
+# File chứa biến môi trường, thường chứa API keys, mật khẩu database
+.env
+*.env
+.env.*
+
+# File cấu hình chứa thông tin nhạy cảm.
+# Cân nhắc bỏ qua 'config.py' nếu file này chỉ load secrets từ .env
+# và không chứa giá trị nhạy cảm nào.
+# config.py
+secrets.ini
+credentials.json
+*.pem
+*keys.json
+
+# Log files có thể chứa thông tin về hoạt động hoặc lỗi nhạy cảm
+*.log
+logs/
+*.log.*
+
+# File database SQLite chứa dữ liệu giao dịch hoặc phân tích của bạn
+*.db
+*.sqlite
+*.sqlite3
+
+# ===================================================================
+# ### MÔI TRƯỜNG ẢO PYTHON (VIRTUAL ENVIRONMENT) ###
+# Thư mục này chứa các thư viện đã cài đặt, không cần đưa lên repo
+# vì người khác có thể tự cài từ file requirements.txt
+# ===================================================================
+venv/
+env/
+.venv/
+ENV/
+venv.bak/
+env.bak/
+
+# ===================================================================
+# ### FILE TẠM VÀ FILE BIÊN DỊCH CỦA PYTHON ###
+# ===================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ===================================================================
+# ### FILE CỦA IDE VÀ EDITOR ###
+# Cấu hình riêng của mỗi người, không cần chia sẻ
+# ===================================================================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ===================================================================
+# ### FILE BUILD VÀ ĐÓNG GÓI ###
+# Sinh ra khi bạn build hoặc phân phối package
+# ===================================================================
+build/
+dist/
+*.egg-info/
+
+# ===================================================================
+# ### FILE HỆ THỐNG ###
+# File tạm do hệ điều hành tạo ra
+# ===================================================================
+.DS_Store
+Thumbs.db
+
+# ===================================================================
+# ### FRONTEND / NODE.JS ###
+# ===================================================================
+node_modules/
+.next/
+out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
