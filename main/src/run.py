@@ -5,6 +5,7 @@ import asyncio
 import sqlite3
 import joblib
 import os # Import os để thực hiện restart
+from binance import AsyncClient
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -44,20 +45,18 @@ logger = logging.getLogger(__name__)
 
 # --- BOT LOOPS ---
 
-async def analysis_loop(symbols, model, label_encoder, model_features):
+async def analysis_loop(client: AsyncClient, symbols: set, model, label_encoder, model_features):
     """LOOP 1: Phân tích thị trường, chọn chiến lược từ config."""
     logger.info(f"✅ Analysis Loop starting (Strategy: {config.STRATEGY_MODE})")
     semaphore = asyncio.Semaphore(config.CONCURRENT_REQUESTS)
     
-    # Client sẽ được truyền vào khi cần thiết trong hàm phân tích
     async def process_with_semaphore(symbol: str):
         async with semaphore:
-            # Tạo client mới trong mỗi lần xử lý hoặc truyền vào
-            async with AsyncClient() as client:
-                if config.STRATEGY_MODE == 'Elliotv8':
-                    await perform_elliotv8_analysis(client, symbol)
-                else: # Mặc định là 'AI'
-                    await perform_ai_fallback_analysis(client, symbol, model, label_encoder, model_features)
+            # Client được truyền vào từ hàm main, giúp cải thiện hiệu suất.
+            if config.STRATEGY_MODE == 'Elliotv8':
+                await perform_elliotv8_analysis(client, symbol)
+            else: # Mặc định là 'AI'
+                await perform_ai_fallback_analysis(client, symbol, model, label_encoder, model_features)
 
     while True:
         try:
@@ -96,14 +95,12 @@ async def signal_check_loop(notifier: NotificationHandler):
             logger.error(f"❌ Error in signal_check_loop: {e}", exc_info=True)
         await asyncio.sleep(config.SIGNAL_CHECK_INTERVAL_SECONDS)
 
-async def updater_loop():
+async def updater_loop(client: AsyncClient):
     """LOOP 3: Cập nhật trạng thái của các lệnh đang mở (TP/SL)."""
     logger.info(f"✅ Trade Updater Loop starting...")
     while True:
         try:
-            # Tạo client mới trong mỗi lần chạy để đảm bảo kết nối mới
-            async with AsyncClient() as client:
-                await check_signal_outcomes(client)
+            await check_signal_outcomes(client)
         except Exception as e:
             logger.error(f"❌ A critical error in updater_loop: {e}", exc_info=True)
         await asyncio.sleep(config.UPDATER_INTERVAL_SECONDS)
@@ -218,49 +215,55 @@ async def update_loop(notifier: NotificationHandler):
 # --- MAIN FUNCTION ---
 async def main():
     logger.info("--- 🚀 Initializing Bot ---")
-    running_tasks = [] 
+    running_tasks = []
+    client = None # Khởi tạo client là None
     
     try:
-        # --- 1. Khởi tạo các thành phần ---
+        # --- 1. Khởi tạo các thành phần cốt lõi ---
         init_sqlite_db(config.SQLITE_DB_PATH)
         tg_handler = TelegramHandler(api_token=config.TELEGRAM_BOT_TOKEN)
         notifier = NotificationHandler(telegram_handler=tg_handler)
         
-        # --- 2. Tải và Huấn luyện Model ---
-        logger.info("🧠 Loading/Training AI Model...")
-        model, label_encoder, model_features = None, None, None
-        try:
-            model, label_encoder, model_features = (joblib.load("model_trend.pkl"), joblib.load("trend_label_encoder.pkl"), joblib.load("model_features.pkl"))
-            logger.info("✅ AI Model loaded from files.")
-        except FileNotFoundError:
-            logger.warning("⚠️ Model files not found. Performing initial training...")
-            loop = asyncio.get_running_loop()
-            initial_accuracy = await loop.run_in_executor(None, train_model)
-            if initial_accuracy is not None:
-                logger.info("Reloading model after initial training...")
+        # --- 2. Tạo một client Binance duy nhất, có thể tái sử dụng ---
+        client = await AsyncClient.create()
+
+        # --- 3. Tải/Huấn luyện Model AI (chỉ khi cần) ---
+        model, label_encoder, model_features, initial_accuracy = None, None, None, None
+        if config.STRATEGY_MODE == 'AI':
+            logger.info("🧠 Chiến lược AI được chọn. Đang tải/huấn luyện Model...")
+            try:
                 model, label_encoder, model_features = (joblib.load("model_trend.pkl"), joblib.load("trend_label_encoder.pkl"), joblib.load("model_features.pkl"))
-        
-        # --- 3. Gửi thông báo khởi động ---
-        async with AsyncClient() as client:
-            all_symbols = await get_usdt_futures_symbols(client)
+                logger.info("✅ Model AI đã được tải thành công từ tệp.")
+            except FileNotFoundError:
+                logger.warning("⚠️ Không tìm thấy tệp model. Đang thực hiện huấn luyện ban đầu...")
+                loop = asyncio.get_running_loop()
+                initial_accuracy = await loop.run_in_executor(None, train_model)
+                if initial_accuracy is not None:
+                    logger.info(f"✅ Huấn luyện ban đầu hoàn tất. Độ chính xác: {initial_accuracy:.2f}. Đang tải lại model...")
+                    model, label_encoder, model_features = (joblib.load("model_trend.pkl"), joblib.load("trend_label_encoder.pkl"), joblib.load("model_features.pkl"))
+                else:
+                    logger.critical("❌ Huấn luyện model ban đầu thất bại. Bot không thể chạy ở chế độ 'AI' nếu không có model. Đang thoát.")
+                    return # Thoát một cách an toàn
+
+        # --- 4. Lấy danh sách cặp giao dịch và gửi thông báo khởi động ---
+        all_symbols = await get_usdt_futures_symbols(client)
         
         if not all_symbols:
-            logger.critical("Could not fetch symbols. Exiting.")
+            logger.critical("❌ Không thể lấy danh sách cặp giao dịch từ Binance. Đang thoát.")
             return
 
-        # Accuracy chỉ có từ lần training đầu tiên, nếu tải từ file thì là None
-        await notifier.send_startup_notification(len(all_symbols), locals().get('initial_accuracy', None))
+        await notifier.send_startup_notification(len(all_symbols), initial_accuracy)
         
-        # --- 4. Khởi chạy tất cả các vòng lặp nền ---
+        # --- 5. Khởi chạy tất cả các vòng lặp nền ---
         logger.info("--- 🟢 Bot is now running. All loops are active. ---")
         
         running_tasks = [
-            asyncio.create_task(analysis_loop(all_symbols, model, label_encoder, model_features)),
+            asyncio.create_task(analysis_loop(client, all_symbols, model, label_encoder, model_features)),
             asyncio.create_task(signal_check_loop(notifier)),
-            asyncio.create_task(updater_loop()),
+            asyncio.create_task(updater_loop(client)),
             asyncio.create_task(outcome_check_loop(notifier)),
-            asyncio.create_task(training_loop(notifier, len(all_symbols))),
-            # --- TÍNH NĂNG MỚI: Kích hoạt vòng lặp tự động cập nhật ---
+            # Giả định training_loop cũng cần client để lấy dữ liệu lịch sử
+            asyncio.create_task(training_loop(client, notifier, len(all_symbols))),
             asyncio.create_task(update_loop(notifier))
         ]
         await asyncio.gather(*running_tasks)
@@ -271,18 +274,22 @@ async def main():
         else:
             logger.critical(f"A fatal error occurred in the main execution block: {main_exc}", exc_info=True)
     finally:
-        # --- CƠ CHẾ TẮT MÁY AN TOÀN ---
+        # --- CƠ CHẾ TẮT AN TOÀN ---
         logger.info("--- ⭕ Bot application shutting down... ---")
         
         # 1. Hủy tất cả các tác vụ đang chạy
         for task in running_tasks:
             task.cancel()
         
-        # 2. Chờ cho tất cả các tác vụ được hủy xong
+        # 2. Chờ cho tất cả các tác vụ hoàn tất việc hủy
         if running_tasks:
             await asyncio.gather(*running_tasks, return_exceptions=True)
             logger.info("All loops have been cancelled.")
-            
+        
+        # 3. Đóng kết nối client với Binance
+        if client:
+            await client.close_connection()
+            logger.info("Binance client connection closed.")
         logger.info("--- Shutdown complete. ---")
 
 if __name__ == "__main__":
