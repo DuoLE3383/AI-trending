@@ -11,7 +11,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 
 # Import các biến và hàm cần thiết
-from config import *
+from main.src.config import *
 from market_data_handler import get_market_data
 from binance import AsyncClient
 

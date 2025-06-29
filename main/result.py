@@ -3,7 +3,7 @@
 import sqlite3
 import logging
 from collections import Counter
-import config
+import main.src.config as config
 
 logger = logging.getLogger(__name__)
 

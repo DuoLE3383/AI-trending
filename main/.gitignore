@@ -1,70 +1,70 @@
-# ===================================================================
-# ### BẢO MẬT - CÁC FILE CHỨA THÔNG TIN NHẠY CẢM ###
-# Tuyệt đối không đưa những file này lên repository
-# ===================================================================
+# # ===================================================================
+# # ### BẢO MẬT - CÁC FILE CHỨA THÔNG TIN NHẠY CẢM ###
+# # Tuyệt đối không đưa những file này lên repository
+# # ===================================================================
 
-# File chứa biến môi trường, thường chứa API keys, mật khẩu database
-.env
-*.env
-.env.*
+# # File chứa biến môi trường, thường chứa API keys, mật khẩu database
+# .env
+# *.env
+# .env.*
 
-# File cấu hình chứa thông tin nhạy cảm. 
-# Xem "Mẹo hay" ở dưới để biết cách quản lý file config an toàn.
-config.py
-secrets.ini
-credentials.json
-*.pem
-*keys.json
+# # File cấu hình chứa thông tin nhạy cảm. 
+# # Xem "Mẹo hay" ở dưới để biết cách quản lý file config an toàn.
+# config.py
+# secrets.ini
+# credentials.json
+# *.pem
+# *keys.json
 
-# Log files có thể chứa thông tin về hoạt động hoặc lỗi nhạy cảm
-*.log
-logs/
-*.log.*
+# # Log files có thể chứa thông tin về hoạt động hoặc lỗi nhạy cảm
+# *.log
+# logs/
+# *.log.*
 
-# File database SQLite chứa dữ liệu giao dịch hoặc phân tích của bạn
-*.db
-*.sqlite
-*.sqlite3
+# # File database SQLite chứa dữ liệu giao dịch hoặc phân tích của bạn
+# *.db
+# *.sqlite
+# *.sqlite3
 
-# ===================================================================
-# ### MÔI TRƯỜNG ẢO PYTHON (VIRTUAL ENVIRONMENT) ###
-# Thư mục này chứa các thư viện đã cài đặt, không cần đưa lên repo
-# vì người khác có thể tự cài từ file requirements.txt
-# ===================================================================
-venv/
-env/
-.venv/
-ENV/
-venv.bak/
-env.bak/
+# # ===================================================================
+# # ### MÔI TRƯỜNG ẢO PYTHON (VIRTUAL ENVIRONMENT) ###
+# # Thư mục này chứa các thư viện đã cài đặt, không cần đưa lên repo
+# # vì người khác có thể tự cài từ file requirements.txt
+# # ===================================================================
+# venv/
+# env/
+# .venv/
+# ENV/
+# venv.bak/
+# env.bak/
 
-# ===================================================================
-# ### FILE TẠM VÀ FILE BIÊN DỊCH CỦA PYTHON ###
-# ===================================================================
-__pycache__/
-*.py[cod]
-*$py.class
+# # ===================================================================
+# # ### FILE TẠM VÀ FILE BIÊN DỊCH CỦA PYTHON ###
+# # ===================================================================
+# __pycache__/
+# *.py[cod]
+# *$py.class
 
-# ===================================================================
-# ### FILE CỦA IDE VÀ EDITOR ###
-# Cấu hình riêng của mỗi người, không cần chia sẻ
-# ===================================================================
-.vscode/
-.idea/
-*.sublime-project
-*.sublime-workspace
+# # ===================================================================
+# # ### FILE CỦA IDE VÀ EDITOR ###
+# # Cấu hình riêng của mỗi người, không cần chia sẻ
+# # ===================================================================
+# .vscode/
+# .idea/
+# *.sublime-project
+# *.sublime-workspace
 
-# ===================================================================
-# ### FILE BUILD VÀ ĐÓNG GÓI ###
-# Sinh ra khi bạn build hoặc phân phối package
-# ===================================================================
-build/
-dist/
-*.egg-info/
+# # ===================================================================
+# # ### FILE BUILD VÀ ĐÓNG GÓI ###
+# # Sinh ra khi bạn build hoặc phân phối package
+# # ===================================================================
+# build/
+# dist/
+# *.egg-info/
 
-# ===================================================================
-# ### FILE HỆ THỐNG ###
-# File tạm do hệ điều hành tạo ra
-# ===================================================================
-.DS_Store # macOS
-Thumbs.db # Windows
+# # ===================================================================
+# # ### FILE HỆ THỐNG ###
+# # File tạm do hệ điều hành tạo ra
+# # ===================================================================
+# .DS_Store # macOS
+# Thumbs.db # Windows

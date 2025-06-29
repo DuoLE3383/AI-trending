@@ -32,7 +32,7 @@ except ImportError:
     from performance_analyzer import get_performance_stats
     from trainer import train_model
     from training_loop import training_loop
-    import config
+    import main.src.config as config
 
 
 # --- Logging Configuration ---

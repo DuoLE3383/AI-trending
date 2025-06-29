@@ -1,11 +1,11 @@
-# report.py
+s# report.py
 import asyncio
 import logging
 from binance.client import Client
 from dotenv import load_dotenv
 
 load_dotenv()
-import config
+import main.src.config as config
 
 from updater import check_signal_outcomes
 from result import get_win_loss_stats
