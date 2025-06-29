@@ -3,8 +3,8 @@ import sqlite3
 import logging
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import main.src.config as config # Import config để lấy đường dẫn DB
-from performance_analyzer import get_performance_stats # Import hàm tính toán đã có
+import config as config # Import config để lấy đường dẫn DB
+from .performance_analyzer import get_performance_stats # Import hàm tính toán đã có
 # --- Chạy Server ---
 app = Flask(__name__)
 # Kích hoạt CORS để React app có thể gọi API từ một domain khác (khi phát triển)

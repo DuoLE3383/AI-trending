@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import classification_report # CẬP NHẬT: Thêm thư viện để báo cáo chi tiết
 import joblib
-import config
+import src.config
 
 logger = logging.getLogger(__name__)
 

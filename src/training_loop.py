@@ -1,9 +1,9 @@
 # training_loop.py (Phiên bản đã sửa lỗi gọi hàm)
 import asyncio
 import logging
-from trainer import train_model
-from notifications import NotificationHandler
-from performance_analyzer import get_performance_stats
+from ml.trainer import train_model
+from .notifications import NotificationHandler
+from .performance_analyzer import get_performance_stats
 
 logger = logging.getLogger(__name__)
 
