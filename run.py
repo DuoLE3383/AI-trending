@@ -13,18 +13,18 @@ load_dotenv()
 
 # --- Project Module Imports ---
 from binance import AsyncClient
-import src.config as config # Import config module to access configuration settings
-from database_handler import init_sqlite_db
-from analysis_engine import perform_ai_fallback_analysis, perform_elliotv8_analysis
-from telegram_handler import TelegramHandler
-from notifications import NotificationHandler
-from performance_analyzer import get_performance_stats
-from updater import get_usdt_futures_symbols, check_signal_outcomes
-from ml.trainer import train_model
-from training_loop import training_loop
-from data_simulator import simulate_trade_data # NEW: Import data simulator
-from pairlist_updater import perform_single_pairlist_update, CONFIG_FILE_PATH as PAIRLIST_CONFIG_PATH
-from api_server import app as flask_app # Import the Flask app instance
+from src import config  # Import config module to access configuration settings
+from src.database_handler import init_sqlite_db
+from src.analysis_engine import perform_ai_fallback_analysis, perform_elliotv8_analysis
+from src.telegram_handler import TelegramHandler
+from src.notifications import NotificationHandler
+from src.performance_analyzer import get_performance_stats
+from src.updater import get_usdt_futures_symbols, check_signal_outcomes
+from src.ml.trainer import train_model
+from src.training_loop import training_loop
+from src.data_simulator import simulate_trade_data  # NEW: Import data simulator
+from src.pairlist_updater import perform_single_pairlist_update, CONFIG_FILE_PATH as PAIRLIST_CONFIG_PATH
+from src.api_server import app as flask_app  # Import the Flask app instance
 
 # --- Logging Configuration ---
 logging.basicConfig(
