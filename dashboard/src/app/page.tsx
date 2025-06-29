@@ -61,7 +61,7 @@ export default function Home() {
         // Validate API_BASE_URL - Consider moving this validation to build time
         if (!API_BASE_URL) {
             console.error("API_BASE_URL is not defined. Please check your .env.local file.");
-            setError("Cấu hình API không đúng. Vui lòng kiểm tra biến môi trường.");
+            setError("API Fail.");
             setStats(MOCK_STATS);
             setActiveTrades(MOCK_TRADES);
             setClosedTrades(MOCK_TRADES);
@@ -84,7 +84,7 @@ export default function Home() {
         anyError = await handleFetchResult<Trade[]>(results[2], setClosedTrades, MOCK_TRADES, "Lỗi khi lấy lịch sử giao dịch (closed trades):") || anyError;
 
         if (anyError) {
-            setError("Không thể kết nối đến một hoặc nhiều dịch vụ. Hiển thị dữ liệu dự phòng cho các thành phần bị lỗi.");
+            setError("CConnection Error: Unable to fetch data from the server. Please check your API connection.");
         } else {
             setError(null);
         }

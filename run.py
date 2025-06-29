@@ -336,18 +336,61 @@ async def main():
         # Set logging level for the existing logger
         logger.setLevel(logging.DEBUG)
         
-        
-        # CẢI TIẾN: Tạo và thêm các tác vụ vào danh sách quản lý
-        running_tasks = [ # Removed all_symbols from analysis_loop as it will fetch its own
-            asyncio.create_task(analysis_loop(client, model, label_encoder, model_features)),
-            asyncio.create_task(signal_check_loop(notifier)),
-            asyncio.create_task(updater_loop(client)),
-            asyncio.create_task(update_loop(notifier)), # THÊM: Chạy vòng lặp tự động cập nhật
-            asyncio.create_task(outcome_check_loop(notifier)),
-            loop.run_in_executor(None, run_api_server), # Chạy API server trong một thread
-            asyncio.create_task(notification_flush_loop(notifier)), # Add notification flush loop
-            asyncio.create_task(summary_loop(notifier)) # Add summary loop
-        ]
+        # CẢI TIẾN: Khởi chạy các chức năng dựa trên file config
+        running_tasks = []
+        logger.info("⚙️  Checking configuration to launch features...")
+
+        if getattr(config, 'ENABLE_ANALYSIS_LOOP', True):
+            running_tasks.append(asyncio.create_task(analysis_loop(client, model, label_encoder, model_features)))
+            logger.info("-> Analysis Loop: [ENABLED]")
+        else:
+            logger.warning("-> Analysis Loop: [DISABLED]")
+
+        if getattr(config, 'ENABLE_SIGNAL_NOTIFICATIONS', True):
+            running_tasks.append(asyncio.create_task(signal_check_loop(notifier)))
+            logger.info("-> New Signal Notifications: [ENABLED]")
+        else:
+            logger.warning("-> New Signal Notifications: [DISABLED]")
+
+        if getattr(config, 'ENABLE_TRADE_UPDATER', True):
+            running_tasks.append(asyncio.create_task(updater_loop(client)))
+            logger.info("-> Trade Updater: [ENABLED]")
+        else:
+            logger.warning("-> Trade Updater: [DISABLED]")
+
+        if getattr(config, 'ENABLE_OUTCOME_NOTIFICATIONS', True):
+            running_tasks.append(asyncio.create_task(outcome_check_loop(notifier)))
+            logger.info("-> Trade Outcome Notifications: [ENABLED]")
+        else:
+            logger.warning("-> Trade Outcome Notifications: [DISABLED]")
+
+        # Vòng lặp dọn dẹp notification chỉ hữu ích khi có ít nhất một loại notification được bật
+        if getattr(config, 'ENABLE_SIGNAL_NOTIFICATIONS', True) or getattr(config, 'ENABLE_OUTCOME_NOTIFICATIONS', True):
+            running_tasks.append(asyncio.create_task(notification_flush_loop(notifier)))
+            logger.info("-> Notification Flush Loop: [ENABLED]")
+
+        if getattr(config, 'ENABLE_AUTO_UPDATE', True):
+            running_tasks.append(asyncio.create_task(update_loop(notifier)))
+            logger.info("-> Auto-Update from Git: [ENABLED]")
+        else:
+            logger.warning("-> Auto-Update from Git: [DISABLED]")
+
+        if getattr(config, 'ENABLE_API_SERVER', True):
+            running_tasks.append(loop.run_in_executor(None, run_api_server))
+            logger.info("-> API Server: [ENABLED]")
+        else:
+            logger.warning("-> API Server: [DISABLED]")
+
+        if getattr(config, 'ENABLE_PERIODIC_SUMMARY', True):
+            running_tasks.append(asyncio.create_task(summary_loop(notifier)))
+            logger.info("-> Periodic Summary: [ENABLED]")
+        else:
+            logger.warning("-> Periodic Summary: [DISABLED]")
+
+        if not running_tasks:
+            logger.critical("❌ All features are disabled in the configuration. Bot has nothing to do. Exiting.")
+            return
+
         await asyncio.gather(*running_tasks)
 
     except (Exception, KeyboardInterrupt) as main_exc:
