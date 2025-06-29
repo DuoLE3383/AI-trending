@@ -5,7 +5,7 @@ from binance.client import Client
 from dotenv import load_dotenv
 
 load_dotenv()
-import main.src.config as config
+import config as config
 
 from updater import check_signal_outcomes
 from result import get_win_loss_stats
