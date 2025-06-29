@@ -13,14 +13,14 @@ load_dotenv()
 
 # --- Project Module Imports ---
 from binance import AsyncClient
-import main.src.config as config
+import config
 from database_handler import init_sqlite_db
 from analysis_engine import perform_ai_fallback_analysis, perform_elliotv8_analysis
 from telegram_handler import TelegramHandler
 from notifications import NotificationHandler
 from performance_analyzer import get_performance_stats
 from updater import get_usdt_futures_symbols, check_signal_outcomes
-from trainer import train_model
+from ml.trainer import train_model
 from training_loop import training_loop
 from data_simulator import simulate_trade_data # NEW: Import data simulator
 from pairlistupdater import perform_single_pairlist_update, CONFIG_FILE_PATH as PAIRLIST_CONFIG_PATH
