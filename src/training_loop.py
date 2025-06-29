@@ -4,30 +4,30 @@ import logging
 from .ml.trainer import train_model
 from .notifications import NotificationHandler
 from .performance_analyzer import get_performance_stats
-
+from . import config as config
 logger = logging.getLogger(__name__)
 
-async def training_loop(notification_handler: NotificationHandler, symbols_count: int):
+async def training_loop(notifier, total_symbols):
+    logger.info("✅ Periodic AI Model Training Loop starting...")
     while True:
+        await asyncio.sleep(config.TRAINING_INTERVAL_SECONDS)
+        logger.info("🤖 Starting periodic model training...")
         try:
-            logger.info("🔁 Starting scheduled model training cycle (every 8 hours)...")
-            
-            # 1. Huấn luyện model
+            # Chạy hàm huấn luyện đồng bộ trong một executor riêng
             loop = asyncio.get_running_loop()
-            logger.info("🚀 Offloading model training to a separate thread...")
-            accuracy = await loop.run_in_executor(None, train_model)
-            logger.info("✅ Training task finished.")
-
-            # 2. Gửi thông báo kết quả training, truyền cả accuracy và symbols_count
-            await notification_handler.send_training_complete_notification(accuracy, symbols_count)
+            new_accuracy = await loop.run_in_executor(None, train_model)
+            
+            if new_accuracy is not None:
+                logger.info(f"✅ Periodic training complete. New accuracy: {new_accuracy:.2f}%")
+                await notifier.send_training_success_notification(new_accuracy, total_symbols)
+            else:
+                # Trường hợp train_model trả về None (ví dụ: không đủ dữ liệu)
+                logger.warning("Periodic training did not produce a new model (e.g., insufficient data).")
+                await notifier.send_training_failed_notification(error="Insufficient data for training.")
 
         except Exception as e:
-            logger.error(f"❌ An error occurred in the training loop: {e}", exc_info=True)
-            # Nếu có lỗi, vẫn cố gắng gửi thông báo lỗi
-            try:
-                await notification_handler.send_training_complete_notification(None, symbols_count)
-            except Exception as notify_err:
-                logger.error(f"❌ Also failed to send error notification: {notify_err}")
-        
-        logger.info("Training cycle finished. Sleeping for 8 hours.")
-        await asyncio.sleep(8 * 60 * 60) # 8 tiếng
+            # === ĐÂY LÀ THAY ĐỔI QUAN TRỌNG NHẤT ===
+            # Thêm exc_info=True để in ra toàn bộ lỗi chi tiết vào console.
+            logger.error(f"❌ An exception occurred during periodic training: {e}", exc_info=True)
+            # Gửi thông báo lỗi tới Telegram
+            await notifier.send_training_failed_notification(error=str(e))

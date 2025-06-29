@@ -1,4 +1,4 @@
-# run.py (Phiên bản đã được bổ sung tính năng tự động cập nhật)
+# run.py (Auto Update Bot)
 import sys
 import logging
 import asyncio
