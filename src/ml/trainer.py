@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import classification_report # CẬP NHẬT: Thêm thư viện để báo cáo chi tiết
 import joblib
-import src.config
+from . import config as config
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,25 @@ def train_model() -> float | None:
     Trả về None nếu có lỗi hoặc không đủ dữ liệu hợp lệ.
     """
     logger.info("🚀 Starting Advanced Model Training...")
+    
+    if df.empty:
+        logger.warning("Training data is empty. Skipping training.")
+        return None # Trả về None để báo hiệu không huấn luyện
+
+    logger.info(f"Loaded {df.shape[0]} records for training.")
+    logger.info("Data types and non-null counts:\n" + str(df.info()))
+    
+    # Thay 'outcome' bằng tên cột kết quả thực tế của bạn (ví dụ: 'signal', 'target')
+    outcome_col = 'outcome' 
+    if outcome_col in df.columns:
+        logger.info(f"Value counts for '{outcome_col}' column:\n" + str(df[outcome_col].value_counts()))
+        # Kiểm tra nếu chỉ có 1 loại kết quả
+        if df[outcome_col].nunique() < 2:
+            logger.error(f"Training failed: Only one class ('{df[outcome_col].unique()[0]}') found in the outcome column. Cannot train.")
+            return None
+    else:
+        logger.error(f"Training failed: The outcome column '{outcome_col}' was not found in the training data!")
+        return None
 
     try:
         with sqlite3.connect(config.SQLITE_DB_PATH) as conn:
