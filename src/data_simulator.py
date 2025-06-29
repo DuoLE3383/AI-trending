@@ -9,10 +9,10 @@ import pandas as pd
 import pandas_ta as ta
 import json # Import json to read config.json directly
 
-from pairlistupdater import perform_single_pairlist_update, CONFIG_FILE_PATH as PAIRLIST_CONFIG_PATH
+from pairlist_updater import perform_single_pairlist_update, CONFIG_FILE_PATH as PAIRLIST_CONFIG_PATH
 
 # Assume config.py exists in the same directory or is importable
-import main.src.config as config
+import src.config as config
 from binance import AsyncClient
 
 # Configure logging

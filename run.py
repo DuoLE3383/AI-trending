@@ -23,7 +23,7 @@ from updater import get_usdt_futures_symbols, check_signal_outcomes
 from ml.trainer import train_model
 from training_loop import training_loop
 from data_simulator import simulate_trade_data # NEW: Import data simulator
-from pairlistupdater import perform_single_pairlist_update, CONFIG_FILE_PATH as PAIRLIST_CONFIG_PATH
+from pairlist_updater import perform_single_pairlist_update, CONFIG_FILE_PATH as PAIRLIST_CONFIG_PATH
 from api_server import app as flask_app # Import the Flask app instance
 
 # --- Logging Configuration ---
