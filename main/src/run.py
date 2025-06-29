@@ -7,6 +7,7 @@ import joblib
 import os # Import os để thực hiện restart
 from binance import AsyncClient
 from dotenv import load_dotenv
+from . import config
 
 load_dotenv()
 
@@ -21,7 +22,6 @@ try:
     from analysis.performance import get_performance_stats
     from models.trainer import train_model
     from models.training_loop import training_loop
-    import config
 except ImportError:
     # Fallback cho cấu trúc cũ nếu cần
     from database_handler import init_sqlite_db
