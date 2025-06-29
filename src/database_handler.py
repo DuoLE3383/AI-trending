@@ -108,7 +108,7 @@ def init_sqlite_db(db_path: str):
 # --- Cách sử dụng ---
 if __name__ == '__main__':
     try:
-        from main.src.config import SQLITE_DB_PATH
+        from config import SQLITE_DB_PATH
         logger.info(f"Initializing database at {SQLITE_DB_PATH}...")
         init_sqlite_db(SQLITE_DB_PATH)
     except ImportError:

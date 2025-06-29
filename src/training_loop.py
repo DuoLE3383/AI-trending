@@ -8,9 +8,6 @@ from .performance_analyzer import get_performance_stats
 logger = logging.getLogger(__name__)
 
 async def training_loop(notification_handler: NotificationHandler, symbols_count: int):
-    """
-    Vòng lặp chạy việc huấn luyện model định kỳ và gửi thông báo.
-    """
     while True:
         try:
             logger.info("🔁 Starting scheduled model training cycle (every 8 hours)...")
