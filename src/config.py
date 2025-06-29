@@ -96,6 +96,9 @@ SIGNAL_CHECK_INTERVAL_SECONDS = 60 # 1 phút (Để nhận thông báo tín hi�
 # Tần suất vòng lặp cập nhật trạng thái trade TP/SL (Đã rút ngắn)
 UPDATER_INTERVAL_SECONDS = 300 # 5 phút (Để kiểm tra thắng/thua nhanh hơn)
 
+# Tần suất vòng lặp huấn luyện lại model AI (Đã tăng lên)
+TRAINING_INTERVAL_SECONDS = 14400 # 4 giờ
+
 # Tần suất vòng lặp gửi báo cáo tổng kết (Đã tăng lên)
 SUMMARY_INTERVAL_SECONDS = 14400 # 4 giờ (Để tránh spam báo cáo)
 

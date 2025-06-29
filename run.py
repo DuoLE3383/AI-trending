@@ -20,7 +20,7 @@ from src.telegram_handler import TelegramHandler
 from src.notifications import NotificationHandler
 from src.performance_analyzer import get_performance_stats
 from src.updater import get_usdt_futures_symbols, check_signal_outcomes
-from src.ml.trainer import train_model
+from trainer import train_model
 from src.training_loop import training_loop
 from src.data_simulator import simulate_trade_data  # NEW: Import data simulator
 from src.pairlist_updater import perform_single_pairlist_update, CONFIG_FILE_PATH as PAIRLIST_CONFIG_PATH
