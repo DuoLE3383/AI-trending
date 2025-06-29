@@ -3,8 +3,8 @@ import logging
 import sqlite3
 import pandas as pd
 from binance import AsyncClient
-import config as config
-from market_data_handler import get_market_data
+from . import config  # Import config to access trading settings and database path
+from .market_data_handler import get_market_data
 import asyncio
 from typing import List, Dict, Any
 
