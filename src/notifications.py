@@ -5,7 +5,8 @@ import asyncio
 from .telegram_handler import TelegramHandler
 import httpx # Import httpx to catch its specific exceptions
 import json # Import json for parsing Telegram API error responses
-import config as config
+from .config import config
+import pandas *
 import re
 import pandas as pd
 
