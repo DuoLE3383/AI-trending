@@ -1,0 +1,4 @@
+Host github-ai
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/ai_deploy_key

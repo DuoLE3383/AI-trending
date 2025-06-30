@@ -76,7 +76,7 @@ def train_model() -> float | None:
 
     df.dropna(subset=initial_features + [target], inplace=True)
 
-    if len(df) < 50: # Đặt một ngưỡng tối thiểu cao hơn cho dữ liệu sạch
+    if len(df) < 10: # Đặt một ngưỡng tối thiểu cao hơn cho dữ liệu sạch
         logger.warning(f"⚠️ Not enough clean data. Only {len(df)} rows. Minimum 50 required.")
         return None
 

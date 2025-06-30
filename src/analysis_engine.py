@@ -11,7 +11,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 
 # Import các biến và hàm cần thiết
-from . import config
+from . import config 
 from .market_data_handler import get_market_data
 from binance import AsyncClient
 
@@ -60,36 +60,49 @@ async def perform_ai_fallback_analysis(
     """
     Hàm chính cho chiến lược AI/Fallback, đã được hoàn thiện.
     """
+        
+
     try:
-        df = await get_market_data(client, symbol, TIMEFRAME, limit=500)
-        if df is None or df.empty or len(df) < EMA_SLOW: return
+        # Dòng này đã đúng từ lần sửa trước
+        df = await get_market_data(client, symbol, config.TIMEFRAME, limit=500)
+
+        # SỬA LỖI: Thêm `config.` vào trước EMA_SLOW
+        if df is None or df.empty or len(df) < config.EMA_SLOW: 
+            return
 
         # 1. Tính toán tất cả các chỉ báo kỹ thuật
-        df.ta.ema(length=EMA_FAST, append=True)
-        df.ta.ema(length=EMA_MEDIUM, append=True)
-        df.ta.ema(length=EMA_SLOW, append=True)
-        df.ta.rsi(length=RSI_PERIOD, append=True)
-        df.ta.bbands(length=BBANDS_PERIOD, std=BBANDS_STD_DEV, append=True)
-        df.ta.atr(length=ATR_PERIOD, append=True)
-        df.ta.sma(length=VOLUME_SMA_PERIOD, close='volume', prefix='VOLUME', append=True)
-        df.ta.macd(fast=MACD_FAST_PERIOD, slow=MACD_SLOW_PERIOD, signal=MACD_SIGNAL_PERIOD, append=True)
-        df.ta.adx(length=ADX_PERIOD, append=True)
+        # SỬA LỖI: Thêm `config.` vào tất cả các tham số
+        df.ta.ema(length=config.EMA_FAST, append=True)
+        df.ta.ema(length=config.EMA_MEDIUM, append=True)
+        df.ta.ema(length=config.EMA_SLOW, append=True)
+        df.ta.rsi(length=config.RSI_PERIOD, append=True)
+        df.ta.bbands(length=config.BBANDS_PERIOD, std=config.BBANDS_STD_DEV, append=True)
+        df.ta.atr(length=config.ATR_PERIOD, append=True)
+        df.ta.sma(length=config.VOLUME_SMA_PERIOD, close='volume', prefix='VOLUME', append=True)
+        df.ta.macd(fast=config.MACD_FAST_PERIOD, slow=config.MACD_SLOW_PERIOD, signal=config.MACD_SIGNAL_PERIOD, append=True)
+        df.ta.adx(length=config.ADX_PERIOD, append=True)
         
         last = df.iloc[-1]
         price = last.get('close')
-        if price is None: return
+        if price is None: 
+            return
 
         # 2. Áp dụng các bộ lọc cơ bản
-        atr_value = last.get(f'ATRr_{ATR_PERIOD}')
-        if atr_value is None or atr_value == 0: return
-        if (atr_value / price) * 100 < MIN_ATR_PERCENT: return
+        # SỬA LỖI: Thêm `config.` vào các tham số
+        atr_value = last.get(f'ATRr_{config.ATR_PERIOD}')
+        if atr_value is None or atr_value == 0: 
+            return
+        if (atr_value / price) * 100 < config.MIN_ATR_PERCENT: 
+            return
+        
         current_volume = last.get('volume')
-        volume_sma = last.get(f'VOLUME_SMA_{VOLUME_SMA_PERIOD}')
-        if current_volume is None or volume_sma is None or current_volume < (volume_sma * MIN_VOLUME_RATIO): return
+        volume_sma = last.get(f'VOLUME_SMA_{config.VOLUME_SMA_PERIOD}')
+        if current_volume is None or volume_sma is None or current_volume < (volume_sma * config.MIN_VOLUME_RATIO): 
+            return
 
-        trend = TREND_SIDEWAYS
-        analysis_method = ""
-
+            # SỬA LỖI: Thêm `config.` vào hằng số xu hướng
+            trend = config.TREND_SIDEWAYS
+            analysis_method = ""
         # 3. CHỌN CHẾ ĐỘ PHÂN TÍCH
         if all([model, label_encoder, model_features]):
             analysis_method = "AI"
@@ -130,7 +143,7 @@ async def perform_ai_fallback_analysis(
             logger.info(f"{symbol}: ({analysis_method}) Analysis complete. Trend is '{trend}', no strong signal generated.")
 
     except Exception as e:
-        logger.error(f"❌ FAILED TO PROCESS SYMBOL {symbol} with AI/Fallback: {e}", exc_info=True)
+        ogger.error(f"❌ FAILED TO PROCESS SYMBOL {symbol} with AI/Fallback: {e}", exc_info=True)
 
 
 # === CHIẾN LƯỢC 2: ELLIOTV8 =================================================

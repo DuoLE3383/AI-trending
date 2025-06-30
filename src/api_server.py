@@ -81,5 +81,5 @@ def get_trades():
 
 if __name__ == '__main__':
     logger.info("🚀 Starting Flask API server for Trading Bot Dashboard (standalone mode)...")
-    # Chạy server ở địa chỉ 127.0.0.1 (localhost) và cổng 5000
+    # Chạy server ở địa chỉ 127.0.0.1 (localhost) và cổng 3000
     app.run(host='0.0.0.0', port=5000, debug=False)

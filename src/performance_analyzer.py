@@ -34,13 +34,15 @@ def get_performance_stats(by_symbol: bool = False) -> Dict[str, Any]:
 
         if by_symbol:
             # Group by symbol and calculate stats for each group
-            symbol_stats_df = df.groupby('symbol').apply(lambda x: pd.Series({
+            symbol_stats_df = df.groupby('symbol').apply(lambda x: pd.Series({  
+
+            
                 'total_trades': len(x),
                 'wins': int(x['is_win'].sum()),
                 'losses': int(len(x) - x['is_win'].sum()),
                 'win_rate': (x['is_win'].sum() / len(x)) * 100 if len(x) > 0 else 0.0,
-                'net_pnl_percentage': x['pnl_percentage'].sum() if 'pnl_percentage' in x else 0.0
-            }))
+                'net_pnl_percentage': x['pnl_percentage'].sum() if 'pnl_percentage' in x else 0.0}), include_groups=False)
+           
             
             symbol_stats = symbol_stats_df.to_dict('index')
             logger.info(f"Per-symbol performance stats calculated for {len(symbol_stats)} symbols.")
