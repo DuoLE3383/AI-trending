@@ -1,23 +1,23 @@
 import sqlite3
 import logging
+import os # NEW: Import the os module for path handling
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import create_access_token, jwt_required, JWTManager, get_jwt, get_jwt_identity
 from functools import wraps
 
-# Assuming these are in the same directory or a sub-module
-# You might need to adjust imports based on your project structure
-# from . import config
-# from .performance_analyzer import get_performance_stats
+# --- CORRECTED DATABASE PATH LOGIC ---
+# This ensures the server always looks for the database in its own directory,
+# preventing path-related errors.
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(SCRIPT_DIR, 'trading_bot.db')
 
-# --- Mocked config and functions for standalone execution ---
 class MockConfig:
-    SQLITE_DB_PATH = 'trading_bot.db'
+    SQLITE_DB_PATH = DB_PATH # Use the robust, absolute path
 config = MockConfig()
 
 def get_performance_stats():
-    # In a real scenario, this would calculate stats.
     return {'win_rate': 65.5, 'total_completed_trades': 120, 'wins': 78, 'losses': 42}
 # --- End of Mock ---
 
@@ -25,7 +25,6 @@ def get_performance_stats():
 app = Flask(__name__)
 
 # --- JWT Configuration ---
-# IMPORTANT: Change this secret key in a real application!
 app.config["JWT_SECRET_KEY"] = "a-super-secret-key-that-is-long-and-random-for-admin" 
 jwt = JWTManager(app)
 
@@ -50,11 +49,12 @@ def admin_required():
     return wrapper
 
 def get_db_connection():
+    # This now connects to the database using the absolute path.
     conn = sqlite3.connect(config.SQLITE_DB_PATH, uri=True) 
     conn.row_factory = sqlite3.Row
     return conn
 
-# --- Login Endpoint (Updated to include role in token) ---
+# --- Login Endpoint ---
 @app.route('/api/login', methods=['POST'])
 def login():
     username = request.json.get('username', None)
@@ -68,37 +68,24 @@ def login():
     conn.close()
 
     if user and check_password_hash(user['password_hash'], password):
-        # Add role to the JWT claims
         additional_claims = {"role": user["role"]}
         access_token = create_access_token(identity=username, additional_claims=additional_claims)
         return jsonify(access_token=access_token)
     
     return jsonify({"msg": "Bad username or password"}), 401
 
-# --- NEW: Admin User Management Endpoints ---
-
-@app.route('/api/admin/users', methods=['GET'])
-@admin_required()
-def get_all_users():
-    """Returns a list of all users (excluding passwords)."""
-    conn = get_db_connection()
-    users = conn.execute('SELECT id, username, role FROM users').fetchall()
-    conn.close()
-    return jsonify([dict(user) for user in users])
-
-@app.route('/api/admin/users', methods=['POST'])
-@admin_required()
-def create_user():
-    """Creates a new user."""
+# --- NEW: Public Registration Endpoint ---
+@app.route('/api/register', methods=['POST'])
+def register():
+    """Creates a new user with a 'user' role."""
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
-    role = data.get('role', 'user') # Defaults to 'user' if not provided
+    # New users created via this public endpoint always get the 'user' role
+    role = 'user' 
 
     if not username or not password:
         return jsonify({"msg": "Username and password are required"}), 400
-    if role not in ['admin', 'user']:
-        return jsonify({"msg": "Invalid role specified"}), 400
 
     hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
     
@@ -118,6 +105,48 @@ def create_user():
 
     return jsonify({"msg": f"User '{username}' created successfully"}), 201
 
+
+# --- Admin User Management Endpoints ---
+@app.route('/api/admin/users', methods=['GET'])
+@admin_required()
+def get_all_users():
+    """Returns a list of all users (excluding passwords)."""
+    conn = get_db_connection()
+    users = conn.execute('SELECT id, username, role FROM users').fetchall()
+    conn.close()
+    return jsonify([dict(user) for user in users])
+
+@app.route('/api/admin/users', methods=['POST'])
+@admin_required()
+def create_user_by_admin():
+    """Creates a new user (admin can specify role)."""
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+    role = data.get('role', 'user')
+
+    if not username or not password:
+        return jsonify({"msg": "Username and password are required"}), 400
+    if role not in ['admin', 'user']:
+        return jsonify({"msg": "Invalid role specified"}), 400
+
+    hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
+    
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+            (username, hashed_password, role)
+        )
+        conn.commit()
+    except sqlite3.IntegrityError:
+        conn.close()
+        return jsonify({"msg": f"User '{username}' already exists"}), 409
+    finally:
+        if conn:
+            conn.close()
+    return jsonify({"msg": f"User '{username}' created successfully by admin"}), 201
+
 @app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
 @admin_required()
 def delete_user(user_id):
@@ -126,7 +155,6 @@ def delete_user(user_id):
     conn = get_db_connection()
     user_to_delete = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
 
-    # Prevent admin from deleting themselves
     if user_to_delete and user_to_delete['username'] == current_user_identity:
         conn.close()
         return jsonify({"msg": "You cannot delete your own account."}), 403
@@ -141,26 +169,24 @@ def delete_user(user_id):
     return jsonify({"msg": f"User with ID {user_id} deleted."}), 200
 
 
-# --- Protected Data Endpoints (No changes needed here) ---
+# --- Protected Data Endpoints ---
 @app.route('/api/stats', methods=['GET'])
 @jwt_required()
 def get_stats():
-    # ... same as before
     stats = get_performance_stats()
     return jsonify(stats)
 
 @app.route('/api/trades', methods=['GET'])
 @jwt_required()
 def get_trades():
-    # ... same as before
     status_filter = request.args.get('status', 'all')
     limit = request.args.get('limit', 20, type=int)
-    # ... query logic ...
-    return jsonify([]) # Placeholder for brevity
+    # Placeholder for brevity
+    return jsonify([]) 
 
 
 if __name__ == '__main__':
-    # You will need to run `create_user_db.py` (from previous steps)
-    # once to set up the database table with the new 'role' column.
-    logger.info("🚀 Starting Flask API server with Admin features...")
+    # REMINDER: You must run the `create_user_db.py` script once
+    # to create the database file and table before starting this server.
+    logger.info("🚀 Starting Flask API server with Admin and Register features...")
     app.run(host='0.0.0.0', port=8080, debug=False)

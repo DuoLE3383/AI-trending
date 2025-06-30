@@ -263,6 +263,7 @@ class NotificationHandler:
             win_rate = stats.get('win_rate', 0.0)
             net_pnl = stats.get('net_pnl_percentage', 0.0)
 
+            # Format the header and details for the current symbol
             symbol_header = f"*{self.esc(symbol)} Summary*"
             symbol_details = (
                 f"Total Trades: `{total_trades}`\n"
@@ -270,9 +271,11 @@ class NotificationHandler:
                 f"Win Rate: `{win_rate:.2f}%`\n"
                 f"Net PnL: `{net_pnl:+.2f}%`"
             )
+            # Append the formatted block for this symbol to our list of message parts
             message_parts.append("\n\n".join([self.esc("---"), symbol_header, symbol_details]))
-        
-        footer = self.esc("The bot will now start with this historical data for training.")
+
+        # The footer should be a standalone message and not include details from the last loop iteration.
+        footer = self.esc("---") + "\n\n" + self.esc("The bot will now start with this historical data for training.")
         message_parts.append("\n\n" + footer)
         
         full_message = "\n".join(message_parts)

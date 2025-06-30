@@ -2,12 +2,11 @@ import sqlite3
 from werkzeug.security import generate_password_hash
 import os
 
-# Assumes your database is in a file named 'trading_bot.db' in the same directory
-# Adjust this path if your config.py points elsewhere
+# The path to your database file.
 DB_PATH = 'trading_bot.db' 
 
-# --- WARNING: This will delete existing users if the table exists! ---
-# --- Run this script ONLY ONCE to set up your database.      ---
+# --- WARNING: This will delete the existing 'users' table if it exists! ---
+# --- Run this script ONLY ONCE to set up your database with the new user. ---
 
 # Connect to the database
 conn = sqlite3.connect(DB_PATH)
@@ -19,38 +18,56 @@ print("Setting up the database...")
 cursor.execute("DROP TABLE IF EXISTS users")
 print("Dropped existing 'users' table (if any).")
 
-# Create the users table
-# Storing the password HASH, never the plain text password!
+# Create the users table with the new 'role' column
 cursor.execute("""
 CREATE TABLE users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'user'
 )
 """)
-print("Created new 'users' table.")
+print("Created new 'users' table with 'role' column.")
 
-# --- Create a sample user ---
-# You will use these credentials to log in from the frontend
-sample_username = 'testuser'
-sample_password = 'password123' 
+# --- NEW: Default User Credentials ---
+# The default user is now 'user' with password 'pass'
+default_username = 'user'
+default_password = 'pass' 
+default_role = 'user'
 
-# Hash the password for secure storage
-hashed_password = generate_password_hash(sample_password, method='pbkdf2:sha256')
+# Create an admin user as well for testing the admin panel
+admin_username = 'admin'
+admin_password = 'admin123123'
+admin_role = 'admin'
 
-# Insert the sample user into the database
+
+# Hash the passwords for secure storage
+hashed_default_password = generate_password_hash(default_password, method='pbkdf2:sha256')
+hashed_admin_password = generate_password_hash(admin_password, method='pbkdf2:sha256')
+
 try:
+    # Insert the default user
     cursor.execute(
-        "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-        (sample_username, hashed_password)
+        "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+        (default_username, hashed_default_password, default_role)
     )
-    conn.commit()
-    print(f"Successfully created sample user:")
-    print(f"  Username: {sample_username}")
-    print(f"  Password: {sample_password}")
+    print(f"Successfully created default user:")
+    print(f"  Username: {default_username}")
+    print(f"  Password: {default_password}")
 
-except sqlite3.IntegrityError:
-    print(f"User '{sample_username}' already exists.")
+    # Insert the admin user
+    cursor.execute(
+        "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+        (admin_username, hashed_admin_password, admin_role)
+    )
+    print(f"Successfully created admin user:")
+    print(f"  Username: {admin_username}")
+    print(f"  Password: {admin_password}")
+
+    conn.commit()
+
+except sqlite3.IntegrityError as e:
+    print(f"An error occurred: {e}")
 finally:
     # Close the connection
     conn.close()
