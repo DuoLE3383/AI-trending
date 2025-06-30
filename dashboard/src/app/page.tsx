@@ -2,13 +2,13 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-// Corrected paths, using absolute imports relative to the /src directory
-import {StatCard} from '../components/components/StatCard';
-import {TradesTable} from '../components/components/TradesTable';
-
+import { StatCard } from '../components/components/StatCard';
+import { TradesTable } from '../components/components/TradesTable';
 import type { Stats, Trade } from '@/lib/types';
 
+// Mock data to use as initial state or as a fallback
 const MOCK_STATS: Stats = {
     win_rate: 0,
     total_completed_trades: 0,
@@ -17,110 +17,134 @@ const MOCK_STATS: Stats = {
 };
 const MOCK_TRADES: Trade[] = [];
 
-// Tối ưu hóa: Dynamic import cho WinLossPieChart để giảm kích thước bundle
+// Dynamically import the chart component to reduce initial bundle size.
+// A loading placeholder is shown while the component is being fetched.
 const DynamicWinLossPieChart = dynamic(
-    // Sửa lỗi đường dẫn: Trỏ trực tiếp đến file component để tree-shaking hiệu quả hơn
     () => import('../components/components/WinLossPieChart').then((mod) => mod.WinLossPieChart),
     { 
-        ssr: false,
+        ssr: false, // This component does not need to be rendered on the server
         loading: () => <div className="bg-gray-800 rounded-lg p-6 h-full flex items-center justify-center min-h-[300px]"><p className="text-gray-400">Loading Chart...</p></div>
-});
+    }
+);
 
-// --- Component chính của ứng dụng ---
+// --- The main Dashboard Component ---
 export default function Home() {
     const [stats, setStats] = useState<Stats>(MOCK_STATS);
     const [activeTrades, setActiveTrades] = useState<Trade[]>(MOCK_TRADES);
     const [closedTrades, setClosedTrades] = useState<Trade[]>(MOCK_TRADES);
-    const [error, setError] = useState<string | null>(null); // Consider using a more specific error type
-    const [isLoading, setIsLoading] = useState<boolean>(true); // Add loading state
-    
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL; 
+    const [error, setError] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const router = useRouter(); // Hook for programmatic navigation
 
-    // Helper function to handle individual fetch results
-    const handleFetchResult = useCallback(async <T,>(
-        result: PromiseSettledResult<Response>,
-        setter: React.Dispatch<React.SetStateAction<T>>,
-        mockData: T,
-        errorMessage: string
-    ): Promise<boolean> => {
-        if (result.status === 'fulfilled' && result.value.ok) {
-            const data = await result.value.json(); // Consider adding type validation here
-            setter(data);
-            return false; // No error for this specific fetch
-        } else {
-            console.error(errorMessage, result.status === 'rejected' ? result.reason : 'Response not OK');
-            setter(mockData); // Fallback to mock data
-            return true; // Error occurred for this specific fetch
-        }
-    }, []);
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
-    // useCallback để tối ưu, tránh tạo lại hàm mỗi lần render
+    // A memoized function to fetch all dashboard data.
     const fetchData = useCallback(async () => {
-        setIsLoading(true); // Set loading to true at the start of fetch
+        setIsLoading(true);
 
-        // Validate API_BASE_URL - Consider moving this validation to build time
-        if (!API_BASE_URL) {
-            console.error("API_BASE_URL is not defined. Please check your .env.local file.");
-            setError("Config Fail.");
-            setStats(MOCK_STATS);
-            setActiveTrades(MOCK_TRADES);
-            setClosedTrades(MOCK_TRADES);
-            setIsLoading(false);
+        // Check if the user is logged in by looking for the token.
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            router.push('/login'); // Redirect to login if no token is found.
             return;
         }
 
-        // Sử dụng Promise.allSettled để tất cả các API call có thể hoàn thành, - Good practice!
-        // ngay cả khi một trong số chúng thất bại.
-        const results = await Promise.allSettled([
-            fetch(`${API_BASE_URL}/api/stats`),
-            fetch(`${API_BASE_URL}/api/trades?status=active`),
-            fetch(`${API_BASE_URL}/api/trades?status=closed&limit=15`)
-        ]);
+        // Include the token in the Authorization header for all API requests.
+        const headers = {
+            'Authorization': `Bearer ${token}`
+        };
         
-        let anyError = false;
+        try {
+            const results = await Promise.allSettled([
+                fetch(`${API_BASE_URL}/api/stats`, { headers }),
+                fetch(`${API_BASE_URL}/api/trades?status=active`, { headers }),
+                fetch(`${API_BASE_URL}/api/trades?status=closed&limit=15`, { headers })
+            ]);
+            
+            // Check if the token has expired or is invalid.
+            for (const result of results) {
+                if (result.status === 'fulfilled' && result.value.status === 401) {
+                    setError("Your session has expired. Please log in again.");
+                    localStorage.removeItem('authToken'); // Clear the bad token
+                    router.push('/login');
+                    return;
+                }
+            }
+            
+            // Process the results from the API calls
+            let anyError = false;
+            const [statsResult, activeTradesResult, closedTradesResult] = results;
 
-        anyError = await handleFetchResult<Stats>(results[0], setStats, MOCK_STATS, "Lỗi khi lấy dữ liệu thống kê (stats):") || anyError;
-        anyError = await handleFetchResult<Trade[]>(results[1], setActiveTrades, MOCK_TRADES, "Lỗi khi lấy giao dịch đang hoạt động (active trades):") || anyError;
-        anyError = await handleFetchResult<Trade[]>(results[2], setClosedTrades, MOCK_TRADES, "Lỗi khi lấy lịch sử giao dịch (closed trades):") || anyError;
+            if (statsResult.status === 'fulfilled' && statsResult.value.ok) {
+                setStats(await statsResult.value.json());
+            } else { anyError = true; }
 
-        if (anyError) {
-            setError("Unable.");
-        } else {
-            setError(null);
+            if (activeTradesResult.status === 'fulfilled' && activeTradesResult.value.ok) {
+                setActiveTrades(await activeTradesResult.value.json());
+            } else { anyError = true; }
+
+            if (closedTradesResult.status === 'fulfilled' && closedTradesResult.value.ok) {
+                setClosedTrades(await closedTradesResult.value.json());
+            } else { anyError = true; }
+
+            if (anyError) {
+                setError("Some data could not be loaded. Connection may be unstable.");
+            } else {
+                setError(null);
+            }
+        } catch (err) {
+            setError("A network error occurred. Could not reach the server.");
+            console.error(err);
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false); // Set loading to false after all fetches
-    }, [handleFetchResult]);
+    }, [router, API_BASE_URL]);
 
-    // Fetch dữ liệu khi component được tải và sau đó cập nhật sau mỗi 5 giây
+    // This hook now only runs the fetchData function on component mount.
+    // The automatic refresh interval has been removed.
     useEffect(() => {
-        fetchData(); 
-        const interval = setInterval(fetchData, 5000); 
-        return () => clearInterval(interval); // Dọn dẹp interval khi component bị hủy
+        fetchData();
     }, [fetchData]);
 
+    // Function to handle user logout.
+    const handleLogout = () => {
+        localStorage.removeItem('authToken');
+        router.push('/login');
+    };
 
     return (
-        <main className="min-h-screen p-4 sm:p-6 lg:p-8">
+        <main className="min-h-screen p-4 sm:p-6 lg:p-8 bg-gray-900 text-white">
             <div className="max-w-7xl mx-auto">
-                {/* Header */}
                 <header className="mb-8 flex justify-between items-center">
                     <div>
                         <h1 className="text-4xl font-bold">AI Trading Bot Dashboard</h1>
                         <p className="text-gray-400">Real-time performance statistics</p>
                     </div>
-                    <div className="w-4 h-4 rounded-full bg-green-500 animate-pulse" title="Live Status"></div>
+                    <div className="flex items-center space-x-4">
+                       {/* The new refresh button */}
+                       <button
+                           onClick={fetchData}
+                           disabled={isLoading}
+                           className="bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors"
+                       >
+                           {isLoading ? 'Refreshing...' : 'Refresh'}
+                       </button>
+                       <button onClick={handleLogout} className="bg-red-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-600 transition-colors">
+                           Logout
+                       </button>
+                       <div className="w-4 h-4 rounded-full bg-green-500 animate-pulse" title="Live Status"></div>
+                    </div>
                 </header>
 
                 {error && (
                     <div className="bg-red-500/20 text-red-400 p-4 rounded-lg mb-6">
-                        <strong>Connection Error:</strong> {error}
+                        <strong>Error:</strong> {error}
                     </div>
                 )}
 
-                {/* Stat Cards */}
+                {/* Stat Cards with loading skeleton */}
                 {isLoading ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                        {/* Simple loading skeletons for StatCards */}
                         <div className="bg-gray-800 rounded-lg p-6 h-32 animate-pulse"></div>
                         <div className="bg-gray-800 rounded-lg p-6 h-32 animate-pulse"></div>
                         <div className="bg-gray-800 rounded-lg p-6 h-32 animate-pulse"></div>
@@ -135,7 +159,7 @@ export default function Home() {
                     </div>
                 )}
 
-                {/* Main Content Area */}
+                {/* Main Content Area with loading skeletons */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-2">
                         {isLoading ? (
@@ -156,8 +180,7 @@ export default function Home() {
                     </div>
                 </div>
 
-                 {/* Footer */}
-                <footer className="text-center text-gray-500 mt-12">
+                 <footer className="text-center text-gray-500 mt-12">
                     <p>AI Signal Pro</p>
                 </footer>
             </div>
