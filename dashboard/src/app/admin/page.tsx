@@ -84,7 +84,7 @@ export default function AdminPanel() {
             }
             // If user is an admin, fetch the list of users.
             fetchUsers();
-        } catch (e) {
+        } catch {
             // This would run if the mock token was invalid
             router.push('/login');
         }
